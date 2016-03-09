@@ -65,11 +65,15 @@ def setup(args):
         opt_string += "-lr_%.4f" % args.lrate
 
     # Set model id
-    name = "%s-%s-%s-decay_%.5f-gclip_%.1f-dropout_%s-bs_%d-bleu_%s-seed_%d" % (
+    name = "%s-%s-%s-decay_%.5f-gclip_%.1f-dropout_%s-bs_%d-bleu_%s-seed_%d-shuffle_%s" % (
             args.model_type, dim_str,
             opt_string, args.decay_c, args.clip_c,
             str(args.dropout),
-            args.batch_size, "yes" if args.use_bleu else "no", args.seed)
+            args.batch_size, "yes" if args.use_bleu else "no", args.seed,
+            "yes" if args.shuffle else "no")
+
+    if args.shuffle:
+        args.sort = True
 
     if len(args.get('suffix', '')) > 0:
         name = "%s-%s" % (name, args.suffix)
@@ -103,6 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--optimizer'     , type=str  , help="Optimizer: sgd, adadelta, rmsprop, adam")
     parser.add_argument('-l', '--lrate'         , type=str  , help="Learning rate for SGD")
     parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
+    parser.add_argument('-H', '--shuffle'       , default=argparse.SUPPRESS, action='store_true', help="Sort by sentence length and shuffle batches.")
     parser.add_argument('-B', '--use-bleu'      , default=argparse.SUPPRESS, action='store_true', help="Use BLEU metric for validation instead of loss.")
     parser.add_argument('-N', '--nanguard'      , default=argparse.SUPPRESS, action='store_true', help="Debug NaN values")
     pargs = parser.parse_args()
