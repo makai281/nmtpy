@@ -1,0 +1,399 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import math
+import shutil
+import atexit
+import logging
+import argparse
+import platform
+import importlib
+import cPickle as pkl
+
+import numpy as np
+
+# Our classes
+from nmtpy.config import Config
+from nmtpy.logger import Logger
+from nmtpy.typedef import INT
+from nmtpy.sysutils import *
+from nmtpy.nmtutils import itemlist, unzip
+
+DEFAULTS = {
+        'batch_size':         32,             # Training batch size
+        'lrate':              0.0001,         # lrate for SGD
+        'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
+        'maxlen':             50,             # max sequence length
+        'dropout':            0,              # dropout ratio (0: disabled)
+        'profile':            False,          # Profile Theano
+        'nanguard':           False,          #
+        }
+
+TRAIN_DEFAULTS = {
+        'alpha_c':            0.,             # Alpha regularization
+        'decay_c':            0.0005,         # L2 penalty factor
+        'clip_c':             0.,             # Clip gradients above clip_c
+        'seed':               1234,           # RNG seed
+        'suffix':             "",             # Model suffix
+        'save_iter':          False,          # Save each best valid weights to separate file
+        'restore':            False,
+        'device_id':          'auto',         #
+        'patience':           10,             # Early stopping patience
+        'max_epochs':         100,            # Max number of epochs to train
+        'max_iteration':      1e6,            # Max number of updates to train
+        'valid_burnin':       0,              # number of epochs to wait before validation
+        'valid_freq':         0,              # 0: End of epochs
+        'use_bleu':           True,           #
+        'shuffle':            False,          # Shuffle training dataset
+        'sort':               False,          # Sort training batches wrt sentence length
+        }
+
+def setup(args):
+    # Find out dimensional information
+    dim_str = ""
+    for k in sorted(args):
+        if k.endswith("_dim"):
+            dim_str += "%s_%d-" % (k, args[k])
+    if len(dim_str) > 0:
+        dim_str = dim_str[:-1]
+
+    # Append learning rate only for the SGD case
+    opt_string = args.optimizer
+    if args.optimizer == "sgd":
+        opt_string += "-lr_%.4f" % args.lrate
+
+    # Set model id
+    name = "%s-%s-%s-decay_%.5f-gclip_%.1f-dropout_%s-bs_%d-bleu_%s-seed_%d" % (
+            args.model_type, dim_str,
+            opt_string, args.decay_c, args.clip_c,
+            str(args.dropout),
+            args.batch_size, "yes" if args.use_bleu else "no", args.seed)
+
+    if len(args.get('suffix', '')) > 0:
+        name = "%s-%s" % (name, args.suffix)
+
+    if 'suffix' in args:
+        del args['suffix']
+
+    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
+    del args['model_path_suffix']
+
+    ensure_dirs([args.model_path])
+    args.model_path = os.path.join(args.model_path, name + ".npz")
+
+    return args
+
+##########
+# main() #
+##########
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='nmt-train')
+
+    parser.add_argument('-c', '--config'        , type=str,   help="Path to model configuration file.", required=True)
+    parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
+
+    parser.add_argument('-d', '--dropout'       , type=float, help="Dropout ratio")
+    parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
+    parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
+    parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
+    parser.add_argument('-V', '--valid-freq'    , type=int  , help="Validation frequency in terms of updates")
+    parser.add_argument('-R', '--seed'          , type=int  , help="Random seed")
+    parser.add_argument('-o', '--optimizer'     , type=str  , help="Optimizer: sgd, adadelta, rmsprop, adam")
+    parser.add_argument('-l', '--lrate'         , type=str  , help="Learning rate for SGD")
+    parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
+    parser.add_argument('-B', '--use-bleu'      , default=argparse.SUPPRESS, action='store_true', help="Use BLEU metric for validation instead of loss.")
+    parser.add_argument('-N', '--nanguard'      , default=argparse.SUPPRESS, action='store_true', help="Debug NaN values")
+    pargs = parser.parse_args()
+
+    # First parse configuration file for arguments
+    args = Config(pargs.config).get()
+    args['model_path_suffix'] = os.path.splitext(os.path.basename(pargs.config))[0]
+    del pargs.__dict__['config']
+
+    # Append user-defined suffix to model id
+    if pargs.suffix:
+        args['suffix'] = pargs.suffix
+
+    # Update args by reading cmdline args
+    args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
+
+    # Bring default values for arguments which are not set
+    all_defaults = dict(DEFAULTS)
+    all_defaults.update(TRAIN_DEFAULTS)
+    for k,v in all_defaults.iteritems():
+        if k not in args:
+            args[k] = v
+
+    ###################
+    # Setup arguments
+    ###################
+    args = setup(args)
+
+    ######################################################
+    # Start logging module (both to terminal and to file)
+    ######################################################
+    log_file = os.path.join(args.model_path.replace(".npz", ".log"))
+    Logger.set_file(log_file)
+    log = Logger._logger
+
+    #############
+    # Reserve GPU
+    #############
+    args.device_id, lock_file = get_gpu(args.device_id)
+    os.environ["THEANO_FLAGS"] = "device=%s" % args.device_id
+    if lock_file:
+        atexit.register(remove_gpu_lock, lock_file)
+
+    log.info("Using device: %s (on machine %s)" % (args.device_id, platform.node()))
+
+    ##################
+    # Dump parameters
+    ##################
+    log.info("Model options:")
+    log.info("**************")
+    for p in sorted(args.keys()):
+        log.info(" %20s -> %s" % (p, args[p]))
+
+    ########
+    # Seed #
+    ########
+    import theano
+    import theano.tensor as tensor
+    from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+
+    # Don't seed numpy if seed == 0
+    # But we need to seed theano.
+    if args.seed == 0:
+        trng = RandomStreams(1234)
+    else:
+        # Set numpy random seed before everything else
+        np.random.seed(args.seed)
+        trng = RandomStreams(args.seed)
+
+    #############################################
+    # Import the class from between nmtpy.models
+    #############################################
+    try:
+       Model = importlib.import_module("nmtpy.models.%s" % args.model_type).Model
+    except ImportError as e:
+        log.error("Error while importing %s" % args.model_type)
+        log.error(e)
+        sys.exit(1)
+
+    #############################
+    # Start async BLEU validator
+    #############################
+    if args.use_bleu:
+        log.info("Starting translation server")
+        tr_ps, tr_sock = start_translator(args)
+        if tr_sock is None:
+            args.use_bleu = False
+            log.info("Couldn't start translation server nmt-translate.")
+        else:
+            def cleanup(s, p):
+                sock_send_data(s, "stop")
+                s.close()
+                p.terminate()
+            atexit.register(cleanup, tr_sock, tr_ps)
+
+    # Create model object
+    # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
+    model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
+    model = Model(trng=trng, **model_args)
+
+    if model.options.get('n_words_src', 0) > 0:
+        log.info("Source vocabulary size: %d" % model.options['n_words_src'])
+    if model.options.get('n_words_trg', 0) > 0:
+        log.info("Target vocabulary size: %d" % model.options['n_words_trg'])
+
+    log.info("Preparing data")
+    model.load_data(shuffle=args.shuffle, sort=args.sort)
+    log.info("Training data: %d samples" % model.train_iterator.n_samples)
+    do_valid = False
+    if model.valid_iterator:
+        log.info("Validation data: %d samples" % model.valid_iterator.n_samples)
+        do_valid = True
+
+    # If valid_freq == 0, do validation at end of epochs
+    if args.valid_freq == 0:
+        args.valid_freq = math.ceil(model.train_iterator.n_samples / float(args.batch_size))
+
+    # Initialize parameters
+    log.info("Initializing parameters")
+    model.init_params()
+    model.init_shared_variables()
+
+    # Build the model
+    log.info("Building model")
+    model.build()
+
+    log.info("Input tensor order: ")
+    log.info(model.inputs.values())
+
+    log.info('Building sampler')
+    model.build_sampler()
+
+    #####################################
+    # apply L2 regularization on weights
+    #####################################
+    if args.decay_c > 0.:
+        decay_c = theano.shared(np.float32(args.decay_c), name='decay_c')
+        weight_decay = 0.
+        for kk, vv in model.tparams.iteritems():
+            weight_decay += (vv ** 2).sum()
+        weight_decay *= decay_c
+        model.cost += weight_decay
+
+    # FIXME: Report this from old code
+    ##############################
+    # regularize attention weights
+    ##############################
+
+    ################################
+    # apply gradient clipping here
+    ################################
+    log.info('Computing gradient')
+    grads = tensor.grad(model.cost, wrt=itemlist(model.tparams))
+    if args.clip_c > 0.:
+        g2 = 0.
+        new_grads = []
+        for g in grads:
+            g2 += (g**2).sum()
+        for g in grads:
+            new_grads.append(tensor.switch(g2 > (args.clip_c**2),
+                                           g / tensor.sqrt(g2) * args.clip_c,
+                                           g))
+        grads = new_grads
+
+    log.info('Building "%s" optimizer' % args.optimizer)
+    model.build_optimizer(grads)
+
+   #####################
+    # Save model options
+    #####################
+    model.save_options()
+
+    ################
+    # Training loop
+    ################
+    bad_counter = 0
+    uidx = 0
+    early_stop = False
+    valid_history = []
+    bleu_history  = []
+    cur_lrate = args.lrate
+
+    for eidx in xrange(1, args.max_epochs+1):
+        train_history = []
+        msg = 'Starting epoch %d' % eidx
+        log.info(msg)
+        log.info('-' * len(msg))
+
+        for batch_dict in model.train_iterator:
+            uidx += 1
+
+            # Enable dropout in training (if requested)
+            model.set_dropout(True)
+
+            # compute cost, grads and copy grads to shared variables
+            ud_start = time.time()
+            cost = model.f_grad_shared(*batch_dict.values())
+            model.f_update(cur_lrate)
+            ud = time.time() - ud_start
+            train_history.append(cost)
+
+            # verbose
+            if uidx % 10 == 0:
+                log.info("Epoch: %6d, update: %10d, Cost: %10.5f, Time: %.3f" % (eidx, uidx, cost, ud))
+
+            ###############################################################
+            # Validate model on validation set and early stop if necessary
+            # Wait valid_burnin epochs before starting validation
+            ###############################################################
+            if do_valid and eidx > args.valid_burnin and uidx % args.valid_freq == 0:
+                if args.use_bleu:
+                    log.info("Sending model parameters to translator.")
+                    sock_send_data(tr_sock, unzip(model.tparams))
+
+                # Compute validation loss
+                model.set_dropout(False)
+                valid_err = model.val_loss()
+                valid_history.append(valid_err)
+
+                if np.isnan(valid_err):
+                    log.warn("NaN in validation loss")
+
+                # Wait for BLEU
+                if args.use_bleu:
+                    valid_bleu = sock_recv_data(tr_sock)
+                    bleu_history.append(valid_bleu.bleu_score)
+
+                # Is this the best model?
+                best = False
+                if args.use_bleu and bleu_history[-1] >= np.array(bleu_history).max():
+                    best = True
+                elif not args.use_bleu and valid_history[-1] <= np.array(valid_history).min():
+                    best = True
+
+                if best:
+                    log.info('Saving the best model')
+                    bad_counter = 0
+
+                    # Save the best model or the current model if no best model is found so far
+                    model.save_params(args.model_path,
+                                      valid_history=valid_history,
+                                      bleu_history=bleu_history,
+                                      uidx=uidx, **unzip(model.tparams))
+
+                    # save with uidx as well
+                    if args.save_iter:
+                        log.info('Saving the model at iteration %d' % (uidx))
+                        model_path_uidx = '%s.iter%d.npz' % (os.path.splitext(args.model_path)[0], uidx)
+                        shutil.copy(args.model_path, model_path_uidx)
+
+                elif len(valid_history) > args.patience:
+                    if args.use_bleu and bleu_history[-1] <= np.array(bleu_history)[-args.patience:].max():
+                        bad_counter += 1
+                    if not args.use_bleu and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
+                        bad_counter += 1
+
+                log.info('Validation loss %5.5f\t (%2d/%2d patience)' % (valid_err, bad_counter, args.patience))
+
+                if args.use_bleu:
+                    log.info("Validation %s" % str(valid_bleu))
+
+                # Remember who are we :)
+                log.info("This is the model: %s" % model.name)
+
+                if bad_counter > args.patience:
+                    early_stop = True
+                    break
+
+            # finish after this many updates
+            if uidx >= args.max_iteration:
+                log.info('Training stopped after %d iterations.' % uidx)
+                early_stop = True
+                break
+
+        train_history = np.array(train_history)
+        log.info("Epoch %d finished with mean batch loss: %.3f, median batch loss: %.3f" % \
+                    (eidx, train_history.mean(), np.median(train_history)))
+
+        if early_stop:
+            log.info('Early Stopped.')
+            break
+
+    #####################
+    # Dump final results
+    #####################
+    best_valid_idx = np.argmin(np.array(valid_history))
+    log.info('Best Validation loss %5.5f at validation period %d' % \
+            (valid_history[best_valid_idx], best_valid_idx))
+    if len(bleu_history) > 0:
+        best_bleu_idx = np.argmax(np.array(bleu_history))
+        log.info('Best Validation BLEU %s at validation period %d' % \
+                (bleu_history[best_bleu_idx], best_bleu_idx))
+
+    sys.exit(0)

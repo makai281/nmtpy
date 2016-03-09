@@ -1,0 +1,325 @@
+#!/usr/bin/env python
+
+"""Translates a source file using a translation model."""
+
+import os
+import sys
+import socket
+import atexit
+import cPickle
+import argparse
+import importlib
+from multiprocessing import Process, Queue
+
+import numpy as np
+
+# Force CPU
+os.environ["THEANO_FLAGS"] = "device=cpu"
+
+import theano
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+
+from nmtpy.logger import Logger
+from nmtpy.config import Config
+from nmtpy.search import beam_search, gen_sample, forced_decoding
+from nmtpy.metrics import MultiBleuScorer
+from nmtpy.nmtutils import idx_to_sent
+from nmtpy.sysutils import *
+from nmtpy.iterators import get_iterator
+
+log = Logger._logger
+
+TEMP_1BEST = "/tmp/.theano_temp_trans"
+
+"""Worker process which does beam search."""
+def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized, nbest, argmax=False, force_dec=False):
+    # If argmax is True, no beam-search is done
+    while True:
+        req = queue.get()
+
+        # We should avoid this
+        if req is None:
+            break
+
+        idx, data_dict = req[0], req[1]
+        sidx = 0
+
+        if force_dec:
+            target = data_dict['y_forced']
+            del data_dict['y_forced']
+            sample, score = forced_decoding(f_init, f_next, data_dict.values(), target)
+            sample = [sample]
+            score = np.array(score)
+
+        elif argmax:
+            # Get the 1best for each distribution
+            sample, score = gen_sample(f_init, f_next, data_dict.values(), maxlen=50, argmax=True)
+            sample = [sample]
+            score = np.array(score)
+        else:
+            # beam search given an input sequence and obtain scores
+            sample, score = beam_search(f_init, f_next, data_dict.values(), k=beam_size, maxlen=50)
+
+        # normalize scores according to sequence lengths
+        if not unnormalized:
+            lengths = np.array([len(s) for s in sample])
+            score = score / lengths
+
+        if nbest > 1:
+            sidx = np.argsort(score)[:nbest]
+        else:
+            sidx = np.argmin(score)
+
+        rqueue.put((idx, np.array(sample)[sidx], score[sidx]))
+
+"""Translator starts worker processes, delegates source iterator
+to them, waits for the results."""
+class Translator(object):
+    def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10,
+                       unnorm=False, seed=None, socket_name=None, force_dec=False, argmax=False):
+
+        self.beam_size = beam_size
+        # Source can be image or text or both.
+        # NOTE: type is img_feats or text for now
+        if src_file:
+            self.src_type, self.src_file = src_file.split(":")
+        else:
+            self.src_file = None
+        self.ref_file = ref_file
+        self.nbest = nbest
+        self.n_jobs = n_jobs
+        self.unnorm = unnorm
+        self.argmax = argmax
+
+        # Create BLEU scorer
+        self.mbs = MultiBleuScorer()
+
+        # Create worker process pool
+        self.processes = [None] * self.n_jobs
+
+        if socket_name:
+            self.daemon = True
+            self.__sock_name = "\0" + socket_name
+        else:
+            self.daemon = False
+
+        self.trng = RandomStreams(seed)
+        self.force_dec = force_dec
+
+    def set_model_params(self, opt_dict=None):
+        # load model parameters and set theano shared variables
+        log.info("Setting model parameters.")
+        if opt_dict:
+            self.tparams = self.__obj.load_params(opt_dict)
+        else:
+            self.tparams = self.__obj.load_params(np.load(self.model_file))
+
+        self.__obj.set_dropout(False)
+        self.__obj.build_sampler()
+
+    def set_model_options(self, model_options, model_file=None):
+        self.model_options = model_options
+
+        if self.daemon:
+            # This is necessary for daemon mode
+            if "model_type" in self.model_options:
+                self.model_type = self.model_options['model_type']
+            else:
+                raise Exception("Model type should be provided in model options.")
+        elif model_file:
+            self.model_file = model_file
+            self.model_type = os.path.basename(self.model_file).split("-")[0]
+
+        # Import the module
+        self.__class = importlib.import_module("nmtpy.models.%s" % self.model_type).Model
+        self.__obj = self.__class(trng=self.trng, **self.model_options)
+
+        # load dictionaries
+        self.trg_idict = {}
+        for k,v in self.__obj.trg_dict.iteritems():
+            self.trg_idict[v] = k
+
+        # If not available, translate on validation set
+        if not self.src_file and not self.ref_file:
+            log.info("No test sentences file given, assuming validation dataset.")
+            src_iter_type, self.src_file = self.__obj.data['valid_src']
+            trg_iter_type, self.ref_file = self.__obj.data['valid_trg']
+            log.info("       Source file: %s" % self.src_file)
+            log.info("    Reference file: %s" % self.ref_file)
+            iterator = get_iterator(src_iter_type)
+            # Sources can be images or text
+            if src_iter_type == 'img_feats':
+                self.iterator = iterator(self.src_file, batch_size=1)
+            elif src_iter_type == 'bitext':
+                # No need to use the bitext iterator here. Override it with text.
+                iterator = get_iterator('text')
+                self.iterator = iterator(self.src_file, self.__obj.src_dict,
+                                         batch_size=1, n_words=self.__obj.n_words_src)
+            self.iterator.prepare_batches()
+
+        if self.force_dec:
+            # We need to have an iterator for the references as well
+            iterator = get_iterator(trg_iter_type)
+            self.ref_iterator = iterator(self.ref_file, self.__obj.trg_dict, batch_size=1,
+                                         n_words=self.__obj.n_words_trg,
+                                         data_name='y_forced', do_mask=False)
+            self.ref_iterator.prepare_batches()
+
+    def listen(self):
+        if not self.daemon:
+            raise Exception("translate wasn't started in socket mode.")
+
+        self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._socket.bind(self.__sock_name)
+        log.info("Translator is listening over socket.")
+        self._socket.listen(1)
+        self._conn, self._addr = self._socket.accept()
+        log.info("Translator connection established.")
+
+        # First receive model options
+        model_options = sock_recv_data(self._conn)
+        log.info("Translator received model options")
+        self.set_model_options(model_options)
+
+    def start_continuous(self):
+        if not self.daemon:
+            raise Exception("translate wasn't started in socket mode.")
+
+        while 1:
+            # Wait for data
+            data = sock_recv_data(self._conn)
+            if data == "stop":
+                log.info("Translator received stop signal.")
+                return
+
+            # Set new model parameters and start translation
+            self.set_model_params(data)
+            self.start()
+            self.write_nbest(TEMP_1BEST)
+            bleu = self.get_bleu(TEMP_1BEST)
+            sock_send_data(self._conn, bleu)
+
+    def start(self):
+        # create input and output queues for processes
+        write_queue = Queue()
+        read_queue = Queue()
+        # Create processes
+        for idx in xrange(self.n_jobs):
+            self.processes[idx] = \
+                    Process(target=translate_model,
+                            args=(write_queue, read_queue, idx, self.__obj.f_init,
+                                  self.__obj.f_next, self.beam_size, self.unnorm,
+                                  self.nbest, self.argmax, self.force_dec))
+            self.processes[idx].start()
+
+        # Send data to worker processes
+        log.info("Distributing sentences to worker processes.")
+        for idx, data in enumerate(self.iterator):
+            # Is it forced decoding?
+            if self.force_dec and self.ref_iterator:
+                data['y_forced'] = (next(self.ref_iterator)[1])['y_forced'].flatten()
+            write_queue.put((idx, data))
+
+        self.n_sentences = idx + 1
+        log.info("Distributed %d sentences to worker processes." % self.n_sentences)
+
+        # Receive the results
+        self.trans  = [None] * self.n_sentences
+        self.scores = [None] * self.n_sentences
+
+        for i in xrange(self.n_sentences):
+            resp = read_queue.get()
+            self.trans[resp[0]] = resp[1]
+            self.scores[resp[0]] = resp[2]
+            if (i+1) % 200 == 0:
+                log.info("%d/%d sentences completed." % ((i+1), self.n_sentences))
+
+        # Stop workers
+        for idx in xrange(self.n_jobs):
+            write_queue.put(None)
+            self.processes[idx].terminate()
+
+    def write_nbest(self, filename):
+        with open(filename, 'w') as f:
+            if self.force_dec or self.nbest > 1:
+                for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
+                    if not isinstance(tr, list):
+                        tr = [tr]
+                        sc = [sc]
+                    for t,s in zip(tr, sc):
+                        # Convert to actual words
+                        f.write("%d ||| %s ||| %.6f\n" % (idx, idx_to_sent(self.trg_idict, t), s))
+            else:
+                f.write("\n".join([idx_to_sent(self.trg_idict, s) for s in self.trans]))
+                f.write("\n")
+
+    def get_bleu(self, hyp_file, bleu_file=None):
+        if self.ref_file:
+            bleu = self.mbs.score_files(self.ref_file, hyp_file)
+
+            if bleu_file:
+                with open(bleu_file, 'w') as f:
+                    f.write(str(bleu) + '\n')
+
+            return bleu
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='translate')
+    parser.add_argument('-j', '--n-jobs'        , type=int, default=10,
+                                                  help="Number of processes")
+    parser.add_argument('-a', '--argmax'        , action="store_true",
+                                                  help="Use argmax (1-best) instead of beam search")
+    parser.add_argument('-b', '--beam-size'     , type=int, default=12,
+                                                  help="Beam size (only for beam-search case)")
+    parser.add_argument('-N', '--nbest'         , type=int, default=1,
+                                                  help="Output n-best list size (only for beam-search case)")
+    parser.add_argument('-r', '--seed'          , type=int, default=1234,
+                                                  help="Random number seed (default: 1234)")
+    parser.add_argument('-m', '--meteor'        , action="store_true",
+                                                  help="Use METEOR as well if possible.")
+
+    subparsers = parser.add_subparsers(help="Sub-commands help")
+
+    parser_sta = subparsers.add_parser('model', help='Standalone mode')
+    parser_sta.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
+    parser_sta.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
+    parser_sta.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
+    parser_sta.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for BLEU evaluation (default: validation set)")
+    parser_sta.add_argument('-f', '--force-decoding', action="store_true",     help="Obtain TM scores for the given reference set instead of translation")
+
+    parser_soc = subparsers.add_parser('daemon', help='Daemon mode')
+    parser_soc.add_argument('-p', '--socket-name'   , type=str, required=True,
+                                                      help="Abstract UNIX socket name")
+
+    args = parser.parse_args()
+
+    if "saveto" in args:
+        translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
+                                ref_file=args.ref_file, nbest=args.nbest,
+                                n_jobs=args.n_jobs, seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
+
+        # load model_options
+        log.info("Loading model parameters.")
+        with open('%s.pkl' % args.model, 'rb') as f:
+            model_options = cPickle.load(f)
+
+        translator.set_model_options(model_options, args.model)
+        translator.set_model_params()
+        translator.start()
+        translator.write_nbest(args.saveto)
+        bleu = translator.get_bleu(args.saveto, "%s.bleu" % args.saveto)
+        if bleu:
+            log.info(bleu)
+
+    elif "socket_name" in args:
+        @atexit.register
+        def cleanup():
+            if os.path.exists(TEMP_1BEST):
+                os.unlink(TEMP_1BEST)
+
+        translator = Translator(beam_size=args.beam_size, nbest=args.nbest,
+                                n_jobs=args.n_jobs, seed=args.seed, socket_name=args.socket_name, argmax=args.argmax)
+        translator.listen()
+        translator.start_continuous()
+
+    sys.exit(0)

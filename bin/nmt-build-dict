@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import argparse
+import cPickle as pkl
+from collections import OrderedDict
+
+import numpy as np
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='build_dictionary')
+    parser.add_argument('-o', '--output-dir', type=str, default='.', help='Output directory')
+    parser.add_argument('-m', '--min-freq', type=int, default=0, help='Filter out words occuring < m times.')
+    parser.add_argument('text_files', type=str, nargs='+', help='Text files to create dictionaries.')
+    args = parser.parse_args()
+
+    for filename in args.text_files:
+        filename = os.path.abspath(os.path.expanduser(filename))
+        print 'Processing', filename
+
+        word_freqs = OrderedDict()
+        with open(filename, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line != '':
+                    # Split into words
+                    words_in = line.strip().split(' ')
+                    # Collect frequencies
+                    for w in words_in:
+                        if w not in word_freqs:
+                            word_freqs[w] = 0
+                        word_freqs[w] += 1
+
+        words = word_freqs.keys()
+        freqs = np.array(word_freqs.values())
+
+        # Some heuristic to warn against non-tokenized data
+        if "." not in words or "," not in words:
+            print "Warning: Check that the input data is tokenized!"
+
+        # Sort in descending order of frequency
+        sorted_idx = np.argsort(freqs)
+        sorted_words = [words[ii] for ii in sorted_idx[::-1] if freqs[ii] >= args.min_freq]
+
+        worddict = OrderedDict()
+        worddict['<eos>'] = 0
+        worddict['<unk>'] = 1
+
+        for ii, ww in enumerate(sorted_words):
+            worddict[ww] = ii + 2
+
+        vocab_fname = os.path.basename(filename)
+        if args.min_freq > 0:
+            vocab_fname += "-min%d" % args.min_freq
+        filename = os.path.join(args.output_dir, vocab_fname + ".pkl")
+        print "Dumping vocabulary (%d tokens) to %s..." % (len(worddict), filename)
+        with open(filename, 'wb') as f:
+            pkl.dump(worddict, f)
+
+        print 'Done'
