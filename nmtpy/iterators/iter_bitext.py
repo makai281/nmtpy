@@ -140,8 +140,12 @@ class BiTextIterator(object):
             self.__minibatches.append((batch_idxs, x, x_mask, y, y_mask))
 
         if sort and shuffle:
-            # Shuffle sorted batches
-            random.shuffle(self.__minibatches)
+            # The last one is probably smaller than batch_size, exclude it
+            all_but_last = self.__minibatches[:-1]
+            random.shuffle(all_but_last)
+            # Add the last one now
+            all_but_last.append(self.__minibatches[-1])
+            self.__minibatches = all_but_last
 
             # Recreate sample idxs from shuffled batches
             sample_idxs = []
