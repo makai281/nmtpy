@@ -37,7 +37,8 @@ if __name__ == '__main__':
 
         # Some heuristic to warn against non-tokenized data
         if "." not in words or "," not in words:
-            print "Warning: Check that the input data is tokenized!"
+            print "WARNING: Check that the input data is tokenized!"
+            print "(You can ignore this if the input doesn't contain punctuations.)"
 
         # Sort in descending order of frequency
         sorted_idx = np.argsort(freqs)
