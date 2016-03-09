@@ -45,7 +45,7 @@ TRAIN_DEFAULTS = {
         'max_iteration':      1e6,            # Max number of updates to train
         'valid_burnin':       0,              # number of epochs to wait before validation
         'valid_freq':         0,              # 0: End of epochs
-        'use_bleu':           True,           #
+        'valid_metric':       'bleu',         # bleu, px, meteor
         'shuffle':            False,          # Shuffle training dataset
         'sort':               False,          # Sort training batches wrt sentence length
         }
@@ -65,13 +65,14 @@ def setup(args):
         opt_string += "-lr_%.4f" % args.lrate
 
     # Set model id
-    name = "%s-%s-%s-decay_%.5f-gclip_%.1f-dropout_%s-bs_%d-bleu_%s-seed_%d-shuffle_%s" % (
+    name = "%s-%s-%s-decay_%.5f-gclip_%.1f-dropout_%s-bs_%d-valid_%s-seed_%d-shuffle_%s" % (
             args.model_type, dim_str,
             opt_string, args.decay_c, args.clip_c,
             str(args.dropout),
-            args.batch_size, "yes" if args.use_bleu else "no", args.seed,
+            args.batch_size, args.valid_metric, args.seed,
             "yes" if args.shuffle else "no")
 
+    # If shuffle requested, sort as well
     if args.shuffle:
         args.sort = True
 
@@ -103,12 +104,12 @@ if __name__ == '__main__':
     parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
     parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
     parser.add_argument('-V', '--valid-freq'    , type=int  , help="Validation frequency in terms of updates")
+    parser.add_argument('-M', '--valid-metric'  , type=str  , help="Validation metric: px, bleu, meteor")
     parser.add_argument('-R', '--seed'          , type=int  , help="Random seed")
     parser.add_argument('-o', '--optimizer'     , type=str  , help="Optimizer: sgd, adadelta, rmsprop, adam")
     parser.add_argument('-l', '--lrate'         , type=str  , help="Learning rate for SGD")
     parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
     parser.add_argument('-H', '--shuffle'       , default=argparse.SUPPRESS, action='store_true', help="Sort by sentence length and shuffle batches.")
-    parser.add_argument('-B', '--use-bleu'      , default=argparse.SUPPRESS, action='store_true', help="Use BLEU metric for validation instead of loss.")
     parser.add_argument('-N', '--nanguard'      , default=argparse.SUPPRESS, action='store_true', help="Debug NaN values")
     pargs = parser.parse_args()
 
@@ -187,14 +188,14 @@ if __name__ == '__main__':
         log.error(e)
         sys.exit(1)
 
-    #############################
-    # Start async BLEU validator
-    #############################
-    if args.use_bleu:
+    ###############################
+    # Start async evaluation server
+    ###############################
+    if args.valid_metric != 'px':
         log.info("Starting translation server")
         tr_ps, tr_sock = start_translator(args)
         if tr_sock is None:
-            args.use_bleu = False
+            args.valid_metric = 'px'
             log.info("Couldn't start translation server nmt-translate.")
         else:
             def cleanup(s, p):
@@ -287,7 +288,7 @@ if __name__ == '__main__':
     uidx = 0
     early_stop = False
     valid_history = []
-    bleu_history  = []
+    metric_history  = []
     cur_lrate = args.lrate
 
     for eidx in xrange(1, args.max_epochs+1):
@@ -318,7 +319,7 @@ if __name__ == '__main__':
             # Wait valid_burnin epochs before starting validation
             ###############################################################
             if do_valid and eidx > args.valid_burnin and uidx % args.valid_freq == 0:
-                if args.use_bleu:
+                if args.valid_metric != 'px':
                     log.info("Sending model parameters to translator.")
                     sock_send_data(tr_sock, unzip(model.tparams))
 
@@ -330,16 +331,18 @@ if __name__ == '__main__':
                 if np.isnan(valid_err):
                     log.warn("NaN in validation loss")
 
-                # Wait for BLEU
-                if args.use_bleu:
-                    valid_bleu = sock_recv_data(tr_sock)
-                    bleu_history.append(valid_bleu.bleu_score)
+                # Wait for evaluation metric
+                if args.valid_metric != 'px':
+                    # BLEU or METEOR
+                    valid_score = sock_recv_data(tr_sock)
+                    # FIXME: Implement meteor score in metrics.py
+                    metric_history.append(valid_score.score)
 
                 # Is this the best model?
                 best = False
-                if args.use_bleu and bleu_history[-1] >= np.array(bleu_history).max():
+                if args.valid_metric != 'px' and metric_history[-1] >= np.array(metric_history).max():
                     best = True
-                elif not args.use_bleu and valid_history[-1] <= np.array(valid_history).min():
+                elif args.valid_metric == 'px' and valid_history[-1] <= np.array(valid_history).min():
                     best = True
 
                 if best:
@@ -349,7 +352,7 @@ if __name__ == '__main__':
                     # Save the best model or the current model if no best model is found so far
                     model.save_params(args.model_path,
                                       valid_history=valid_history,
-                                      bleu_history=bleu_history,
+                                      metric_history=metric_history,
                                       uidx=uidx, **unzip(model.tparams))
 
                     # save with uidx as well
@@ -359,15 +362,15 @@ if __name__ == '__main__':
                         shutil.copy(args.model_path, model_path_uidx)
 
                 elif len(valid_history) > args.patience:
-                    if args.use_bleu and bleu_history[-1] <= np.array(bleu_history)[-args.patience:].max():
+                    if args.valid_metric != 'px' and metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
                         bad_counter += 1
-                    if not args.use_bleu and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
+                    if args.valid_metric == 'px' and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
                         bad_counter += 1
 
                 log.info('Validation loss %5.5f\t (%2d/%2d patience)' % (valid_err, bad_counter, args.patience))
 
-                if args.use_bleu:
-                    log.info("Validation %s" % str(valid_bleu))
+                if args.valid_metric != 'px':
+                    log.info("Validation %s" % (args.valid_metric, str(valid_score)))
 
                 # Remember who are we :)
                 log.info("This is the model: %s" % model.name)
@@ -383,7 +386,7 @@ if __name__ == '__main__':
                 break
 
         train_history = np.array(train_history)
-        log.info("Epoch %d finished with mean batch loss: %.3f, median batch loss: %.3f" % \
+        log.info("Epoch %d finished with mean/median batch loss: %.3f, %.3f" % \
                     (eidx, train_history.mean(), np.median(train_history)))
 
         if early_stop:
@@ -396,9 +399,9 @@ if __name__ == '__main__':
     best_valid_idx = np.argmin(np.array(valid_history))
     log.info('Best Validation loss %5.5f at validation period %d' % \
             (valid_history[best_valid_idx], best_valid_idx))
-    if len(bleu_history) > 0:
-        best_bleu_idx = np.argmax(np.array(bleu_history))
-        log.info('Best Validation BLEU %s at validation period %d' % \
-                (bleu_history[best_bleu_idx], best_bleu_idx))
+    if len(metric_history) > 0 and args.valid_metric != 'px':
+        best_metric_idx = np.argmax(np.array(metric_history))
+        log.info('Best Validation %s: %s at validation period %d' % \
+                (args.valid_metric, metric_history[best_metric_idx], best_metric_idx))
 
     sys.exit(0)
