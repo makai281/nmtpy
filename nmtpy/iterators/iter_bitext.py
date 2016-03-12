@@ -17,8 +17,9 @@ class BiTextIterator(object):
                        trg_data, trg_dict,
                        batch_size,
                        n_words_src=0, n_words_trg=0,
+                       maxlen=50,
                        src_name='x', trg_name='y', n_splits=1,
-                       maxlen=50, maxlen_as_n_src_tsteps=False):
+                       maxlen_as_n_src_tsteps=False):
 
         # For minibatch shuffling
         random.seed(1234)
@@ -74,6 +75,8 @@ class BiTextIterator(object):
 
     def read(self):
         self.__max_filt = 0
+        self.__seqs = []
+        self.__idxs = []
         sf = fopen(self.src_data, 'r')
         tf = fopen(self.trg_data, 'r')
 
@@ -85,11 +88,11 @@ class BiTextIterator(object):
             if sline == "" or tline == "":
                 raise Exception("Empty line(s) detected in parallel corpora.")
 
-            sline = sline.split()
-            tline = tline.split()
+            sline = sline.split(" ")
+            tline = tline.split(" ")
 
             # Filter out long sentences
-            if self.maxlen > 0 and len(sline) > self.maxlen and len(tline) > self.maxlen:
+            if self.maxlen > 0 and len(sline) > self.maxlen or len(tline) > self.maxlen:
                 self.__max_filt += 1
                 continue
 

@@ -54,9 +54,9 @@ class Model(BaseModel):
 
         self.train_iterator = train_src_iter_class(train_src_file, self.src_dict,
                                                    train_trg_file, self.trg_dict,
-                                                   self.batch_size,
-                                                   self.n_words_src, self.n_words_trg,
-                                                   self.maxlen)
+                                                   batch_size=self.batch_size,
+                                                   n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
+                                                   maxlen=self.maxlen)
 
         # Prepare batches
         self.train_iterator.prepare_batches(shuffle=shuffle, sort=sort)
@@ -70,9 +70,9 @@ class Model(BaseModel):
             assert valid_src_type == valid_trg_type == 'bitext'
 
             self.valid_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
-                                                       valid_trg_file, self.trg_dict, 256,
-                                                       self.n_words_src, self.n_words_trg,
-                                                       self.maxlen)
+                                                       valid_trg_file, self.trg_dict, batch_size=256,
+                                                       n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
+                                                       maxlen=self.maxlen)
             self.valid_iterator.prepare_batches()
 
     def init_params(self):

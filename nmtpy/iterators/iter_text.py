@@ -61,6 +61,8 @@ class TextIterator(object):
         pass
 
     def read(self):
+        self.__seqs = []
+        self.__idxs = []
         self.__max_filt = 0
         with fopen(self.data, 'r') as f:
             for idx, line in enumerate(f):
@@ -68,7 +70,7 @@ class TextIterator(object):
 
                 # Skip empty lines
                 if line != "":
-                    line = line.split()
+                    line = line.split(" ")
 
                     # Filter out long sentences
                     if self.maxlen > 0 and len(line) > self.maxlen:
