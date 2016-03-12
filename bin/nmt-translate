@@ -9,7 +9,7 @@ import atexit
 import cPickle
 import argparse
 import importlib
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, cpu_count
 
 import numpy as np
 
@@ -22,7 +22,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from nmtpy.logger import Logger
 from nmtpy.config import Config
 from nmtpy.search import beam_search, gen_sample, forced_decoding
-from nmtpy.metrics import MultiBleuScorer
+from nmtpy.metrics import get_scorer
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
 from nmtpy.iterators import get_iterator
@@ -75,7 +75,7 @@ def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized,
 """Translator starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Translator(object):
-    def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10,
+    def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10, method='bleu',
                        unnorm=False, seed=None, socket_name=None, force_dec=False, argmax=False):
 
         self.beam_size = beam_size
@@ -90,9 +90,8 @@ class Translator(object):
         self.n_jobs = n_jobs
         self.unnorm = unnorm
         self.argmax = argmax
-
-        # Create BLEU scorer
-        self.mbs = MultiBleuScorer()
+        self.method = method
+        self.scorer = get_scorer(self.method)()
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
@@ -154,7 +153,8 @@ class Translator(object):
                 # No need to use the bitext iterator here. Override it with text.
                 iterator = get_iterator('text')
                 self.iterator = iterator(self.src_file, self.__obj.src_dict,
-                                         batch_size=1, n_words=self.__obj.n_words_src)
+                                         batch_size=1, n_words=self.__obj.n_words_src,
+                                         maxlen=self.__obj.maxlen)
             self.iterator.prepare_batches()
 
         if self.force_dec:
@@ -196,8 +196,8 @@ class Translator(object):
             self.set_model_params(data)
             self.start()
             self.write_nbest(TEMP_1BEST)
-            bleu = self.get_bleu(TEMP_1BEST)
-            sock_send_data(self._conn, bleu)
+            score = self.compute_score(TEMP_1BEST)
+            sock_send_data(self._conn, score)
 
     def start(self):
         # create input and output queues for processes
@@ -253,20 +253,13 @@ class Translator(object):
                 f.write("\n".join([idx_to_sent(self.trg_idict, s) for s in self.trans]))
                 f.write("\n")
 
-    def get_bleu(self, hyp_file, bleu_file=None):
-        if self.ref_file:
-            bleu = self.mbs.score_files(self.ref_file, hyp_file)
-
-            if bleu_file:
-                with open(bleu_file, 'w') as f:
-                    f.write(str(bleu) + '\n')
-
-            return bleu
+    def compute_score(self, hyp_file):
+        return self.scorer.compute(self.ref_file, hyp_file)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='translate')
     parser.add_argument('-j', '--n-jobs'        , type=int, default=10,
-                                                  help="Number of processes")
+                                                  help="Number of processes (default: 10, 0: Auto")
     parser.add_argument('-a', '--argmax'        , action="store_true",
                                                   help="Use argmax (1-best) instead of beam search")
     parser.add_argument('-b', '--beam-size'     , type=int, default=12,
@@ -275,8 +268,8 @@ if __name__ == "__main__":
                                                   help="Output n-best list size (only for beam-search case)")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
-    parser.add_argument('-m', '--meteor'        , action="store_true",
-                                                  help="Use METEOR as well if possible.")
+    parser.add_argument('-m', '--method'        , type=str, default="bleu",
+                                                  help="bleu or meteor (default: bleu)")
 
     subparsers = parser.add_subparsers(help="Sub-commands help")
 
@@ -284,7 +277,7 @@ if __name__ == "__main__":
     parser_sta.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
     parser_sta.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
     parser_sta.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
-    parser_sta.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for BLEU evaluation (default: validation set)")
+    parser_sta.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for evaluation (default: validation set)")
     parser_sta.add_argument('-f', '--force-decoding', action="store_true",     help="Obtain TM scores for the given reference set instead of translation")
 
     parser_soc = subparsers.add_parser('daemon', help='Daemon mode')
@@ -292,11 +285,15 @@ if __name__ == "__main__":
                                                       help="Abstract UNIX socket name")
 
     args = parser.parse_args()
+    if args.n_jobs == 0:
+        # Auto infer CPU number
+        args.n_jobs = (cpu_count() / 2) - 1
 
     if "saveto" in args:
         translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
                                 ref_file=args.ref_file, nbest=args.nbest,
-                                n_jobs=args.n_jobs, seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
+                                n_jobs=args.n_jobs, method=args.method,
+                                seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
 
         # load model_options
         log.info("Loading model parameters.")
@@ -307,9 +304,9 @@ if __name__ == "__main__":
         translator.set_model_params()
         translator.start()
         translator.write_nbest(args.saveto)
-        bleu = translator.get_bleu(args.saveto, "%s.bleu" % args.saveto)
-        if bleu:
-            log.info(bleu)
+        if args.ref_file:
+            score = translator.get_score(args.saveto)
+            log.info(str(score))
 
     elif "socket_name" in args:
         @atexit.register
@@ -318,7 +315,8 @@ if __name__ == "__main__":
                 os.unlink(TEMP_1BEST)
 
         translator = Translator(beam_size=args.beam_size, nbest=args.nbest,
-                                n_jobs=args.n_jobs, seed=args.seed, socket_name=args.socket_name, argmax=args.argmax)
+                                n_jobs=args.n_jobs, method=args.method,
+                                seed=args.seed, socket_name=args.socket_name, argmax=args.argmax)
         translator.listen()
         translator.start_continuous()
 
