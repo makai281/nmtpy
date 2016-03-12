@@ -5,7 +5,7 @@ import re
 from subprocess import Popen, PIPE, check_output
 
 from functools import total_ordering
-from .sysutils import find_executable
+from .sysutils import find_executable, real_path
 
 @total_ordering
 class METEORScore(object):
@@ -95,9 +95,9 @@ class MultiBleuScorer(object):
 
 """Meteor wrapper."""
 class METEORScorer(object):
-    def __init__(self, path="/lium/buster1/caglayan/git/meteor/meteor-1.5.jar"):
+    def __init__(self, path="~/git/meteor/meteor-1.5.jar"):
 
-        self.path = path
+        self.path = real_path(path)
         self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]
 
     def compute(self, refs, hyps, language="auto", norm=True):
