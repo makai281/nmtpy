@@ -10,13 +10,30 @@ from functools import total_ordering
 from .sysutils import find_executable
 
 @total_ordering
+class METEORScore(object):
+    def __init__(self, score=""):
+        if score:
+            self.score = float(score)
+        else:
+            self.score = 0
+
+    def __eq__(self, other):
+        return self.score == other.score
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+    def __repr__(self):
+        return "METEOR = %3.3f" % self.score
+
+@total_ordering
 class BLEUScore(object):
     def __init__(self, score=""):
         sc = re.findall("^BLEU = (.*), (.*)/(.*)/(.*)/(.*) \(BP=(.*), ratio=(.*), hyp_len=(.*), ref_len=(.*)\)$", score)
         self.__parsed = True
         if len(sc) > 0:
             sc = sc[0]
-            self.bleu_score = float(sc[0])
+            self.score = float(sc[0])
             self.ngram_scores = [float(n) for n in sc[1:5]]
             self.brevity_penalty = float(sc[5])
             self.ratio = float(sc[6])
@@ -24,21 +41,21 @@ class BLEUScore(object):
             self.ref_len = int(sc[8])
         else:
             self.__parsed = False
-            self.bleu_score = 0
+            self.score = 0
 
     def __repr__(self):
         if self.__parsed == False:
             return "0"
         return "BLEU = %3.2f, %2.1f/%2.1f/%2.1f/%2.1f (BP=%.3f, ratio=%.3f, hyp_len=%d, ref_len=%d)" % \
-                (self.bleu_score,
+                (self.score,
                  self.ngram_scores[0], self.ngram_scores[1], self.ngram_scores[2], self.ngram_scores[3],
                  self.brevity_penalty, self.ratio, self.hyp_len, self.ref_len)
 
     def __eq__(self, other):
-        return self.bleu_score == other.bleu_score
+        return self.score == other.score
 
     def __lt__(self, other):
-        return self.bleu_score < other.bleu_score
+        return self.score < other.score
 
 """MultiBleuScorer class."""
 class MultiBleuScorer(object):
@@ -106,7 +123,7 @@ class MultiBleuScorer(object):
 
 """Meteor wrapper."""
 
-class MeteorScorer(object):
+class METEORScorer(object):
     def __init__(self, path="/lium/buster1/caglayan/git/meteor/meteor-1.5.jar"):
 
         self.path = path
@@ -127,7 +144,7 @@ class MeteorScorer(object):
 
         score = output.splitlines()
         if len(score) == 0:
-            return 0.
+            return METEORScore()
         else:
             # Final score:              0.320320320320
-            return float(score[-1].split(":")[-1].strip())
+            return METEORScore(score[-1].split(":")[-1].strip())
