@@ -29,7 +29,7 @@ def start_translator(model_options, cmd=None):
 
     # This is to avoid AF_UNIX too long exception
     sock_name = sha1(model_options['model_path']).hexdigest()
-    cmds = ["nmt-translate", "daemon", "--socket-name", sock_name]
+    cmds = ["nmt-translate", "-m", model_options['valid_metric'], "daemon", "--socket-name", sock_name]
     p = subprocess.Popen(cmds, env=dict(os.environ, THEANO_FLAGS="device=cpu"))
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     for i in range(10):
