@@ -370,7 +370,7 @@ if __name__ == '__main__':
                 log.info('Validation loss %5.5f\t (%2d/%2d patience)' % (valid_err, bad_counter, args.patience))
 
                 if args.valid_metric != 'px':
-                    log.info("Validation %s" % (args.valid_metric, str(valid_score)))
+                    log.info("Validation %s: %s" % (args.valid_metric, str(valid_score)))
 
                 # Remember who are we :)
                 log.info("This is the model: %s" % model.name)
