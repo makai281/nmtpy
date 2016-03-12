@@ -70,7 +70,7 @@ class Model(BaseModel):
             assert valid_src_type == valid_trg_type == 'bitext'
 
             self.valid_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
-                                                       valid_trg_file, self.trg_dict, batch_size=256,
+                                                       valid_trg_file, self.trg_dict, batch_size=64,
                                                        n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
                                                        maxlen=self.maxlen)
             self.valid_iterator.prepare_batches()
