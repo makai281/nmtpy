@@ -3,10 +3,8 @@
 import os
 import re
 from subprocess import Popen, PIPE, check_output
-from tempfile import mkstemp
 
 from functools import total_ordering
-
 from .sysutils import find_executable
 
 @total_ordering
@@ -71,49 +69,23 @@ class MultiBleuScorer(object):
         if self.lowercase:
             self.__cmdline.append("-lc")
 
-    def score_files(self, ref_files, trans_file):
+    def compute(self, refs, hyps):
         cmdline = self.__cmdline[:]
-        # Multiple reference files
-        if isinstance(ref_files, list):
-            for ref in ref_files:
-                cmdline.append(ref)
-        # Single reference file
-        elif isinstance(ref_files, str):
-            cmdline.append(ref_files)
 
-        # Give the translation hypotheses as file object
-        with open(trans_file, "rb") as ftrans:
-            process = Popen(cmdline, stdout=PIPE, stderr=PIPE, stdin=ftrans)
-            stdout, stderr = process.communicate()
+        # Make reference files a list
+        refs = [refs] if isinstance(refs, str) else refs
+        cmdline.extend(refs)
 
-        score = stdout.splitlines()
-        if len(score) == 0:
-            return BLEUScore()
-        else:
-            return BLEUScore(score[0].rstrip("\n"))
-
-    def score_sentences(self, ref_sents, trans_sents):
-        cmdline = self.__cmdline[:]
-        temp_ref = isinstance(ref_sents, list)
-        if temp_ref:
-            (fh, fref) = mkstemp(suffix=".bleu")
-            os.close(fh)
-            with open(fref, "wb") as ref_file:
-                ref_file.write("\n".join(ref_sents) + "\n")
-        elif isinstance(ref_sents, str):
-            # Filename
-            fref = ref_sents
-
-        cmdline.append(fref)
-
-        # Hypotheses are sent through STDIN
-        process = Popen(cmdline, stdout=PIPE, stderr=PIPE, stdin=PIPE)
-        process.stdin.write("\n".join(trans_sents) + "\n")
+        if isinstance(hyps, list):
+            # Hypotheses are sent through STDIN
+            process = Popen(cmdline, stdout=PIPE, stderr=PIPE, stdin=PIPE)
+            process.stdin.write("\n".join(hyps) + "\n")
+        elif isinstance(hyps, str):
+            # Hypotheses is file
+            with open(hyps, "rb") as fhyp:
+                process = Popen(cmdline, stdout=PIPE, stderr=PIPE, stdin=fhyp)
 
         stdout, stderr = process.communicate()
-
-        if temp_ref:
-            os.unlink(fref)
 
         score = stdout.splitlines()
         if len(score) == 0:
@@ -122,20 +94,32 @@ class MultiBleuScorer(object):
             return BLEUScore(score[0].rstrip("\n"))
 
 """Meteor wrapper."""
-
 class METEORScorer(object):
     def __init__(self, path="/lium/buster1/caglayan/git/meteor/meteor-1.5.jar"):
 
         self.path = path
         self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]
 
-    def score_file(self, ref_file, trans_file, language="auto", norm=True):
+    def compute(self, refs, hyps, language="auto", norm=True):
         cmdline = self.__cmdline[:]
-        cmdline.append(trans_file)
-        cmdline.append(ref_file)
+
+        if isinstance(hyps, list):
+            # Create a temporary file
+            with open('/tmp/.hyps.meteor', 'w') as f:
+                for hyp in hyps:
+                    f.write("%s\n" % hyp)
+            cmdline.append('/tmp/.hyps.meteor')
+        elif isinstance(hyps, str):
+            cmdline.append(hyps)
+
+        # Make reference files a list
+        refs = [refs] if isinstance(refs, str) else refs
+        cmdline.extend(refs)
+
         if language == "auto":
-            # Take the extension of the reference file, e.g. ".de"
-            language = os.path.splitext(ref_file)[-1][1:]
+            # Take the extension of the 1st reference file, e.g. ".de"
+            language = os.path.splitext(refs[0])[-1][1:]
+
         cmdline.extend(["-l", language])
         if norm:
             cmdline.append("-norm")
@@ -148,3 +132,12 @@ class METEORScorer(object):
         else:
             # Final score:              0.320320320320
             return METEORScore(score[-1].split(":")[-1].strip())
+
+#######################################
+SCORERS = {
+            'meteor': METEORScorer,
+            'bleu'  : MultiBleuScorer,
+          }
+
+def get_scorer(scorer):
+    return SCORERS[scorer]
