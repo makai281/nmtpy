@@ -19,7 +19,8 @@ import theano.tensor as tensor
 from nmtpy.layers import *
 from nmtpy.typedef import *
 from nmtpy.nmtutils import *
-from nmtpy.search import gen_sample
+from nmtpy.metrics import get_scorer
+from nmtpy.search import beam_search2
 from nmtpy.iterators import get_iterator
 from nmtpy.models.basemodel import BaseModel
 
@@ -35,10 +36,15 @@ class Model(BaseModel):
                 self.src_dict, _ = load_dictionary(dicts['src'])
                 self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
             if 'trg' in dicts:
-                self.trg_dict, _ = load_dictionary(dicts['trg'])
+                self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
                 self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
 
         self.options = dict(self.__dict__)
+        self.trg_idict = trg_idict
+
+        self.valid_scorer = None
+        if self.valid_metric != 'px':
+            self.valid_scorer = get_scorer(self.valid_metric)()
 
         self.ctx_dim = 2 * self.rnn_dim
 
@@ -64,16 +70,22 @@ class Model(BaseModel):
         if 'valid_src' in self.data:
             # Validation data available
             valid_src_type, valid_src_file = self.data['valid_src']
-            valid_trg_type, valid_trg_file = self.data['valid_trg']
+            valid_trg_type, self.valid_trg_file = self.data['valid_trg']
             valid_src_iter_class = get_iterator(valid_src_type)
             valid_trg_iter_class = get_iterator(valid_trg_type)
             assert valid_src_type == valid_trg_type == 'bitext'
 
             self.valid_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
-                                                       valid_trg_file, self.trg_dict, batch_size=64,
+                                                       self.valid_trg_file, self.trg_dict, batch_size=64,
                                                        n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
                                                        maxlen=self.maxlen)
             self.valid_iterator.prepare_batches()
+
+            self.beam_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
+                                                      self.valid_trg_file, self.trg_dict, batch_size=1,
+                                                      n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
+                                                      maxlen=self.maxlen)
+            self.beam_iterator.prepare_batches()
 
     def init_params(self):
         params = OrderedDict()
@@ -208,7 +220,6 @@ class Model(BaseModel):
                                            cost,
                                            mode=self.func_mode,
                                            profile=self.profile)
-        self.f_log_probs.trust_input = True
 
         self.cost = cost.mean()
 
@@ -241,7 +252,6 @@ class Model(BaseModel):
 
         outs = [init_state, ctx]
         self.f_init = theano.function([x], outs, name='f_init', profile=self.profile)
-        self.f_init.trust_input = True
 
         # x: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
@@ -253,20 +263,20 @@ class Model(BaseModel):
                             self.tparams['Wemb_dec'][y])
 
         # apply one step of conditional gru with attention
-        proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
+        # get the next hidden state
+        # get the weighted averages of context for this target word y
+        r = get_new_layer(self.dec_type)[1](self.tparams, emb,
                                                     prefix='decoder',
                                                     mask=None, context=ctx,
                                                     one_step=True,
                                                     init_state=init_state)
-        # get the next hidden state
-        next_state = proj[0]
 
-        # get the weighted averages of context for this target word y
-        ctxs = proj[1]
+        next_state = r[0]
+        ctxs = r[1]
 
-        logit_gru = get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
-        logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
-        logit_ctx = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
+        logit_prev = get_new_layer('ff')[1](self.tparams, emb,          prefix='ff_logit_prev',activ='linear')
+        logit_ctx  = get_new_layer('ff')[1](self.tparams, ctxs,         prefix='ff_logit_ctx', activ='linear')
+        logit_gru  = get_new_layer('ff')[1](self.tparams, next_state,   prefix='ff_logit_gru', activ='linear')
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
 
@@ -275,33 +285,35 @@ class Model(BaseModel):
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
 
-        # compute the softmax probability
-        next_probs = tensor.nnet.softmax(logit)
-
-        # sample from softmax distribution to get the sample
-        next_sample = self.trng.multinomial(pvals=next_probs).argmax(1)
+        # compute the logsoftmax
+        next_log_probs = tensor.nnet.logsoftmax(logit)
 
         # compile a function to do the whole thing above, next word probability,
-        # sampled word for the next target, next hidden state to be used
+        # next hidden state to be used
         inputs = [y, ctx, init_state]
-        outs = [next_probs, next_sample, next_state]
+        outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
-        self.f_next.trust_input = True
 
-    def generate_samples(self, batch_dict, n):
-        x = batch_dict['x']
-        y = batch_dict['y']
+    def beam_search(self, beam_size=12):
+        hyps = []
+        for data in self.beam_iterator:
+            x = data['x'].astype(np.int64)
+            hyp = beam_search2(self.f_init, self.f_next, [x], beam_size=beam_size, maxlen=self.maxlen)
+            hyps.append(idx_to_sent(self.trg_idict, hyp))
+        return self.valid_scorer.compute(self.valid_trg_file, hyps)
 
-        n_samples = np.minimum(n, x.shape[1])
-        sample_idxs = np.random.choice(x.shape[1], n_samples, replace=False)
-        samples = []
-        for i in sample_idxs:
-            sample, _ = gen_sample(self.f_init,
-                                   self.f_next,
-                                   [x[:, i][:, None]],
-                                   maxlen=self.maxlen)
-            samples.append((x[:, i], y[:, i], sample))
+#    def generate_samples(self, batch_dict, n):
+        #x = batch_dict['x']
+        #y = batch_dict['y']
 
-        return samples
+        #n_samples = np.minimum(n, x.shape[1])
+        #sample_idxs = np.random.choice(x.shape[1], n_samples, replace=False)
+        #samples = []
+        #for i in sample_idxs:
+            #sample, _ = gen_sample(self.f_init,
+                                   #self.f_next,
+                                   #[x[:, i][:, None]],
+                                   #maxlen=self.maxlen)
+            #samples.append((x[:, i], y[:, i], sample))
 
-
+        #return samples
