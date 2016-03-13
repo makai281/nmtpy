@@ -77,7 +77,7 @@ def param_init_gru(params, prefix='gru', nin=None, dim=None):
     return params
 
 
-def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, **kwargs):
+def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode=None, **kwargs):
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
@@ -156,6 +156,7 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, **kw
                                 name=_p(prefix, '_layers'),
                                 n_steps=nsteps,
                                 profile=profile,
+                                mode=mode,
                                 strict=True)
     rval = [rval]
     return rval
@@ -217,7 +218,7 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
 def gru_cond_layer(tparams, state_below, prefix='gru',
                    mask=None, context=None, one_step=False,
                    init_memory=None, init_state=None,
-                   context_mask=None, profile=False,
+                   context_mask=None, profile=False, mode=None,
                    **kwargs):
 
     def _slice(_x, n, dim):
@@ -353,6 +354,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
                                     name=_p(prefix, '_layers'),
                                     n_steps=nsteps,
                                     profile=profile,
+                                    mode=mode,
                                     strict=True)
     return rval
 
