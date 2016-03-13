@@ -269,58 +269,79 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         tparams[_p(prefix, 'b')]
 
     # Step function for the recurrence/scan
+    # m_: mask, x_: state_below_, xx_: state_belowx (sequences)
+    # h_: init_state, ctx_: 0 or None, alpha_: 0 or None (outputs_info)
+    # pctx_: pctx_, cc_: context (non_sequences)
     def _step(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_,
               # The followings are the shared variables
               U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
-        preact1 = tensor.dot(h_, U)
-        preact1 += x_
+
+        # init_state X U + state_below_
+        preact1 = tensor.dot(h_, U) + x_
         preact1 = tensor.nnet.sigmoid(preact1)
 
+        # Slice activations
         r1 = _slice(preact1, 0, dim)
         u1 = _slice(preact1, 1, dim)
 
-        preactx1 = tensor.dot(h_, Ux)
-        preactx1 *= r1
-        preactx1 += xx_
-
+        # (init_state X Ux) * r1 + state_belowx
+        preactx1 = (tensor.dot(h_, Ux) * r1) + xx_
         h1 = tanh(preactx1)
 
+        # h1 is update1 * h_ + (1 - update1) * h1
+        # Leaky integration
         h1 = u1 * h_ + (1. - u1) * h1
+        # Multiply h1 by the mask
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
 
-        # attention
+        ###########
+        # Attention
+        ###########
+        # h1 X W_comb_att
         pstate_ = tensor.dot(h1, W_comb_att)
+        # Accumulate in pctx__
         pctx__ = pctx_ + pstate_[None, :, :]
 
+        # Apply tanh over pctx__
         pctx__ = tanh(pctx__)
+
+        # Affine transformation for alpha = (pctx__ X U_att) + c_att
         alpha = tensor.dot(pctx__, U_att) + c_att
+
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
 
-        # Apply context mask over the alphas
-        if context_mask:
-            alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
-            alpha = alpha * context_mask
-            alpha = alpha / alpha.sum(0, keepdims=True)
-        else:
-            # Fixed sequences like in image captioning features
-            alpha = tensor.nnet.softmax(alpha)
+        # Exponentiate alpha
+        alpha = tensor.exp(alpha)
 
-        # Compute the current context
+        # If there is a context mask, multiply with it
+        # to cancel unnecessary steps
+        if context_mask:
+            alpha = alpha * context_mask
+
+        # Normalize so that the sum makes 1
+        alpha = alpha / (alpha.sum(0, keepdims=True) + 1e-6)
+
+        # Compute the current context ctx_
+        # which is cc_ weighted by alpha
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)
 
+        # Affine transformation: h1 X U_nl + b_nl
         preact2 = tensor.dot(h1, U_nl) + b_nl
+        # Add (context X Wc) over it
         preact2 += tensor.dot(ctx_, Wc)
+        # Apply sigmoid nonlinearity
         preact2 = tensor.nnet.sigmoid(preact2)
 
+        # Slice activations
         r2 = _slice(preact2, 0, dim)
         u2 = _slice(preact2, 1, dim)
 
         preactx2 = tensor.dot(h1, Ux_nl)+bx_nl
         preactx2 *= r2
         preactx2 += tensor.dot(ctx_, Wcx)
-
         h2 = tanh(preactx2)
 
+        # Same leaky integration as above now for h2
         h2 = u2 * h1 + (1. - u2) * h2
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
 
@@ -344,13 +365,13 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         rval = _step(*(seqs + [init_state, None, None, pctx_, context] +
                        shared_vars))
     else:
+        outputs_info=[init_state,
+                      tensor.alloc(0., n_samples, context.shape[2]), # hidden dim
+                      tensor.alloc(0., n_samples, context.shape[0])] # n_timesteps
+
         rval, updates = theano.scan(_step,
                                     sequences=seqs,
-                                    outputs_info=[init_state,
-                                                  tensor.alloc(0., n_samples,
-                                                               context.shape[2]), # hidden dim
-                                                  tensor.alloc(0., n_samples,
-                                                               context.shape[0])], # n_timesteps
+                                    outputs_info=outputs_info,
                                     non_sequences=[pctx_, context] + shared_vars,
                                     name=_p(prefix, '_layers'),
                                     n_steps=nsteps,
