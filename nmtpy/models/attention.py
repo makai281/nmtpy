@@ -48,7 +48,7 @@ class Model(BaseModel):
 
         self.ctx_dim = 2 * self.rnn_dim
         self.set_nanguard()
-        self.set_trng()
+        self.set_trng(trng)
 
     def load_data(self, shuffle=False, sort=False):
         # We need to find out about modalities

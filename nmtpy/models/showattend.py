@@ -127,6 +127,7 @@ class Model(BaseModel):
         # init_state, init_cell
         # n_convfeats (512) -> rnn_dim (1000)
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim)
+        params = get_new_layer('ff')[0](params, prefix='ff_ctx', nin=self.n_convfeats, nout=self.rnn_dim)
 
         # decoder
         params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.n_convfeats)
@@ -169,6 +170,7 @@ class Model(BaseModel):
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        init_ctx = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_ctx', activ='tanh')
 
         # NOTE: Don't change afterwards here, the rest should be OK
         # word embedding (target), we will shift the target sequence one time step
@@ -247,12 +249,13 @@ class Model(BaseModel):
         # Take mean across the first axis which are the timesteps, e.g. conv patches
         # No need to multiply by all-one masks
         # ctx_mean: 1 x n_convfeat (512) x n_samples
-        ctx_mean = ctx.mean(0) #tensor.mean(ctx, axis=0, dtype='float32')
+        ctx_mean = ctx.mean(0)
 
         # initial decoder state: -> rnn_dim, e.g. 1000
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        init_ctx = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_ctx', activ='tanh')
 
         # NOTE: No need to compute ctx as input is ctx as well.
         # But this will require changes in other parts of the code
