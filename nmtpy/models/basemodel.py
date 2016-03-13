@@ -60,7 +60,7 @@ class BaseModel(object):
             from theano.compile.nanguardmode import NanGuardMode
             self.func_mode = NanGuardMode(nan_is_error=True,
                                           inf_is_error=True,
-                                          big_is_error=True)
+                                          big_is_error=False)
 
     def set_dropout(self, val):
         # Enable use_dropout in training. (Effective if dropout exists)
