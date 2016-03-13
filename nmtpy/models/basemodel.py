@@ -40,7 +40,7 @@ class BaseModel(object):
         self.f_update = None
         self.f_grad_shared = None
 
-        self.params = None
+        self.initial_params = None
         self.tparams = None
 
         # Iterators
@@ -48,6 +48,13 @@ class BaseModel(object):
         self.valid_iterator = None
         self.test_iterator = None
 
+    def param_stats(self):
+        print "%30s %12s %12s %6s" % ("Name", "min", "max", "NaNs")
+        for name, value in self.tparams.iteritems():
+            value = value.get_value()
+            print "%30s %5.5f %5.5f %s" % (name, value.min(), value.max(), str(np.isnan(value).any()))
+
+    def set_nanguard(self):
         self.func_mode = None
         if self.nanguard:
             from theano.compile.nanguardmode import NanGuardMode
@@ -79,8 +86,8 @@ class BaseModel(object):
     def init_shared_variables(self):
         # initialize Theano shared variables according to the initial parameters
         self.tparams = OrderedDict()
-        for kk, pp in self.params.iteritems():
-            self.tparams[kk] = theano.shared(self.params[kk], name=kk)
+        for kk, pp in self.initial_params.iteritems():
+            self.tparams[kk] = theano.shared(self.initial_params[kk], name=kk)
 
     def val_loss(self):
         probs = []
