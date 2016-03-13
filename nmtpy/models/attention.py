@@ -46,6 +46,7 @@ class Model(BaseModel):
         if self.valid_metric != 'px':
             self.valid_scorer = get_scorer(self.valid_metric)()
 
+        self.set_nanguard()
         self.ctx_dim = 2 * self.rnn_dim
 
     def load_data(self, shuffle=False, sort=False):
@@ -114,7 +115,7 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.ctx_dim, nout=self.embedding_dim, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.embedding_dim, nout=self.n_words_trg)
 
-        self.params = params
+        self.initial_params = params
 
     def build(self):
         # description string: #words x #samples
@@ -139,12 +140,14 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask)
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask,
+                                               profile=self.profile, mode=self.func_mode)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask)
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
+                                                profile=self.profile, mode=self.func_mode)
 
         # context will be the concatenation of forward and backward rnns
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -157,8 +160,7 @@ class Model(BaseModel):
         # ctx_mean = tensor.concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
 
         # initial decoder state
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean,
-                                            prefix='ff_state', activ='tanh')
+        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
         # word embedding (target), we will shift the target sequence one time step
         # to the right. This is done because of the bi-gram connections in the
@@ -176,7 +178,9 @@ class Model(BaseModel):
                                                     mask=y_mask, context=ctx,
                                                     context_mask=x_mask,
                                                     one_step=False,
-                                                    init_state=init_state)
+                                                    init_state=init_state,
+                                                    profile=self.profile,
+                                                    mode=self.func_mode)
         # hidden states of the decoder gru
         proj_h = proj[0]
 
@@ -196,8 +200,7 @@ class Model(BaseModel):
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
-        logit = get_new_layer('ff')[1](self.tparams, logit,
-                                       prefix='ff_logit', activ='linear')
+        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
         logit_shp = logit.shape
 
         # Apply logsoftmax (stable version)
@@ -210,6 +213,9 @@ class Model(BaseModel):
         cost = log_probs.flatten()[y_flat_idx]
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
+
+        # Useful for debugging from ipython
+        #self.db = locals()
 
         # NOTE: We may want to normalize the cost by dividing
         # to the number of target tokens but this needs
@@ -300,20 +306,5 @@ class Model(BaseModel):
             x = data['x'].astype(np.int64)
             hyp = beam_search2(self.f_init, self.f_next, [x], beam_size=beam_size, maxlen=self.maxlen)
             hyps.append(idx_to_sent(self.trg_idict, hyp))
+
         return self.valid_scorer.compute(self.valid_trg_file, hyps)
-
-#    def generate_samples(self, batch_dict, n):
-        #x = batch_dict['x']
-        #y = batch_dict['y']
-
-        #n_samples = np.minimum(n, x.shape[1])
-        #sample_idxs = np.random.choice(x.shape[1], n_samples, replace=False)
-        #samples = []
-        #for i in sample_idxs:
-            #sample, _ = gen_sample(self.f_init,
-                                   #self.f_next,
-                                   #[x[:, i][:, None]],
-                                   #maxlen=self.maxlen)
-            #samples.append((x[:, i], y[:, i], sample))
-
-        #return samples
