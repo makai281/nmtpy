@@ -295,11 +295,15 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         pctx__ = tanh(pctx__)
         alpha = tensor.dot(pctx__, U_att) + c_att
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
-        alpha = tensor.nnet.softmax(alpha)
 
         # Apply context mask over the alphas
         if context_mask:
+            alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
             alpha = alpha * context_mask
+            alpha = alpha / alpha.sum(0, keepdims=True)
+        else:
+            # Fixed sequences like in image captioning features
+            alpha = tensor.nnet.softmax(alpha)
 
         # Compute the current context
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)
