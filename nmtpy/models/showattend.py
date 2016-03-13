@@ -126,7 +126,7 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.trg_emb_dim, nout=self.n_words_trg)
 
-        self.params = params
+        self.initial_params = params
 
     def build(self):
         # Image features and all-1 mask
