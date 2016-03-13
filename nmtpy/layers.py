@@ -206,9 +206,9 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
     # attention: hidden bias
     params[_p(prefix, 'b_att')]         = np.zeros((dimctx,)).astype('float32')
 
-    # attention:
+    # attention: This gives the alpha's
     params[_p(prefix, 'U_att')]         = norm_weight(dimctx, 1)
-    params[_p(prefix, 'c_att')]          = np.zeros((1,)).astype('float32')
+    params[_p(prefix, 'c_att')]         = np.zeros((1,)).astype('float32')
 
     return params
 
@@ -362,8 +362,8 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
                    tparams[_p(prefix, 'bx_nl')]]
 
     if one_step:
-        rval = _step(*(seqs + [init_state, None, None, pctx_, context] +
-                       shared_vars))
+        # NOTE: According to the SAT paper, initial ctx is learned with an FF as well
+        rval = _step(*(seqs + [init_state, None, None, pctx_, context] + shared_vars))
     else:
         outputs_info=[init_state,
                       tensor.alloc(0., n_samples, context.shape[2]), # hidden dim

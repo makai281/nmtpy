@@ -131,6 +131,9 @@ class Translator(object):
 
         # Import the module
         self.__class = importlib.import_module("nmtpy.models.%s" % self.model_type).Model
+        # FIXME: Remove trng for compatibility with earlier models
+        if 'trng' in self.model_options:
+            del self.model_options['trng']
         self.__obj = self.__class(trng=self.trng, **self.model_options)
 
         # load dictionaries
@@ -148,7 +151,8 @@ class Translator(object):
             iterator = get_iterator(src_iter_type)
             # Sources can be images or text
             if src_iter_type == 'img_feats':
-                self.iterator = iterator(self.src_file, batch_size=1)
+                self.iterator = iterator(self.src_file, batch_size=1, do_mask=False,
+                                         n_timesteps=self.__obj.n_timesteps)
             elif src_iter_type == 'bitext':
                 # No need to use the bitext iterator here. Override it with text.
                 iterator = get_iterator('text')

@@ -28,7 +28,7 @@ from nmtpy.models.basemodel import BaseModel
 class Model(BaseModel):
     def __init__(self, trng, **kwargs):
         # Call parent's init first
-        super(Model, self).__init__(trng, **kwargs)
+        super(Model, self).__init__(**kwargs)
 
         # Load vocabularies if any
         if 'dicts' in kwargs:
@@ -50,6 +50,7 @@ class Model(BaseModel):
             self.valid_scorer = get_scorer(self.valid_metric)()
 
         self.set_nanguard()
+        self.set_trng(trng)
 
     def load_data(self, shuffle=False, sort=False):
         ###############

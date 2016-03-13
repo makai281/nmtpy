@@ -18,12 +18,11 @@ import numpy as np
 
 class BaseModel(object):
     __metaclass__ = ABCMeta
-    def __init__(self, trng, **kwargs):
+    def __init__(self, **kwargs):
         # This is for tracking changes in the source code
         #self.__base_version = sha1(inspect.getsource(self.__class__)).hexdigest() 
         self.__dict__.update(kwargs)
 
-        self.trng = trng
         self.name = os.path.splitext(os.path.basename(self.model_path))[0]
 
         self.do_dropout = True if self.dropout > 0 else False
@@ -47,6 +46,9 @@ class BaseModel(object):
         self.train_iterator = None
         self.valid_iterator = None
         self.test_iterator = None
+
+    def set_trng(self, trng):
+        self.trng = trng
 
     def param_stats(self):
         print "%30s %12s %12s %6s" % ("Name", "min", "max", "NaNs")
