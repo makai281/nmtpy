@@ -58,7 +58,7 @@ def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized,
             score = np.array(score)
         else:
             # beam search given an input sequence and obtain scores
-            sample, score = beam_search(f_init, f_next, data_dict.values(), k=beam_size, maxlen=50)
+            sample, score = beam_search(f_init, f_next, data_dict.values(), beam_size=beam_size, maxlen=50)
 
         # normalize scores according to sequence lengths
         if not unnormalized:

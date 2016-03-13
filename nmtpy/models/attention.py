@@ -20,7 +20,7 @@ from nmtpy.layers import *
 from nmtpy.typedef import *
 from nmtpy.nmtutils import *
 from nmtpy.metrics import get_scorer
-from nmtpy.search import beam_search2
+from nmtpy.search import beam_search
 from nmtpy.iterators import get_iterator
 from nmtpy.models.basemodel import BaseModel
 
@@ -304,7 +304,11 @@ class Model(BaseModel):
         hyps = []
         for data in self.beam_iterator:
             x = data['x'].astype(np.int64)
-            hyp = beam_search2(self.f_init, self.f_next, [x], beam_size=beam_size, maxlen=self.maxlen)
-            hyps.append(idx_to_sent(self.trg_idict, hyp))
+            sample, score = beam_search(self.f_init, self.f_next, [x], beam_size=beam_size, maxlen=self.maxlen)
+
+            # Normalize by lengths and find the best hypothesis
+            lens = np.array([len(s) for s in sample])
+            score = np.array(score) / lens
+            hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
 
         return self.valid_scorer.compute(self.valid_trg_file, hyps)
