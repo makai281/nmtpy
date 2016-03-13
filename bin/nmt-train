@@ -292,6 +292,8 @@ if __name__ == '__main__':
             # compute cost, grads and copy grads to shared variables
             ud_start = time.time()
             cost = model.f_grad_shared(*batch_dict.values())
+            if np.isnan(cost):
+                raise Exception("NaN in cost")
             model.f_update(cur_lrate)
             ud = time.time() - ud_start
             train_history.append(cost)
