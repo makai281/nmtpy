@@ -156,16 +156,15 @@ def beam_search2(f_init, f_next, inputs, beam_size=12, maxlen=50):
         cand_scores = hyp_scores[:, None] - next_log_p
         cand_flat = cand_scores.flatten()
         ranks_flat = cand_flat.argsort()[:(beam_size-dead_k)]
+        costs = cand_flat[ranks_flat]
 
         voc_size = next_log_p.shape[1]
         prev_indices = ranks_flat / voc_size
         word_indices = ranks_flat % voc_size
-        costs = cand_flat[ranks_flat]
 
         # New lists for this iteration
         new_hyp_samples = []
         new_hyp_states = []
-        #new_hyp_scores = np.zeros(beam_size-dead_k).astype('float32')
         new_hyp_scores = []
         new_live_k = 0
 
@@ -190,16 +189,18 @@ def beam_search2(f_init, f_next, inputs, beam_size=12, maxlen=50):
         hyp_samples = new_hyp_samples
         hyp_scores = np.array(new_hyp_scores).astype('float32')
         hyp_states = new_hyp_states
+        live_k = new_live_k
 
-        if new_live_k < 1:
+        # We always hit EOS, e.g. first if()
+        if live_k == 0:
             break
         if dead_k >= beam_size:
             break
 
-        live_k = new_live_k
         next_w = np.array([w[-1] for w in hyp_samples])
         next_state = np.array(hyp_states)
 
+    ###################################
     # dump every remaining hypotheses
     if live_k > 0:
         final_sample.extend(hyp_samples)
