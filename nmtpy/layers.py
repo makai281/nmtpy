@@ -235,8 +235,10 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
 
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
+        # We have a batch
         n_samples = state_below.shape[1]
     else:
+        # Single sample
         n_samples = 1
 
     # if we have no mask, we assume all the inputs are valid
@@ -306,7 +308,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         # Compute the current context
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)
 
-        preact2 = tensor.dot(h1, U_nl)+b_nl
+        preact2 = tensor.dot(h1, U_nl) + b_nl
         preact2 += tensor.dot(ctx_, Wc)
         preact2 = tensor.nnet.sigmoid(preact2)
 
