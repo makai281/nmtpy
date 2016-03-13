@@ -29,6 +29,7 @@ DEFAULTS = {
         'dropout':            0,              # dropout ratio (0: disabled)
         'profile':            False,          # Profile Theano
         'nanguard':           False,          #
+        'valid_metric':       'bleu',         # bleu, px, meteor
         }
 
 TRAIN_DEFAULTS = {
@@ -45,7 +46,6 @@ TRAIN_DEFAULTS = {
         'max_iteration':      1e6,            # Max number of updates to train
         'valid_burnin':       0,              # number of epochs to wait before validation
         'valid_freq':         0,              # 0: End of epochs
-        'valid_metric':       'bleu',         # bleu, px, meteor
         'shuffle':            False,          # Shuffle training dataset
         'sort':               False,          # Sort training batches wrt sentence length
         }
@@ -188,22 +188,6 @@ if __name__ == '__main__':
         log.error(e)
         sys.exit(1)
 
-    ###############################
-    # Start async evaluation server
-    ###############################
-    if args.valid_metric != 'px':
-        log.info("Starting translation server")
-        tr_ps, tr_sock = start_translator(args)
-        if tr_sock is None:
-            args.valid_metric = 'px'
-            log.info("Couldn't start translation server nmt-translate.")
-        else:
-            def cleanup(s, p):
-                sock_send_data(s, "stop")
-                s.close()
-                p.terminate()
-            atexit.register(cleanup, tr_sock, tr_ps)
-
     # Create model object
     # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
     model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
@@ -225,6 +209,8 @@ if __name__ == '__main__':
     # If valid_freq == 0, do validation at end of epochs
     if args.valid_freq == 0:
         args.valid_freq = math.ceil(model.train_iterator.n_samples / float(args.batch_size))
+
+    log.info("Early stopping metric is %s" % args.valid_metric)
 
     # Initialize parameters
     log.info("Initializing parameters")
@@ -320,8 +306,10 @@ if __name__ == '__main__':
             ###############################################################
             if do_valid and eidx > args.valid_burnin and uidx % args.valid_freq == 0:
                 if args.valid_metric != 'px':
-                    log.info("Sending model parameters to translator.")
-                    sock_send_data(tr_sock, unzip(model.tparams))
+                    log.info("Starting beam search")
+                    valid_score = model.beam_search()
+                    log.info("Validation %s: %s" % (args.valid_metric, valid_score))
+                    metric_history.append(valid_score.score)
 
                 # Compute validation loss
                 model.set_dropout(False)
@@ -330,13 +318,6 @@ if __name__ == '__main__':
 
                 if np.isnan(valid_err):
                     log.warn("NaN in validation loss")
-
-                # Wait for evaluation metric
-                if args.valid_metric != 'px':
-                    # BLEU or METEOR
-                    valid_score = sock_recv_data(tr_sock)
-                    # FIXME: Implement meteor score in metrics.py
-                    metric_history.append(valid_score.score)
 
                 # Is this the best model?
                 best = False
