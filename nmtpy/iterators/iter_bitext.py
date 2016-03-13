@@ -18,14 +18,12 @@ class BiTextIterator(object):
                        batch_size,
                        n_words_src=0, n_words_trg=0,
                        maxlen=50,
-                       src_name='x', trg_name='y', n_splits=1,
+                       src_name='x', trg_name='y',
                        maxlen_as_n_src_tsteps=False):
 
         # For minibatch shuffling
         random.seed(1234)
 
-        # If n_splits > 1, it means that we have several sources
-        # and several targets like in the crosslingual image description task.
         self.src_data = src_data
         self.src_dict = src_dict
 
@@ -40,7 +38,6 @@ class BiTextIterator(object):
         self.src_name = src_name
         self.trg_name = trg_name
 
-        self.n_splits = n_splits
         self.maxlen = maxlen
 
         # This is for fixed timesteps batches as input
