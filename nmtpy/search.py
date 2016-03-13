@@ -44,14 +44,11 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
     final_sample = []
     final_score = []
 
-    live_beam = 1
-    dead_beam = 0
-
     # Initially we have one empty hypothesis
     # with a score of 0
     hyp_states  = []
-    hyp_samples = [[]] * live_beam
-    hyp_scores  = np.zeros(live_beam).astype('float32')
+    hyp_samples = [[]]
+    hyp_scores  = np.zeros(1).astype('float32')
 
     # get initial state of decoder rnn and encoder context
     # The check is for multimodal data
@@ -62,11 +59,13 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
 
     # Beginning-of-sentence indicator is -1
     next_w = -1 * np.ones((1,)).astype(INT)
+    ctx = np.tile(ctx0, [1, 1])
 
     # Iterate until maxlen. In groundhog this
     # is len(seq) * 3
     for ii in xrange(maxlen):
-        ctx = np.tile(ctx0, [live_beam, 1])
+        if beam_size == 0:
+            break
 
         # Get next states
         inputs = [next_w, ctx, next_state]
@@ -76,8 +75,8 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
         cand_scores = hyp_scores[:, None] - next_log_p
         cand_flat = cand_scores.flatten()
 
-        # Take the best beam_size-dead_beam hypotheses
-        ranks_flat = cand_flat.argsort()[:(beam_size-dead_beam)]
+        # Take the best beam_size hypotheses
+        ranks_flat = cand_flat.argsort()[:(beam_size)]
         # Get their costs
         costs = cand_flat[ranks_flat]
 
@@ -89,7 +88,7 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
 
         # New states, scores and samples
         new_hyp_states  = []
-        new_hyp_scores  = np.zeros(beam_size-dead_beam).astype('float32')
+        new_hyp_scores  = np.zeros(beam_size).astype('float32')
         new_hyp_samples = []
 
         # Iterate over the hypotheses
@@ -100,7 +99,6 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
             new_hyp_states.append(copy.copy(next_state[ti]))
 
         # check the finished samples
-        new_live_beam = 0
         hyp_samples = []
         hyp_scores = []
         hyp_states = []
@@ -110,28 +108,22 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
                 # EOS detected
                 final_sample.append(new_hyp_samples[idx])
                 final_score.append(new_hyp_scores[idx])
-                dead_beam += 1
+                beam_size -= 1
             else:
-                new_live_beam += 1
                 hyp_samples.append(new_hyp_samples[idx])
                 hyp_scores.append(new_hyp_scores[idx])
                 hyp_states.append(new_hyp_states[idx])
 
         hyp_scores = np.array(hyp_scores)
-        live_beam = new_live_beam
-
-        if new_live_beam < 1:
-            break
-        if dead_beam >= beam_size:
-            break
 
         # Prepare for the next iteration
         next_w = np.array([w[-1] for w in hyp_samples])
         next_state = np.array(hyp_states)
+        ctx = np.tile(ctx0, [beam_size, 1])
 
     # dump every remaining hypotheses
-    if live_beam > 0:
-        for idx in xrange(live_beam):
+    if beam_size > 0:
+        for idx in xrange(beam_size):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
 

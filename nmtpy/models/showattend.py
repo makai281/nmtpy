@@ -20,7 +20,8 @@ import theano.tensor as tensor
 from nmtpy.layers import *
 from nmtpy.typedef import *
 from nmtpy.nmtutils import *
-from nmtpy.search import gen_sample
+from nmtpy.metrics import get_scorer
+from nmtpy.search import beam_search
 from nmtpy.iterators import get_iterator
 from nmtpy.models.basemodel import BaseModel
 
@@ -33,14 +34,22 @@ class Model(BaseModel):
         if 'dicts' in kwargs:
             dicts = kwargs['dicts']
             assert 'trg' in dicts
-            self.trg_dict, _ = load_dictionary(dicts['trg'])
+            self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
             self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
 
         # Convolutional feature dim
         self.n_convfeats = 512
         self.n_timesteps = 196 # 14x14 patches
 
+        # Collect options
         self.options = dict(self.__dict__)
+        self.trg_idict = trg_idict
+
+        self.valid_scorer = None
+        if self.valid_metric != 'px':
+            self.valid_scorer = get_scorer(self.valid_metric)()
+
+        self.set_nanguard()
 
     def load_data(self, shuffle=False, sort=False):
         ###############
@@ -81,18 +90,19 @@ class Model(BaseModel):
         #################
         # Validation data 
         #################
-
         if "valid_src" in data:
             # Validation data available
+            valid_batch_size = 64
+
             valid_src_type, valid_src_file = data["valid_src"]
-            valid_trg_type, valid_trg_file = data["valid_trg"]
+            valid_trg_type, self.valid_trg_file = data["valid_trg"]
             # src iter: img, trg iter: text
             valid_src_iter = get_iterator(valid_src_type)
             valid_trg_iter = get_iterator(valid_trg_type)
 
             # First load target texts
-            valid_trg_iterator = valid_trg_iter(valid_trg_file, self.trg_dict,
-                                                batch_size=self.batch_size,
+            valid_trg_iterator = valid_trg_iter(self.valid_trg_file, self.trg_dict,
+                                                batch_size=valid_batch_size,
                                                 n_words=self.n_words_trg,
                                                 data_name='y', maxlen=self.maxlen,
                                                 do_mask=True)
@@ -100,7 +110,7 @@ class Model(BaseModel):
             batch_idxs = valid_trg_iterator.get_idxs()
 
             # This should be image
-            valid_src_iterator = valid_src_iter(valid_src_file, batch_size=self.batch_size,
+            valid_src_iterator = valid_src_iter(valid_src_file, batch_size=valid_batch_size,
                                                 idxs=batch_idxs, do_mask=False, n_timesteps=self.n_timesteps)
             valid_src_iterator.prepare_batches()
 
@@ -130,7 +140,7 @@ class Model(BaseModel):
 
     def build(self):
         # Image features and all-1 mask
-        # shape will be n_timesteps, n_samples, n_convfeats
+        # shape will be n_timesteps, n_samples, n_convfeats (196, bs, 512)
         x_img = tensor.tensor3('x_img', dtype='float32')
 
         # Target sentences: n_timesteps, n_samples
@@ -171,14 +181,17 @@ class Model(BaseModel):
         emb = emb_shifted
 
         # decoder - pass through the decoder conditional gru with attention
+        proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
+                                               prefix='decoder',
+                                               mask=y_mask, context=x_img,
+                                               context_mask=None,
+                                               one_step=False,
+                                               init_state=init_state)
         # gru_cond returns hidden state, weighted sum of context vectors
         # and attentional weights.
-        proj_h, ctxs, alphas = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                                               prefix='decoder',
-                                                               mask=y_mask, context=x_img,
-                                                               context_mask=None,
-                                                               one_step=False,
-                                                               init_state=init_state)
+        proj_h = proj[0]
+        ctxs = proj[1]
+        alphas = proj[2]
 
         # rnn_dim -> trg_emb_dim
         logit_gru = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
@@ -225,24 +238,25 @@ class Model(BaseModel):
 
     def build_sampler(self):
         # shape will be n_timesteps, n_samples, n_convfeats
-        x_img = tensor.tensor3('x_img', dtype='float32')
-        n_timesteps = x_img.shape[0]
-        n_samples = x_img.shape[1]
+        # context is the convolutional vectors themselves
+        ctx = tensor.tensor3('x_img', dtype='float32')
+        n_timesteps = ctx.shape[0]
+        n_samples = ctx.shape[1]
 
         # Take mean across the first axis which are the timesteps, e.g. conv patches
         # No need to multiply by all-one masks
         # ctx_mean: 1 x n_convfeat (512) x n_samples
-        ctx_mean = tensor.mean(x_img, axis=0, dtype='float32')
+        ctx_mean = ctx.mean(0) #tensor.mean(ctx, axis=0, dtype='float32')
 
         # initial decoder state: -> rnn_dim, e.g. 1000
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
-        # context is the convolutional vectors themselves
-        ctx = x_img
+        # NOTE: No need to compute ctx as input is ctx as well.
+        # But this will require changes in other parts of the code
         outs = [init_state, ctx]
-        self.f_init = theano.function([x_img], outs, name='f_init', profile=self.profile)
+        self.f_init = theano.function([ctx], outs, name='f_init', profile=self.profile)
 
         # x: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
@@ -254,16 +268,15 @@ class Model(BaseModel):
                             self.tparams['Wemb_dec'][y])
 
         # apply one step of conditional gru with attention
-        proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                                    prefix='decoder',
-                                                    mask=None, context=ctx,
-                                                    one_step=True,
-                                                    init_state=init_state)
+        r = get_new_layer(self.dec_type)[1](self.tparams, emb,
+                                            prefix='decoder',
+                                            mask=None, context=ctx,
+                                            one_step=True,
+                                            init_state=init_state)
         # get the next hidden state
-        next_state = proj[0]
-
         # get the weighted averages of context for this target word y
-        ctxs = proj[1]
+        next_state = r[0]
+        ctxs = r[1]
 
         logit_gru = get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
         logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
@@ -276,14 +289,27 @@ class Model(BaseModel):
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
 
-        # compute the softmax probability
-        next_probs = tensor.nnet.softmax(logit)
+        # compute the logsoftmax
+        next_log_probs = tensor.nnet.logsoftmax(logit)
 
-        # sample from softmax distribution to get the sample
-        next_sample = self.trng.multinomial(pvals=next_probs).argmax(1)
-
-        # compile a function to do the whole thing above, next word probability,
+        # compile a function to do the whole thing above
         # sampled word for the next target, next hidden state to be used
         inputs = [y, ctx, init_state]
-        outs = [next_probs, next_sample, next_state]
+        outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
+
+    def beam_search(self, beam_size=12):
+        hyps = []
+        for data in self.valid_iterator:
+            # Transpose for iteration over sampels
+            xs = np.transpose(data['x_img'], (1, 0, 2))
+            # Consume validation data sample by sample for beam search
+            for x in xs:
+                sample, score = beam_search(self.f_init, self.f_next, [x[:, None, :]],
+                                            beam_size=beam_size, maxlen=self.maxlen)
+                # Normalize by lengths and find the best hypothesis
+                lens = np.array([len(s) for s in sample])
+                score = np.array(score) / lens
+                hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
+
+        return self.valid_scorer.compute(self.valid_trg_file, hyps)

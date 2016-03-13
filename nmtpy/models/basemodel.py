@@ -105,8 +105,6 @@ class BaseModel(object):
                                                 grads, self.inputs.values(),
                                                 self.cost, profile=self.profile,
                                                 mode=self.func_mode)
-        #self.f_grad_shared.trust_input = True
-        #self.f_update.trust_input = True
 
     @abstractmethod
     def load_data(self, shuffle=False, sort=False):

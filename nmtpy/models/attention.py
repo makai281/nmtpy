@@ -82,12 +82,6 @@ class Model(BaseModel):
                                                        maxlen=self.maxlen)
             self.valid_iterator.prepare_batches()
 
-            self.beam_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
-                                                      self.valid_trg_file, self.trg_dict, batch_size=1,
-                                                      n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
-                                                      maxlen=self.maxlen)
-            self.beam_iterator.prepare_batches()
-
     def init_params(self):
         params = OrderedDict()
 
@@ -294,7 +288,7 @@ class Model(BaseModel):
         # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
 
-        # compile a function to do the whole thing above, next word probability,
+        # compile a function to do the whole thing above
         # next hidden state to be used
         inputs = [y, ctx, init_state]
         outs = [next_log_probs, next_state]
@@ -302,13 +296,15 @@ class Model(BaseModel):
 
     def beam_search(self, beam_size=12):
         hyps = []
-        for data in self.beam_iterator:
-            x = data['x'].astype(np.int64)
-            sample, score = beam_search(self.f_init, self.f_next, [x], beam_size=beam_size, maxlen=self.maxlen)
-
-            # Normalize by lengths and find the best hypothesis
-            lens = np.array([len(s) for s in sample])
-            score = np.array(score) / lens
-            hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
+        for data in self.valid_iterator:
+            xs = data['x'].T.astype(np.int64)
+            # Consume validation data sample by sample for beam search
+            for x in xs:
+                sample, score = beam_search(self.f_init, self.f_next, [x[:, None]],
+                                            beam_size=beam_size, maxlen=self.maxlen)
+                # Normalize by lengths and find the best hypothesis
+                lens = np.array([len(s) for s in sample])
+                score = np.array(score) / lens
+                hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
 
         return self.valid_scorer.compute(self.valid_trg_file, hyps)
