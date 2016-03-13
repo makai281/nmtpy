@@ -287,21 +287,3 @@ class Model(BaseModel):
         inputs = [y, ctx, init_state]
         outs = [next_probs, next_sample, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
-
-    def generate_samples(self, batch_dict, n):
-        x_img = batch_dict['x_img']
-        y = batch_dict['y']
-
-        n_samples = np.minimum(n, x_img.shape[1])
-        sample_idxs = np.random.choice(x_img.shape[1], n_samples, replace=False)
-        samples = []
-        for i in sample_idxs:
-            sample, _ = gen_sample(self.f_init,
-                                   self.f_next,
-                                   [x_img[:, i][:, None]],
-                                   maxlen=self.maxlen)
-            samples.append((None, y[:, i], sample))
-
-        return samples
-
-
