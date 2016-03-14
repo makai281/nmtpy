@@ -19,10 +19,10 @@ import theano.tensor as tensor
 from nmtpy.layers import *
 from nmtpy.typedef import *
 from nmtpy.nmtutils import *
-from nmtpy.metrics import get_scorer
 from nmtpy.search import beam_search
 from nmtpy.iterators import get_iterator
 from nmtpy.models.basemodel import BaseModel
+from nmtpy.sysutils import get_valid_evaluation
 
 class Model(BaseModel):
     def __init__(self, trng, **kwargs):
@@ -42,10 +42,6 @@ class Model(BaseModel):
         self.options = dict(self.__dict__)
         self.trg_idict = trg_idict
         self.src_idict = src_idict
-
-        self.valid_scorer = None
-        if self.valid_metric != 'px':
-            self.valid_scorer = get_scorer(self.valid_metric)()
 
         self.ctx_dim = 2 * self.rnn_dim
         self.set_nanguard()
@@ -296,17 +292,27 @@ class Model(BaseModel):
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
+    # Not used for now
     def beam_search(self, beam_size=12):
-        hyps = []
-        for data in self.valid_iterator:
-            xs = data['x'].T.astype(np.int64)
-            # Consume validation data sample by sample for beam search
-            for x in xs:
-                sample, score = beam_search(self.f_init, self.f_next, [x[:, None]],
-                                            beam_size=beam_size, maxlen=self.maxlen)
-                # Normalize by lengths and find the best hypothesis
-                lens = np.array([len(s) for s in sample])
-                score = np.array(score) / lens
-                hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
+        tmp_model = os.path.join("/tmp", self.name) + ".npz"
+        # Save model temporarily
+        self.save_params(tmp_model)
+        self.save_options(tmp_model + ".pkl")
+        results = get_valid_evaluation(tmp_model, beam_size)
+        # NOTE: We shouldn't remove them for asynch or at least for some time
+        os.unlink(tmp_model)
+        os.unlink(tmp_model + ".pkl")
+        return results
+        #hyps = []
+        #for data in self.valid_iterator:
+            #xs = data['x'].T.astype(np.int64)
+            ## Consume validation data sample by sample for beam search
+            #for x in xs:
+                #sample, score = beam_search(self.f_init, self.f_next, [x[:, None]],
+                                            #beam_size=beam_size, maxlen=self.maxlen)
+                ## Normalize by lengths and find the best hypothesis
+                #lens = np.array([len(s) for s in sample])
+                #score = np.array(score) / lens
+                #hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
 
-        return self.valid_scorer.compute(self.valid_trg_file, hyps)
+        #return self.valid_scorer.compute(self.valid_trg_file, hyps)
