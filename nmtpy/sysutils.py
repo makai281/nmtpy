@@ -5,6 +5,7 @@ import socket
 import select
 import cPickle
 import inspect
+import tempfile
 import subprocess
 
 from hashlib import sha1
@@ -19,6 +20,16 @@ def ensure_dirs(dirs):
 
 def real_path(p):
     return os.path.abspath(os.path.expanduser(p))
+
+def get_valid_evaluation(model_path, beam_size=12):
+    trans_fd, trans_fname = tempfile.mkstemp(suffix='.hyp')
+    os.close(trans_fd)
+    cmd = ["nmt-translate", "-b", str(beam_size),
+           "model", "-m", model_path, "-o", trans_fname]
+    results = subprocess.check_output(cmd)
+    # let nmt-translate print a dict of metrics
+    results = eval(results.split("\n")[-1])
+    return results
 
 def start_translator(model_options, cmd=None):
     # This starts translate.py as a continuous
