@@ -33,7 +33,7 @@ class Model(BaseModel):
         if 'dicts' in kwargs:
             dicts = kwargs['dicts']
             if 'src' in dicts:
-                self.src_dict, _ = load_dictionary(dicts['src'])
+                self.src_dict, src_idict = load_dictionary(dicts['src'])
                 self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
             if 'trg' in dicts:
                 self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
@@ -41,6 +41,7 @@ class Model(BaseModel):
 
         self.options = dict(self.__dict__)
         self.trg_idict = trg_idict
+        self.src_idict = src_idict
 
         self.valid_scorer = None
         if self.valid_metric != 'px':
