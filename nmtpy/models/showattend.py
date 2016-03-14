@@ -302,6 +302,7 @@ class Model(BaseModel):
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
+    # Not used for now
     def beam_search(self, beam_size=12):
         hyps = []
         for data in self.valid_iterator:
