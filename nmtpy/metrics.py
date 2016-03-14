@@ -124,7 +124,7 @@ class METEORScorer(object):
         if norm:
             cmdline.append("-norm")
 
-        output = subprocess.check_output(cmdline)
+        output = check_output(cmdline)
 
         score = output.splitlines()
         if len(score) == 0:
@@ -141,3 +141,6 @@ SCORERS = {
 
 def get_scorer(scorer):
     return SCORERS[scorer]
+
+def get_all_scorers():
+    return SCORERS
