@@ -39,7 +39,7 @@ def forced_decoding(f_init, f_next, inputs, target):
     return final_sample, final_score
 
 ########################################################
-def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
+def beam_search(f_init, f_next, inputs, beam_size=12, maxlen=50):
     # Final results and their scores
     final_sample = []
     final_score = []
@@ -51,7 +51,7 @@ def beam_search(f_init, f_next, inputs, beam_size=1, maxlen=50):
     # with a score of 0
     hyp_states  = []
     hyp_samples = [[]]
-    hyp_scores  = np.zeros(live_beam).astype('float32')
+    hyp_scores  = np.zeros(1).astype('float32')
 
     # get initial state of decoder rnn and encoder context
     # The check is for multimodal data
