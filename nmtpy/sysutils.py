@@ -24,7 +24,7 @@ def get_valid_evaluation(model_path, beam_size=12):
     trans_fd, trans_fname = tempfile.mkstemp(suffix='.hyp')
     os.close(trans_fd)
     cmd = ["nmt-translate", "-b", str(beam_size),
-           "model", "-m", model_path, "-o", trans_fname]
+           "-m", model_path, "-o", trans_fname]
     # let nmt-translate print a dict of metrics
     result = eval(subprocess.check_output(cmd).strip())
     os.unlink(trans_fname)
