@@ -273,8 +273,9 @@ if __name__ == '__main__':
     bad_counter = 0
     uidx = 0
     early_stop = False
+    valid_results = []
     valid_history = []
-    metric_history  = []
+    metric_history = []
     cur_lrate = args.lrate
 
     for eidx in xrange(1, args.max_epochs+1):
@@ -321,6 +322,7 @@ if __name__ == '__main__':
                     results = model.beam_search(beam_size=12)
                     log.info("Done: %.2f seconds" % (time.time() - t))
                     # We'll receive every available metric such as BLEU, METEOR, etc.
+                    valid_results.append(results)
                     for _, v in sorted(results.iteritems()):
                         log.info("Validation after update %6d: %s" % (uidx, v[0]))
                     metric_history.append(results[args.valid_metric][1])
@@ -381,10 +383,12 @@ if __name__ == '__main__':
     # Dump final results
     #####################
     best_valid_idx = np.argmin(np.array(valid_history))
-    log.info('[Validation %3d] Best Validation loss %5.5f' % (best_valid_idx, valid_history[best_valid_idx]))
+    log.info('[Validation %3d] Best loss %5.5f' % (best_valid_idx, valid_history[best_valid_idx]))
 
     if len(metric_history) > 0 and args.valid_metric != 'px':
         best_metric_idx = np.argmax(np.array(metric_history))
-        log.info('[Validation %3d] Best %s' % (best_metric_idx, metric_history[best_metric_idx]))
+        best_valid = valid_results[best_metric_idx]
+        for _, v in sorted(best_valid.iteritems()):
+            log.info("[Validation %3d] Best %s" % (best_metric_idx, v[0]))
 
     sys.exit(0)
