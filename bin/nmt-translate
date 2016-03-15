@@ -4,7 +4,6 @@
 
 import os
 import sys
-import socket
 import atexit
 import cPickle
 import argparse
@@ -28,8 +27,6 @@ from nmtpy.sysutils import *
 from nmtpy.iterators import get_iterator
 
 log = Logger._logger
-
-TEMP_1BEST = "/tmp/.theano_temp_trans"
 
 """Worker process which does beam search."""
 def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized, nbest, argmax=False, force_dec=False):
@@ -76,7 +73,7 @@ def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized,
 to them, waits for the results."""
 class Translator(object):
     def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10,
-                       unnorm=False, seed=None, socket_name=None, force_dec=False, argmax=False):
+                       unnorm=False, seed=None, force_dec=False, argmax=False):
 
         self.beam_size = beam_size
 
@@ -98,12 +95,6 @@ class Translator(object):
         # Create worker process pool
         self.processes = [None] * self.n_jobs
 
-        if socket_name:
-            self.daemon = True
-            self.__sock_name = "\0" + socket_name
-        else:
-            self.daemon = False
-
         self.trng = RandomStreams(seed)
 
     def set_model_params(self, opt_dict=None):
@@ -116,18 +107,10 @@ class Translator(object):
         self.__obj.set_dropout(False)
         self.__obj.build_sampler()
 
-    def set_model_options(self, model_options, model_file=None):
+    def set_model_options(self, model_options, model_file):
         self.model_options = model_options
-
-        if self.daemon:
-            # This is necessary for daemon mode
-            if "model_type" in self.model_options:
-                self.model_type = self.model_options['model_type']
-            else:
-                raise Exception("Model type should be provided in model options.")
-        elif model_file:
-            self.model_file = model_file
-            self.model_type = os.path.basename(self.model_file).split("-")[0]
+        self.model_file = model_file
+        self.model_type = os.path.basename(self.model_file).split("-")[0]
 
         # Import the module
         self.__class = importlib.import_module("nmtpy.models.%s" % self.model_type).Model
@@ -172,40 +155,6 @@ class Translator(object):
                                          n_words=self.__obj.n_words_trg,
                                          data_name='y_forced', do_mask=False)
             self.ref_iterator.prepare_batches()
-
-    def listen(self):
-        if not self.daemon:
-            raise Exception("translate wasn't started in socket mode.")
-
-        self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._socket.bind(self.__sock_name)
-        log.info("Translator is listening over socket.")
-        self._socket.listen(1)
-        self._conn, self._addr = self._socket.accept()
-        log.info("Translator connection established.")
-
-        # First receive model options
-        model_options = sock_recv_data(self._conn)
-        log.info("Translator received model options")
-        self.set_model_options(model_options)
-
-    def start_continuous(self):
-        if not self.daemon:
-            raise Exception("translate wasn't started in socket mode.")
-
-        while 1:
-            # Wait for data
-            data = sock_recv_data(self._conn)
-            if data == "stop":
-                log.info("Translator received stop signal.")
-                return
-
-            # Set new model parameters and start translation
-            self.set_model_params(data)
-            self.start()
-            self.write_nbest(TEMP_1BEST)
-            results = self.compute_score(TEMP_1BEST)
-            sock_send_data(self._conn, results)
 
     def start(self):
         # create input and output queues for processes
@@ -279,56 +228,38 @@ if __name__ == "__main__":
                                                   help="Beam size (only for beam-search case)")
     parser.add_argument('-N', '--nbest'         , type=int, default=1,
                                                   help="Output n-best list size (only for beam-search case)")
+    parser.add_argument('-f', '--force-decoding', help="Obtain TM scores for the given reference set instead of translation",
+                                                  action="store_true")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
-
-    subparsers = parser.add_subparsers(help="Sub-commands help")
-
-    parser_sta = subparsers.add_parser('model', help='Standalone mode')
-    parser_sta.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
-    parser_sta.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
-    parser_sta.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
-    parser_sta.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for evaluation (default: validation set)")
-    parser_sta.add_argument('-f', '--force-decoding', action="store_true",     help="Obtain TM scores for the given reference set instead of translation")
-
-    parser_soc = subparsers.add_parser('daemon', help='Daemon mode')
-    parser_soc.add_argument('-p', '--socket-name'   , type=str, required=True,
-                                                      help="Abstract UNIX socket name")
+    parser.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
+    parser.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
+    parser.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
+    parser.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for evaluation (default: validation set)")
 
     args = parser.parse_args()
     if args.n_jobs == 0:
         # Auto infer CPU number
         args.n_jobs = (cpu_count() / 2) - 1
 
-    if "saveto" in args:
-        translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
-                                ref_file=args.ref_file, nbest=args.nbest,
-                                n_jobs=args.n_jobs,
-                                seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
+    translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
+                            ref_file=args.ref_file, nbest=args.nbest,
+                            n_jobs=args.n_jobs,
+                            seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
 
-        # load model_options
-        with open('%s.pkl' % args.model, 'rb') as f:
-            model_options = cPickle.load(f)
+    # load model_options
+    with open('%s.pkl' % args.model, 'rb') as f:
+        model_options = cPickle.load(f)
 
-        translator.set_model_options(model_options, args.model)
-        translator.set_model_params()
-        translator.start()
-        translator.write_nbest(args.saveto)
-        if translator.ref_file:
-            # Compute all metrics
-            results = translator.compute_score(args.saveto)
-            print results
-
-    elif "socket_name" in args:
-        @atexit.register
-        def cleanup():
-            if os.path.exists(TEMP_1BEST):
-                os.unlink(TEMP_1BEST)
-
-        translator = Translator(beam_size=args.beam_size, nbest=args.nbest,
-                                n_jobs=args.n_jobs,
-                                seed=args.seed, socket_name=args.socket_name, argmax=args.argmax)
-        translator.listen()
-        translator.start_continuous()
+    translator.set_model_options(model_options, args.model)
+    translator.set_model_params()
+    translator.start()
+    translator.write_nbest(args.saveto)
+    if translator.ref_file:
+        # Compute all metrics
+        results = translator.compute_score(args.saveto)
+        # NOTE: This dict is expected from nmt-translate for
+        # obtaining the validation results.
+        print results
 
     sys.exit(0)
