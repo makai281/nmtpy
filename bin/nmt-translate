@@ -22,7 +22,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from nmtpy.logger import Logger
 from nmtpy.config import Config
 from nmtpy.search import beam_search, gen_sample, forced_decoding
-from nmtpy.metrics import get_scorer
+from nmtpy.metrics import get_all_scorers
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
 from nmtpy.iterators import get_iterator
@@ -75,23 +75,25 @@ def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized,
 """Translator starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Translator(object):
-    def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10, method='bleu',
+    def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10,
                        unnorm=False, seed=None, socket_name=None, force_dec=False, argmax=False):
 
         self.beam_size = beam_size
-        # Source can be image or text or both.
+
         # NOTE: type is img_feats or text for now
+        self.src_file = None
         if src_file:
-            self.src_type, self.src_file = src_file.split(":")
-        else:
-            self.src_file = None
-        self.ref_file = ref_file
+            self.src_iter_type, self.src_file = src_file.split(":")
+
+        self.ref_file = None
+        if ref_file:
+            self.ref_iter_type, self.ref_file = ref_file.split(":")
+
         self.nbest = nbest
         self.n_jobs = n_jobs
         self.unnorm = unnorm
         self.argmax = argmax
-        self.method = method
-        self.scorer = get_scorer(self.method)()
+        self.force_dec = force_dec
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
@@ -103,11 +105,9 @@ class Translator(object):
             self.daemon = False
 
         self.trng = RandomStreams(seed)
-        self.force_dec = force_dec
 
     def set_model_params(self, opt_dict=None):
         # load model parameters and set theano shared variables
-        log.info("Setting model parameters.")
         if opt_dict:
             self.tparams = self.__obj.load_params(opt_dict)
         else:
@@ -131,39 +131,43 @@ class Translator(object):
 
         # Import the module
         self.__class = importlib.import_module("nmtpy.models.%s" % self.model_type).Model
+
         # FIXME: Remove trng for compatibility with earlier models
         if 'trng' in self.model_options:
             del self.model_options['trng']
+
+        # Create the model
         self.__obj = self.__class(trng=self.trng, **self.model_options)
 
         # load dictionaries
-        self.trg_idict = {}
+        self.ref_idict = {}
         for k,v in self.__obj.trg_dict.iteritems():
-            self.trg_idict[v] = k
+            self.ref_idict[v] = k
 
         # If not available, translate on validation set
         if not self.src_file and not self.ref_file:
             log.info("No test sentences file given, assuming validation dataset.")
-            src_iter_type, self.src_file = self.__obj.data['valid_src']
-            trg_iter_type, self.ref_file = self.__obj.data['valid_trg']
-            log.info("       Source file: %s" % self.src_file)
-            log.info("    Reference file: %s" % self.ref_file)
-            iterator = get_iterator(src_iter_type)
-            # Sources can be images or text
-            if src_iter_type == 'img_feats':
-                self.iterator = iterator(self.src_file, batch_size=1, do_mask=False,
-                                         n_timesteps=self.__obj.n_timesteps)
-            elif src_iter_type == 'bitext':
-                # No need to use the bitext iterator here. Override it with text.
-                iterator = get_iterator('text')
-                self.iterator = iterator(self.src_file, self.__obj.src_dict,
-                                         batch_size=1, n_words=self.__obj.n_words_src,
-                                         maxlen=self.__obj.maxlen)
-            self.iterator.prepare_batches()
+            self.src_iter_type, self.src_file = self.__obj.data['valid_src']
+            self.ref_iter_type, self.ref_file = self.__obj.data['valid_trg']
+
+        log.info("       Source file: %s" % self.src_file)
+        log.info("    Reference file: %s" % self.ref_file)
+        iterator = get_iterator(self.src_iter_type)
+        # Sources can be images or text
+        if self.src_iter_type == 'img_feats':
+            self.iterator = iterator(self.src_file, batch_size=1, do_mask=False, n_timesteps=self.__obj.n_timesteps)
+        elif self.src_iter_type in ('text', 'bitext'):
+            # No need to use the bitext iterator in translation.
+            # Override it with text.
+            iterator = get_iterator('text')
+            self.iterator = iterator(self.src_file, self.__obj.src_dict,
+                                     batch_size=1, n_words=self.__obj.n_words_src,
+                                     maxlen=self.__obj.maxlen)
+        self.iterator.prepare_batches()
 
         if self.force_dec:
             # We need to have an iterator for the references as well
-            iterator = get_iterator(trg_iter_type)
+            iterator = get_iterator(ref_iter_type)
             self.ref_iterator = iterator(self.ref_file, self.__obj.trg_dict, batch_size=1,
                                          n_words=self.__obj.n_words_trg,
                                          data_name='y_forced', do_mask=False)
@@ -200,8 +204,8 @@ class Translator(object):
             self.set_model_params(data)
             self.start()
             self.write_nbest(TEMP_1BEST)
-            score = self.compute_score(TEMP_1BEST)
-            sock_send_data(self._conn, score)
+            results = self.compute_score(TEMP_1BEST)
+            sock_send_data(self._conn, results)
 
     def start(self):
         # create input and output queues for processes
@@ -252,18 +256,23 @@ class Translator(object):
                         sc = [sc]
                     for t,s in zip(tr, sc):
                         # Convert to actual words
-                        f.write("%d ||| %s ||| %.6f\n" % (idx, idx_to_sent(self.trg_idict, t), s))
+                        f.write("%d ||| %s ||| %.6f\n" % (idx, idx_to_sent(self.ref_idict, t), s))
             else:
-                f.write("\n".join([idx_to_sent(self.trg_idict, s) for s in self.trans]))
+                f.write("\n".join([idx_to_sent(self.ref_idict, s) for s in self.trans]))
                 f.write("\n")
 
     def compute_score(self, hyp_file):
-        return self.scorer.compute(self.ref_file, hyp_file)
+        results = {}
+        for metric, _class in get_all_scorers().iteritems():
+            c = _class()
+            score = c.compute(self.ref_file, hyp_file)
+            results[metric] = (str(score), score.score)
+        return results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='translate')
-    parser.add_argument('-j', '--n-jobs'        , type=int, default=10,
-                                                  help="Number of processes (default: 10, 0: Auto")
+    parser.add_argument('-j', '--n-jobs'        , type=int, default=6,
+                                                  help="Number of processes (default: 6, 0: Auto")
     parser.add_argument('-a', '--argmax'        , action="store_true",
                                                   help="Use argmax (1-best) instead of beam search")
     parser.add_argument('-b', '--beam-size'     , type=int, default=12,
@@ -272,8 +281,6 @@ if __name__ == "__main__":
                                                   help="Output n-best list size (only for beam-search case)")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
-    parser.add_argument('-m', '--method'        , type=str, default="bleu",
-                                                  help="bleu or meteor (default: bleu)")
 
     subparsers = parser.add_subparsers(help="Sub-commands help")
 
@@ -296,11 +303,10 @@ if __name__ == "__main__":
     if "saveto" in args:
         translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
                                 ref_file=args.ref_file, nbest=args.nbest,
-                                n_jobs=args.n_jobs, method=args.method,
+                                n_jobs=args.n_jobs,
                                 seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
 
         # load model_options
-        log.info("Loading model parameters.")
         with open('%s.pkl' % args.model, 'rb') as f:
             model_options = cPickle.load(f)
 
@@ -308,9 +314,10 @@ if __name__ == "__main__":
         translator.set_model_params()
         translator.start()
         translator.write_nbest(args.saveto)
-        if args.ref_file:
-            score = translator.get_score(args.saveto)
-            log.info(str(score))
+        if translator.ref_file:
+            # Compute all metrics
+            results = translator.compute_score(args.saveto)
+            print results
 
     elif "socket_name" in args:
         @atexit.register
@@ -319,7 +326,7 @@ if __name__ == "__main__":
                 os.unlink(TEMP_1BEST)
 
         translator = Translator(beam_size=args.beam_size, nbest=args.nbest,
-                                n_jobs=args.n_jobs, method=args.method,
+                                n_jobs=args.n_jobs,
                                 seed=args.seed, socket_name=args.socket_name, argmax=args.argmax)
         translator.listen()
         translator.start_continuous()
