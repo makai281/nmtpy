@@ -71,7 +71,7 @@ class BiTextIterator(object):
         return self.__idxs
 
     def read(self):
-        self.__max_filt = 0
+        #self.__max_filt = 0
         self.__seqs = []
         self.__idxs = []
         sf = fopen(self.src_data, 'r')
@@ -89,9 +89,10 @@ class BiTextIterator(object):
             tline = tline.split(" ")
 
             # Filter out long sentences
-            if self.maxlen > 0 and len(sline) > self.maxlen or len(tline) > self.maxlen:
-                self.__max_filt += 1
-                continue
+            # FIXME: This is very error prone, disable it
+            #if self.maxlen > 0 and len(sline) > self.maxlen or len(tline) > self.maxlen:
+            #    self.__max_filt += 1
+            #    continue
 
             sseq = [self.src_dict.get(w, 1) for w in sline]
             tseq = [self.trg_dict.get(w, 1) for w in tline]
@@ -113,14 +114,6 @@ class BiTextIterator(object):
 
         sf.close()
         tf.close()
-
-    def __repr__(self):
-        s = self.__class__.__name__
-        if self.n_samples > 0:
-            s += " of %d parallel sentences" % self.n_samples
-            if self.__max_filt > 0:
-                s += "%d sentences filtered out as long." % self.__max_filt
-        return s
 
     def prepare_batches(self, shuffle=False, sort=False):
         sample_idxs = np.arange(self.n_samples)

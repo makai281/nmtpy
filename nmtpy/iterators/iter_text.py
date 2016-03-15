@@ -63,7 +63,7 @@ class TextIterator(object):
     def read(self):
         self.__seqs = []
         self.__idxs = []
-        self.__max_filt = 0
+        #self.__max_filt = 0
         with fopen(self.data, 'r') as f:
             for idx, line in enumerate(f):
                 line = line.strip()
@@ -73,9 +73,10 @@ class TextIterator(object):
                     line = line.split(" ")
 
                     # Filter out long sentences
-                    if self.maxlen > 0 and len(line) > self.maxlen:
-                        self.__max_filt += 1
-                        continue
+                    # FIXME: This is very error-prone, disable
+                    #if self.maxlen > 0 and len(line) > self.maxlen:
+                    #    self.__max_filt += 1
+                    #    continue
 
                     seq = [self.dict.get(w, 1) for w in line]
 
@@ -90,14 +91,6 @@ class TextIterator(object):
                     self.__idxs += [idx]
 
         self.n_samples = len(self.__idxs)
-
-    def __repr__(self):
-        s = self.__class__.__name__
-        if self.n_samples > 0:
-            s += " of %d sentences" % self.n_samples
-            if self.__max_filt > 0:
-                s += "%d sentences filtered out as long." % self.__max_filt
-        return s
 
     def prepare_batches(self, shuffle=False, sort=False):
         sample_idxs = np.arange(self.n_samples)

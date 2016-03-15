@@ -145,7 +145,7 @@ class Translator(object):
             iterator = get_iterator('text')
             self.iterator = iterator(self.src_file, self.__obj.src_dict,
                                      batch_size=1, n_words=self.__obj.n_words_src,
-                                     maxlen=self.__obj.maxlen)
+                                     maxlen=50)
         self.iterator.prepare_batches()
 
         if self.force_dec:

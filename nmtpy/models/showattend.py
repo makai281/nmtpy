@@ -75,7 +75,7 @@ class Model(BaseModel):
         train_trg_iterator = train_trg_iter(train_trg_file, self.trg_dict,
                                             batch_size=self.batch_size,
                                             n_words=self.n_words_trg,
-                                            data_name='y', maxlen=self.maxlen,
+                                            data_name='y',
                                             do_mask=True)
         train_trg_iterator.prepare_batches(shuffle=shuffle, sort=sort)
         batch_idxs = train_trg_iterator.get_idxs()
@@ -105,7 +105,7 @@ class Model(BaseModel):
             valid_trg_iterator = valid_trg_iter(self.valid_trg_file, self.trg_dict,
                                                 batch_size=valid_batch_size,
                                                 n_words=self.n_words_trg,
-                                                data_name='y', maxlen=self.maxlen,
+                                                data_name='y',
                                                 do_mask=True)
             valid_trg_iterator.prepare_batches()
             batch_idxs = valid_trg_iterator.get_idxs()
@@ -311,7 +311,7 @@ class Model(BaseModel):
             # Consume validation data sample by sample for beam search
             for x in xs:
                 sample, score = beam_search(self.f_init, self.f_next, [x[:, None, :]],
-                                            beam_size=beam_size, maxlen=self.maxlen)
+                                            beam_size=beam_size, maxlen=50)
                 # Normalize by lengths and find the best hypothesis
                 lens = np.array([len(s) for s in sample])
                 score = np.array(score) / lens

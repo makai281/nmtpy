@@ -60,8 +60,7 @@ class Model(BaseModel):
         self.train_iterator = train_src_iter_class(train_src_file, self.src_dict,
                                                    train_trg_file, self.trg_dict,
                                                    batch_size=self.batch_size,
-                                                   n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
-                                                   maxlen=self.maxlen)
+                                                   n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
 
         # Prepare batches
         self.train_iterator.prepare_batches(shuffle=shuffle, sort=sort)
@@ -76,8 +75,7 @@ class Model(BaseModel):
 
             self.valid_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
                                                        self.valid_trg_file, self.trg_dict, batch_size=64,
-                                                       n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
-                                                       maxlen=self.maxlen)
+                                                       n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
             self.valid_iterator.prepare_batches()
 
     def init_params(self):

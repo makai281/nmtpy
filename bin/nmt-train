@@ -25,7 +25,7 @@ DEFAULTS = {
         'batch_size':         32,             # Training batch size
         'lrate':              0.0001,         # lrate for SGD
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
-        'maxlen':             50,             # max sequence length
+        #'maxlen':             50,             # max sequence length
         'dropout':            0,              # dropout ratio (0: disabled)
         'profile':            False,          # Profile Theano
         'nanguard':           False,          #
