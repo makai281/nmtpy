@@ -16,6 +16,7 @@ import theano.tensor as tensor
 
 import numpy as np
 from ..sysutils import get_valid_evaluation
+from ..nmtutils import unzip
 
 class BaseModel(object):
     __metaclass__ = ABCMeta
