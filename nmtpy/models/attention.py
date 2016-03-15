@@ -295,14 +295,14 @@ class Model(BaseModel):
     # Not used for now
     def beam_search(self, beam_size=12):
         tmp_model = os.path.join("/tmp", self.name) + ".npz"
+        tmp_opts = "%s.pkl" % tmp_model
         # Save model temporarily
-        self.save_params(tmp_model)
-        self.save_options(tmp_model + ".pkl")
-        results = get_valid_evaluation(tmp_model, beam_size)
-        # NOTE: We shouldn't remove them for asynch or at least for some time
+        self.save_params(tmp_model, **unzip(self.tparams))
+        self.save_options(filepath=tmp_opts)
+        result = get_valid_evaluation(tmp_model, beam_size)
         os.unlink(tmp_model)
-        os.unlink(tmp_model + ".pkl")
-        return results
+        os.unlink(tmp_opts)
+        return result
         #hyps = []
         #for data in self.valid_iterator:
             #xs = data['x'].T.astype(np.int64)
