@@ -17,13 +17,11 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from nmtpy.layers import *
-from nmtpy.typedef import *
-from nmtpy.nmtutils import *
-from nmtpy.metrics import get_scorer
-from nmtpy.search import beam_search
-from nmtpy.iterators import get_iterator
-from nmtpy.models.basemodel import BaseModel
+from ..layers import *
+from ..typedef import *
+from ..nmtutils import *
+from ..iterators import get_iterator
+from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
     def __init__(self, trng, **kwargs):
@@ -44,10 +42,6 @@ class Model(BaseModel):
         # Collect options
         self.options = dict(self.__dict__)
         self.trg_idict = trg_idict
-
-        self.valid_scorer = None
-        if self.valid_metric != 'px':
-            self.valid_scorer = get_scorer(self.valid_metric)()
 
         self.set_nanguard()
         self.set_trng(trng)
@@ -127,7 +121,6 @@ class Model(BaseModel):
         # init_state, init_cell
         # n_convfeats (512) -> rnn_dim (1000)
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim)
-        params = get_new_layer('ff')[0](params, prefix='ff_ctx', nin=self.n_convfeats, nout=self.rnn_dim)
 
         # decoder
         params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.n_convfeats)
@@ -170,7 +163,6 @@ class Model(BaseModel):
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
-        init_ctx = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_ctx', activ='tanh')
 
         # NOTE: Don't change afterwards here, the rest should be OK
         # word embedding (target), we will shift the target sequence one time step
@@ -255,7 +247,6 @@ class Model(BaseModel):
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
-        init_ctx = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_ctx', activ='tanh')
 
         # NOTE: No need to compute ctx as input is ctx as well.
         # But this will require changes in other parts of the code
@@ -301,20 +292,3 @@ class Model(BaseModel):
         inputs = [y, ctx, init_state]
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
-
-    # Not used for now
-    def beam_search(self, beam_size=12):
-        hyps = []
-        for data in self.valid_iterator:
-            # Transpose for iteration over sampels
-            xs = np.transpose(data['x_img'], (1, 0, 2))
-            # Consume validation data sample by sample for beam search
-            for x in xs:
-                sample, score = beam_search(self.f_init, self.f_next, [x[:, None, :]],
-                                            beam_size=beam_size, maxlen=50)
-                # Normalize by lengths and find the best hypothesis
-                lens = np.array([len(s) for s in sample])
-                score = np.array(score) / lens
-                hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
-
-        return self.valid_scorer.compute(self.valid_trg_file, hyps)

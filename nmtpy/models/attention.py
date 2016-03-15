@@ -16,13 +16,11 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from nmtpy.layers import *
-from nmtpy.typedef import *
-from nmtpy.nmtutils import *
-from nmtpy.search import beam_search
-from nmtpy.iterators import get_iterator
-from nmtpy.models.basemodel import BaseModel
-from nmtpy.sysutils import get_valid_evaluation
+from ..layers import *
+from ..typedef import *
+from ..nmtutils import *
+from ..iterators import get_iterator
+from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
     def __init__(self, trng, **kwargs):
@@ -290,27 +288,4 @@ class Model(BaseModel):
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
-    # Not used for now
-    def beam_search(self, beam_size=12):
-        tmp_model = os.path.join("/tmp", self.name) + ".npz"
-        tmp_opts = "%s.pkl" % tmp_model
-        # Save model temporarily
-        self.save_params(tmp_model, **unzip(self.tparams))
-        self.save_options(filepath=tmp_opts)
-        result = get_valid_evaluation(tmp_model, beam_size)
-        os.unlink(tmp_model)
-        os.unlink(tmp_opts)
-        return result
-        #hyps = []
-        #for data in self.valid_iterator:
-            #xs = data['x'].T.astype(np.int64)
-            ## Consume validation data sample by sample for beam search
-            #for x in xs:
-                #sample, score = beam_search(self.f_init, self.f_next, [x[:, None]],
-                                            #beam_size=beam_size, maxlen=self.maxlen)
-                ## Normalize by lengths and find the best hypothesis
-                #lens = np.array([len(s) for s in sample])
-                #score = np.array(score) / lens
-                #hyps.append(idx_to_sent(self.trg_idict, sample[np.argmin(score)]))
 
-        #return self.valid_scorer.compute(self.valid_trg_file, hyps)

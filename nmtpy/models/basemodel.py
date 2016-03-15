@@ -15,6 +15,7 @@ import theano
 import theano.tensor as tensor
 
 import numpy as np
+from ..sysutils import get_valid_evaluation
 
 class BaseModel(object):
     __metaclass__ = ABCMeta
@@ -107,6 +108,17 @@ class BaseModel(object):
                                                 grads, self.inputs.values(),
                                                 self.cost, profile=self.profile,
                                                 mode=self.func_mode)
+
+    def beam_search(self, beam_size=12):
+        tmp_model = os.path.join("/tmp", self.name) + ".npz"
+        tmp_opts = "%s.pkl" % tmp_model
+        # Save model temporarily
+        self.save_params(tmp_model, **unzip(self.tparams))
+        self.save_options(filepath=tmp_opts)
+        result = get_valid_evaluation(tmp_model, beam_size)
+        os.unlink(tmp_model)
+        os.unlink(tmp_opts)
+        return result
 
     @abstractmethod
     def load_data(self, shuffle=False, sort=False):
