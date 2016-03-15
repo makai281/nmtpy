@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 import time
-import socket
 import select
 import cPickle
 import inspect
@@ -31,43 +30,6 @@ def get_valid_evaluation(model_path, beam_size=12):
     os.unlink(trans_fname)
     return result
 
-def start_translator(model_options, cmd=None):
-    # This starts translate.py as a continuous
-    # BLEU validation daemon to use during validation periods.
-    if not cmd:
-        frame = inspect.stack()[1]
-        cmd = os.path.join(os.path.dirname(frame[1]), "translate.py")
-
-    # This is to avoid AF_UNIX too long exception
-    sock_name = sha1(model_options['model_path']).hexdigest()
-    cmds = ["nmt-translate", "-m", model_options['valid_metric'], "daemon", "--socket-name", sock_name]
-    p = subprocess.Popen(cmds, env=dict(os.environ, THEANO_FLAGS="device=cpu"))
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    for i in range(10):
-        try:
-            sock.connect("\0" + sock_name)
-        except socket.error as se:
-            time.sleep(0.5)
-        else:
-            sock_send_data(sock, model_options)
-            return p, sock
-
-    return None, None
-
-def sock_send_data(handle, d):
-    c = cPickle.dumps(d, cPickle.HIGHEST_PROTOCOL)
-    return handle.sendall(c + "%%%%%")
-
-def sock_recv_data(handle):
-    data = ""
-    while 1:
-        r = handle.recv(4096)
-        data += r
-        if r[-5:] == '%%%%%':
-            break
-
-    return cPickle.loads(data[:-5])
-
 ### GPU & PBS related functions
 def create_gpu_lock(used_gpu):
     pid = os.getpid()
@@ -77,19 +39,16 @@ def create_gpu_lock(used_gpu):
 
     return lockfile
 
-
 def remove_gpu_lock(lockfile):
     try:
         os.unlink(lockfile)
     except Exception as e:
         pass
 
-
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):
         return gzip.open(filename, mode)
     return open(filename, mode)
-
 
 def find_executable(fname):
     fname = os.path.expanduser(fname)
@@ -99,7 +58,6 @@ def find_executable(fname):
         fpath = os.path.join(path, fname)
         if os.access(fpath, os.X_OK):
             return fpath
-
 
 def get_gpu(which='auto'):
     if which == "cpu":
