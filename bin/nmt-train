@@ -324,7 +324,7 @@ if __name__ == '__main__':
                     # We'll receive every available metric such as BLEU, METEOR, etc.
                     valid_results.append(results)
                     for _, v in sorted(results.iteritems()):
-                        log.info("Validation after update %6d: %s" % (uidx, v[0]))
+                        log.info("[Validation %2d] %s" % (len(metric_history)+1, v[0]))
                     metric_history.append(results[args.valid_metric][1])
 
                 # Is this the best model?
