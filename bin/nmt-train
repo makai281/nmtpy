@@ -355,7 +355,7 @@ if __name__ == '__main__':
                         log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, patience))
                     if args.valid_metric == 'px' and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
                         bad_counter += 1
-                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, patience))
+                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
 
                 # Remember who are we :)
                 log.info("Model is --> %s" % model.name)
