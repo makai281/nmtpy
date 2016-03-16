@@ -118,7 +118,6 @@ class BiTextIterator(object):
     def prepare_batches(self, shuffle=False, sort=False):
         sample_idxs = np.arange(self.n_samples)
         self.__minibatches = []
-        self.__batch_sample_idxs = []
 
         if sort:
             # Sort samples by target sentence length
@@ -132,7 +131,6 @@ class BiTextIterator(object):
             x, x_mask = mask_data([self.__seqs[i][0] for i in batch_idxs], self.n_src_tsteps)
             y, y_mask = mask_data([self.__seqs[i][1] for i in batch_idxs])
             self.__minibatches.append((x, x_mask, y, y_mask))
-            self.__batch_sample_idxs.extend(batch_idxs)
 
         if sort and shuffle:
             # The last one is probably smaller than batch_size, exclude it
@@ -143,10 +141,12 @@ class BiTextIterator(object):
             self.__minibatches = all_but_last
 
             # Recreate sample idxs from shuffled batches
-            sample_idxs = self.__batch_sample_idxs
+            sample_idxs = []
+            for batch in self.__minibatches:
+                sample_idxs.extend(batch[0])
 
-        self.__idxs = sample_idxs
         self.__iter = iter(self.__minibatches)
+        self.__idxs = sample_idxs
 
     def next(self):
         try:
