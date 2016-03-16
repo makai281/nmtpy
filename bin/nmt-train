@@ -152,6 +152,8 @@ if __name__ == '__main__':
     if lock_file:
         atexit.register(remove_gpu_lock, lock_file)
 
+    import theano
+    import theano.tensor as tensor
     log.info("Using device: %s (on machine %s)" % (args.device_id, platform.node()))
 
     ##################
@@ -165,18 +167,13 @@ if __name__ == '__main__':
     ########
     # Seed #
     ########
-    import theano
-    import theano.tensor as tensor
-    from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-
     # Don't seed numpy if seed == 0
     # But we need to seed theano.
     if args.seed == 0:
-        trng = RandomStreams(1234)
+        args.seed = 1234
     else:
         # Set numpy random seed before everything else
         np.random.seed(args.seed)
-        trng = RandomStreams(args.seed)
 
     #############################################
     # Import the class from between nmtpy.models
@@ -191,7 +188,7 @@ if __name__ == '__main__':
     # Create model object
     # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
     model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
-    model = Model(trng=trng, **model_args)
+    model = Model(seed=args.seed, **model_args)
 
     if model.options.get('n_words_src', 0) > 0:
         log.info("Source vocabulary size: %d" % model.options['n_words_src'])
@@ -327,6 +324,8 @@ if __name__ == '__main__':
                         log.info("[Validation %2d] %s" % (len(metric_history)+1, v[0]))
                     metric_history.append(results[args.valid_metric][1])
 
+                log.info("[Validation %2d] LOSS = %5.5f" % (len(valid_history), valid_err))
+
                 # Is this the best model?
                 best = False
                 if args.valid_metric != 'px' and metric_history[-1] >= np.array(metric_history).max():
@@ -353,13 +352,13 @@ if __name__ == '__main__':
                 elif len(valid_history) > args.patience:
                     if args.valid_metric != 'px' and metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
                         bad_counter += 1
+                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, patience))
                     if args.valid_metric == 'px' and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
                         bad_counter += 1
-
-                log.info('Validation loss %5.5f\t (%2d/%2d patience)' % (valid_err, bad_counter, args.patience))
+                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, patience))
 
                 # Remember who are we :)
-                log.info("This is the model: %s" % model.name)
+                log.info("Model is --> %s" % model.name)
 
                 if bad_counter > args.patience:
                     early_stop = True
