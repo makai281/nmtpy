@@ -130,7 +130,7 @@ class BiTextIterator(object):
             batch_idxs = sample_idxs[i:i + self.batch_size]
             x, x_mask = mask_data([self.__seqs[i][0] for i in batch_idxs], self.n_src_tsteps)
             y, y_mask = mask_data([self.__seqs[i][1] for i in batch_idxs])
-            self.__minibatches.append((batch_idxs, x, x_mask, y, y_mask))
+            self.__minibatches.append((x, x_mask, y, y_mask))
 
         if sort and shuffle:
             # The last one is probably smaller than batch_size, exclude it
@@ -157,4 +157,4 @@ class BiTextIterator(object):
         except AttributeError as ae:
             raise Exception("You need to call prepare_batches() first.")
         else:
-            return OrderedDict([(k,data[i+1]) for i,k in enumerate(self.__return_keys)])
+            return OrderedDict([(k,data[i]) for i,k in enumerate(self.__return_keys)])
