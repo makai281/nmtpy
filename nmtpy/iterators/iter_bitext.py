@@ -158,3 +158,42 @@ class BiTextIterator(object):
             raise Exception("You need to call prepare_batches() first.")
         else:
             return OrderedDict([(k,data[i]) for i,k in enumerate(self.__return_keys)])
+
+### Test
+if __name__ == '__main__':
+    import os
+    src = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.en"
+    trg = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.de"
+    sdc = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.en.pkl"
+    tdc = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.de.pkl"
+
+    from ..nmtutils import load_dictionary,idx_to_sent
+    src_dict, src_idict = load_dictionary(os.path.expanduser(sdc))
+    trg_dict, trg_idict = load_dictionary(os.path.expanduser(tdc))
+
+    iterator = BiTextIterator(os.path.expanduser(src), src_dict,
+                              os.path.expanduser(trg), trg_dict, batch_size=32)
+    iterator.prepare_batches()
+    idxs1 = iterator.get_idxs()
+
+    d = {}
+    for batch in iterator:
+        for s,t in zip(batch['x'].T, batch['y'].T):
+            src_sent = idx_to_sent(src_idict, s)
+            trg_sent = idx_to_sent(trg_idict, t)
+            if src_sent in d:
+                print "Key already available: %s" % src_sent
+            else:
+                d[src_sent] = trg_sent
+
+    iterator.prepare_batches(shuffle=True, sort=True)
+    for batch in iterator:
+        for s,t in zip(batch['x'].T, batch['y'].T):
+            src_sent = idx_to_sent(src_idict, s)
+            trg_sent = idx_to_sent(trg_idict, t)
+            if d[src_sent] != trg_sent:
+                print "Warning: %s -> %s" % (src_sent, trg_sent)
+    idxs2 = iterator.get_idxs()
+
+    if np.allclose(idxs1, idxs2):
+        print "all close"
