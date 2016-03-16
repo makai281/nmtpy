@@ -105,7 +105,7 @@ class TextIterator(object):
         for i in range(0, self.n_samples, self.batch_size):
             batch_idxs = sample_idxs[i:i + self.batch_size]
             x, x_mask = mask_data([self.__seqs[i] for i in batch_idxs])
-            self.__minibatches.append((x, x_mask))
+            self.__minibatches.append((batch_idxs, x, x_mask))
 
         # Shuffle sorted batches
         if sort and shuffle:
@@ -133,4 +133,4 @@ class TextIterator(object):
         except AttributeError as ae:
             raise Exception("You need to call prepare_batches() first.")
         else:
-            return OrderedDict([(k,data[i]) for i,k in enumerate(self.__return_keys)])
+            return OrderedDict([(k,data[i+1]) for i,k in enumerate(self.__return_keys)])
