@@ -105,7 +105,7 @@ class Model(BaseModel):
 
         self.initial_params = params
 
-    def build(self):
+    def build(self, normalize_cost=False):
         # description string: #words x #samples
         x = tensor.matrix('x', dtype=INT)
         x_mask = tensor.matrix('x_mask', dtype='float32')
@@ -205,10 +205,11 @@ class Model(BaseModel):
         # Useful for debugging from ipython
         #self.db = locals()
 
-        # NOTE: We may want to normalize the cost by dividing
+        # We may want to normalize the cost by dividing
         # to the number of target tokens but this needs
         # scaling the learning rate accordingly.
-        # cost = cost / y_mask.sum()
+        if normalize_cost:
+            cost = cost / y_mask.sum()
 
         self.f_log_probs = theano.function(self.inputs.values(),
                                            cost,

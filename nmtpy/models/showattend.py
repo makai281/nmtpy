@@ -221,6 +221,8 @@ class Model(BaseModel):
         cost = (cost * y_mask).sum(0)
 
         # This computes the cost given the input tensors
+        # This is normalized wrt batch size afterwards
+        # after doing a full forward pass in validation in val_loss()
         self.f_log_probs = theano.function(self.inputs.values(),
                                            cost,
                                            mode=self.func_mode,

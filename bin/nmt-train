@@ -35,6 +35,7 @@ TRAIN_DEFAULTS = {
         'alpha_c':            0.,             # Alpha regularization
         'decay_c':            0.0005,         # L2 penalty factor
         'clip_c':             0.,             # Clip gradients above clip_c
+        'norm_cost':          False,          # Normalize cost wrt sentence length
         'seed':               1234,           # RNG seed
         'suffix':             "",             # Model suffix
         'save_iter':          False,          # Save each best valid weights to separate file
@@ -60,6 +61,7 @@ def setup(args):
         dim_str = dim_str[:-1]
 
     # Append learning rate only for the SGD case
+    args.lrate = float(args.lrate)
     opt_string = args.optimizer
     if args.optimizer == "sgd":
         opt_string += "-lr_%.4f" % args.lrate
@@ -216,7 +218,7 @@ if __name__ == '__main__':
 
     # Build the model
     log.info("Building model")
-    model.build()
+    model.build(args.norm_cost)
 
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
@@ -352,7 +354,7 @@ if __name__ == '__main__':
                 elif len(valid_history) > args.patience:
                     if args.valid_metric != 'px' and metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
                         bad_counter += 1
-                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, patience))
+                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
                     if args.valid_metric == 'px' and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
                         bad_counter += 1
                         log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
