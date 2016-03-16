@@ -13,6 +13,7 @@ from abc import ABCMeta, abstractmethod
 
 import theano
 import theano.tensor as tensor
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
 from ..sysutils import get_valid_evaluation
@@ -49,8 +50,8 @@ class BaseModel(object):
         self.valid_iterator = None
         self.test_iterator = None
 
-    def set_trng(self, trng):
-        self.trng = trng
+    def set_trng(self, seed):
+        self.trng = RandomStreams(seed)
 
     def param_stats(self):
         print "%30s %12s %12s %6s" % ("Name", "min", "max", "NaNs")

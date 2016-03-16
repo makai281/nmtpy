@@ -24,7 +24,7 @@ from ..iterators import get_iterator
 from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
-    def __init__(self, trng, **kwargs):
+    def __init__(self, seed, **kwargs):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
@@ -44,7 +44,7 @@ class Model(BaseModel):
         self.trg_idict = trg_idict
 
         self.set_nanguard()
-        self.set_trng(trng)
+        self.set_trng(seed)
 
     def load_data(self, shuffle=False, sort=False):
         ###############
