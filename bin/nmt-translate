@@ -12,12 +12,6 @@ from multiprocessing import Process, Queue, cpu_count
 
 import numpy as np
 
-# Force CPU
-os.environ["THEANO_FLAGS"] = "device=cpu"
-
-import theano
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-
 from nmtpy.logger import Logger
 from nmtpy.config import Config
 from nmtpy.search import beam_search, gen_sample, forced_decoding
@@ -29,7 +23,11 @@ from nmtpy.iterators import get_iterator
 log = Logger._logger
 
 """Worker process which does beam search."""
-def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized, nbest, argmax=False, force_dec=False):
+def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, argmax=False, force_dec=False, seed=1234):
+    from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+    trng = RandomStreams(seed)
+    model.build_sampler()
+    f_init, f_next = model.f_init, model.f_next
     # If argmax is True, no beam-search is done
     while True:
         req = queue.get()
@@ -50,6 +48,7 @@ def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized,
 
         elif argmax:
             # Get the 1best for each distribution
+            # FIXME: Should pass trng?
             sample, score = gen_sample(f_init, f_next, data_dict.values(), maxlen=50, argmax=True)
             sample = [sample]
             score = np.array(score)
@@ -73,7 +72,7 @@ def translate_model(queue, rqueue, pid, f_init, f_next, beam_size, unnormalized,
 to them, waits for the results."""
 class Translator(object):
     def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10,
-                       unnorm=False, seed=None, force_dec=False, argmax=False):
+                       unnorm=False, seed=1234, force_dec=False, argmax=False):
 
         self.beam_size = beam_size
 
@@ -91,11 +90,11 @@ class Translator(object):
         self.unnorm = unnorm
         self.argmax = argmax
         self.force_dec = force_dec
+        self.seed = seed
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
 
-        self.trng = RandomStreams(seed)
 
     def set_model_params(self, opt_dict=None):
         # load model parameters and set theano shared variables
@@ -105,7 +104,6 @@ class Translator(object):
             self.tparams = self.__obj.load_params(np.load(self.model_file))
 
         self.__obj.set_dropout(False)
-        self.__obj.build_sampler()
 
     def set_model_options(self, model_options, model_file):
         self.model_options = model_options
@@ -120,7 +118,7 @@ class Translator(object):
             del self.model_options['trng']
 
         # Create the model
-        self.__obj = self.__class(trng=self.trng, **self.model_options)
+        self.__obj = self.__class(seed=self.seed, **self.model_options)
 
         # load dictionaries
         self.ref_idict = {}
@@ -164,9 +162,8 @@ class Translator(object):
         for idx in xrange(self.n_jobs):
             self.processes[idx] = \
                     Process(target=translate_model,
-                            args=(write_queue, read_queue, idx, self.__obj.f_init,
-                                  self.__obj.f_next, self.beam_size, self.unnorm,
-                                  self.nbest, self.argmax, self.force_dec))
+                            args=(write_queue, read_queue, idx, self.__obj, self.beam_size, self.unnorm,
+                                  self.nbest, self.argmax, self.force_dec, self.seed))
             self.processes[idx].start()
 
         # Send data to worker processes
@@ -184,12 +181,15 @@ class Translator(object):
         self.trans  = [None] * self.n_sentences
         self.scores = [None] * self.n_sentences
 
+        t = time.time()
         for i in xrange(self.n_sentences):
             resp = read_queue.get()
             self.trans[resp[0]] = resp[1]
             self.scores[resp[0]] = resp[2]
-            if (i+1) % 200 == 0:
-                log.info("%d/%d sentences completed." % ((i+1), self.n_sentences))
+            if (i+1) % 100 == 0:
+                t = time.time() - t
+                log.info("%d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, t))
+                t = time.time()
 
         # Stop workers
         for idx in xrange(self.n_jobs):
@@ -232,15 +232,28 @@ if __name__ == "__main__":
                                                   action="store_true")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
+    parser.add_argument('-d', '--device'        , default='cpu', help="Where to run beam search.")
     parser.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
     parser.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
     parser.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
     parser.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for evaluation (default: validation set)")
 
     args = parser.parse_args()
-    if args.n_jobs == 0:
-        # Auto infer CPU number
-        args.n_jobs = (cpu_count() / 2) - 1
+    if args.device.startswith("gpu"):
+        args.n_jobs = 1
+    elif args.device.startswith("cpu"):
+        if args.n_jobs == 0:
+            # Auto infer CPU number
+            args.n_jobs = (cpu_count() / 2) - 1
+
+        if args.n_jobs > 1:
+            # This is to avoid thread explosion. Allow
+            # each process to use a single thread.
+            os.environ["OMP_NUM_THREADS"] = "1"
+            os.environ["MKL_NUM_THREADS"] = "1"
+
+    # Select device
+    os.environ["THEANO_FLAGS"] = "device=%s" % args.device
 
     translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
                             ref_file=args.ref_file, nbest=args.nbest,
