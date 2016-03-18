@@ -45,7 +45,7 @@ class Model(BaseModel):
         self.set_nanguard()
         self.set_trng(seed)
 
-    def load_data(self, shuffle=False, sort=False):
+    def load_data(self, shuffle=False, sort=False, invert=False):
         # We need to find out about modalities
         train_src_type, train_src_file = self.data['train_src']
         train_trg_type, train_trg_file = self.data['train_trg']
@@ -61,7 +61,7 @@ class Model(BaseModel):
                                                    n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
 
         # Prepare batches
-        self.train_iterator.prepare_batches(shuffle=shuffle, sort=sort)
+        self.train_iterator.prepare_batches(shuffle=shuffle, sort=sort, invert=invert)
 
         if 'valid_src' in self.data:
             # Validation data available
