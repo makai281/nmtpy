@@ -49,6 +49,7 @@ TRAIN_DEFAULTS = {
         'valid_metric':       'bleu',         # bleu, px, meteor
         'shuffle':            False,          # Shuffle training dataset
         'sort':               False,          # Sort training batches wrt sentence length
+        'invert':             False,          # Invert the order of batches for each epoch
         }
 
 def setup(args):
@@ -66,17 +67,26 @@ def setup(args):
     if args.optimizer == "sgd":
         opt_string += "-lr_%.4f" % args.lrate
 
-    # Set model id
-    name = "%s-%s-%s-decay_%.5f-gclip_%.1f-dropout_%s-bs_%d-valid_%s-seed_%d-shuffle_%s" % (
-            args.model_type, dim_str,
-            opt_string, args.decay_c, args.clip_c,
-            str(args.dropout),
-            args.batch_size, args.valid_metric, args.seed,
-            "yes" if args.shuffle else "no")
-
     # If shuffle requested, sort as well
     if args.shuffle:
         args.sort = True
+
+    # Set model name
+    name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
+    if args.decay_c > 0:
+        name += "-decay_%.5f" % args.decay_c
+    if args.clip_c > 0:
+        name += "-gclip_%.1f" % args.clip_c
+    if args.dropout > 0:
+        name += "-dropout_%.1f" % args.dropout
+    if args.seed != 1234:
+        name += "-seed_%d" % args.seed
+    if args.sort:
+        name += "-sort"
+    if args.shuffle:
+        name += "-shuf"
+    if args.invert:
+        name += "-invert"
 
     if len(args.get('suffix', '')) > 0:
         name = "%s-%s" % (name, args.suffix)
