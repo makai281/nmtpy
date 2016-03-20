@@ -17,9 +17,7 @@ class BiTextIterator(object):
                        trg_data, trg_dict,
                        batch_size,
                        n_words_src=0, n_words_trg=0,
-                       maxlen=50,
-                       src_name='x', trg_name='y',
-                       maxlen_as_n_src_tsteps=False):
+                       src_name='x', trg_name='y')
 
         # For minibatch shuffling
         random.seed(1234)
@@ -37,14 +35,6 @@ class BiTextIterator(object):
 
         self.src_name = src_name
         self.trg_name = trg_name
-
-        self.maxlen = maxlen
-
-        # This is for fixed timesteps batches as input
-        # Not used for recurrent networks
-        self.n_src_tsteps = -1
-        if maxlen_as_n_src_tsteps:
-            self.n_src_tsteps = self.maxlen
 
         self.n_samples = 0
         self.__seqs = []
@@ -90,12 +80,6 @@ class BiTextIterator(object):
             sline = sline.split(" ")
             tline = tline.split(" ")
 
-            # Filter out long sentences
-            # FIXME: This is very error prone, disable it
-            #if self.maxlen > 0 and len(sline) > self.maxlen or len(tline) > self.maxlen:
-            #    self.__max_filt += 1
-            #    continue
-
             sseq = [self.src_dict.get(w, 1) for w in sline]
             tseq = [self.trg_dict.get(w, 1) for w in tline]
 
@@ -131,11 +115,13 @@ class BiTextIterator(object):
 
         for i in range(0, self.n_samples, self.batch_size):
             batch_idxs = sample_idxs[i:i + self.batch_size]
-            x, x_mask = mask_data([self.__seqs[i][0] for i in batch_idxs], self.n_src_tsteps)
+            x, x_mask = mask_data([self.__seqs[i][0] for i in batch_idxs])
             y, y_mask = mask_data([self.__seqs[i][1] for i in batch_idxs])
             self.__minibatches.append((batch_idxs, x, x_mask, y, y_mask))
 
         if sort and shuffle:
+            # FIXME: This will break get_idxs and image features
+            # as the leftover batch will not be at the end
             random.shuffle(self.__minibatches)
             sample_idxs = []
             for batch in self.__minibatches:

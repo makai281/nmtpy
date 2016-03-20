@@ -12,8 +12,7 @@ from ..nmtutils import mask_data
 
 """Single side text iterator for monolingual data."""
 class TextIterator(object):
-    def __init__(self, data, _dict, batch_size, n_words=0, data_name='x',
-                 maxlen=50, maxlen_as_n_tsteps=False, do_mask=False):
+    def __init__(self, data, _dict, batch_size, n_words=0, data_name='x', do_mask=False):
 
         random.seed(1234)
 
@@ -22,13 +21,6 @@ class TextIterator(object):
         self.batch_size = batch_size
         self.n_words = n_words
         self.data_name = data_name
-        self.maxlen = maxlen
-
-        # This is for fixed timesteps batches as input
-        # Not used for recurrent networks
-        self.n_tsteps = -1
-        if maxlen_as_n_tsteps:
-            self.n_tsteps = self.maxlen
 
         self.n_samples = 0
 
@@ -72,12 +64,6 @@ class TextIterator(object):
                 if line != "":
                     line = line.split(" ")
 
-                    # Filter out long sentences
-                    # FIXME: This is very error-prone, disable
-                    #if self.maxlen > 0 and len(line) > self.maxlen:
-                    #    self.__max_filt += 1
-                    #    continue
-
                     seq = [self.dict.get(w, 1) for w in line]
 
                     # if given limit vocabulary
@@ -109,14 +95,9 @@ class TextIterator(object):
 
         # Shuffle sorted batches
         if sort and shuffle:
-            # The last one is probably smaller than batch_size, exclude it
-            all_but_last = self.__minibatches[:-1]
-            random.shuffle(all_but_last)
-            # Add the last one now
-            all_but_last.append(self.__minibatches[-1])
-            self.__minibatches = all_but_last
-
-            # Recreate sample idxs from shuffled batches
+            # FIXME: This will break get_idxs and image features
+            # as the leftover batch will not be at the end
+            random.shuffle(self.__minibatches)
             sample_idxs = []
             for batch in self.__minibatches:
                 sample_idxs.extend(batch[0])

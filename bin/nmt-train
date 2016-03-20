@@ -310,7 +310,7 @@ if __name__ == '__main__':
 
             # verbose
             if uidx % 10 == 0:
-                log.info("Epoch: %6d, update: %10d, Cost: %10.5f, Time: %.3f" % (eidx, uidx, cost, ud))
+                log.info("Epoch: %4d, update: %7d, Cost: %10.2f, Time: %.3f" % (eidx, uidx, cost, ud))
 
             ###############################################################
             # Validate model on validation set and early stop if necessary
