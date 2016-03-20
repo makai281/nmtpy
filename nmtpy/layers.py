@@ -11,6 +11,13 @@ tanh = tensor.tanh
 relu = tensor.nnet.relu
 linear = lambda x: x
 
+def _tensor_slice(_x, n, dim):
+    if _x.ndim == 3:
+        return _x[:, :, n*dim:(n+1)*dim]
+    elif _x.ndim == 2:
+        return _x[:, n*dim:(n+1)*dim]
+    return _x[n*dim:(n+1)*dim]
+
 #########
 # dropout
 #########
@@ -28,9 +35,11 @@ def dropout_layer(state_before, use_dropout, dropout_prob, trng):
 def get_new_layer(name):
     # Layer type: (initializer, layer)
     layers = {
-                'ff'        : ('param_init_fflayer', 'fflayer'),
-                'gru'       : ('param_init_gru', 'gru_layer'),
-                'gru_cond'  : ('param_init_gru_cond', 'gru_cond_layer'),
+                'ff'        : ('param_init_fflayer'     , 'fflayer'),
+                'gru'       : ('param_init_gru'         , 'gru_layer'),
+                'gru_cond'  : ('param_init_gru_cond'    , 'gru_cond_layer'),
+                'lstm'      : ('param_init_lstm'        , 'lstm_layer'),
+                'lstm_cond' : ('param_init_lstm_cond'   , 'lstm_cond_layer'),
              }
 
     init, layer = layers[name]
@@ -100,13 +109,6 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     # input to compute the hidden state proposal
     state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) + tparams[_p(prefix, 'bx')]
 
-    ##############################################################
-    # utility function to slice a tensor
-    def _slice(_x, n, dim):
-        if _x.ndim == 3:
-            return _x[:, :, n*dim:(n+1)*dim]
-        return _x[:, n*dim:(n+1)*dim]
-
     # step function to be used by scan
     # sequences:
     #   m_    : mask
@@ -122,8 +124,8 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
         preact += x_
 
         # reset and update gates
-        r = tensor.nnet.sigmoid(_slice(preact, 0, dim))
-        u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
+        r = tensor.nnet.sigmoid(_tensor_slice(preact, 0, dim))
+        u = tensor.nnet.sigmoid(_tensor_slice(preact, 1, dim))
 
         # compute the hidden state proposal
         preactx = tensor.dot(h_, Ux)
@@ -219,10 +221,6 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
                    context_mask=None, profile=False, mode=None,
                    **kwargs):
 
-    def _slice(_x, n, dim):
-        if _x.ndim == 3:
-            return _x[:, :, n*dim:(n+1)*dim]
-        return _x[:, n*dim:(n+1)*dim]
     assert context, 'Context must be provided'
 
     if one_step:
@@ -281,8 +279,8 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         preact1 = tensor.nnet.sigmoid(preact1)
 
         # Slice activations
-        r1 = _slice(preact1, 0, dim)
-        u1 = _slice(preact1, 1, dim)
+        r1 = _tensor_slice(preact1, 0, dim)
+        u1 = _tensor_slice(preact1, 1, dim)
 
         # (init_state X Ux) * r1 + state_belowx
         preactx1 = (tensor.dot(h_, Ux) * r1) + xx_
@@ -333,8 +331,8 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         preact2 = tensor.nnet.sigmoid(preact2)
 
         # Slice activations
-        r2 = _slice(preact2, 0, dim)
-        u2 = _slice(preact2, 1, dim)
+        r2 = _tensor_slice(preact2, 0, dim)
+        u2 = _tensor_slice(preact2, 1, dim)
 
         preactx2 = tensor.dot(h1, Ux_nl)+bx_nl
         preactx2 *= r2
@@ -379,3 +377,251 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
                                     mode=mode,
                                     strict=True)
     return rval
+
+#################
+# LSTM (from SAT)
+#################
+def param_init_lstm(options, params, nin, dim, prefix='lstm'):
+    """
+     Stack the weight matrices for all the gates
+     for much cleaner code and slightly faster dot-prods
+    """
+    # input weights
+    params[_p(prefix, 'W')] = np.concatenate([norm_weight(nin,dim),
+                                              norm_weight(nin,dim),
+                                              norm_weight(nin,dim),
+                                              norm_weight(nin,dim)], axis=1)
+
+    # for the previous hidden activation
+    params[_p(prefix, 'U')] = np.concatenate([ortho_weight(dim),
+                                              ortho_weight(dim),
+                                              ortho_weight(dim),
+                                              ortho_weight(dim)], axis=1)
+    params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype('float32')
+
+    return params
+
+# This function implements the lstm fprop
+def lstm_layer(tparams, state_below, options, prefix='lstm', mask=None, **kwargs):
+    nsteps = state_below.shape[0]
+    dim = tparams[_p(prefix, 'U')].shape[0]
+
+    # if we are dealing with a mini-batch
+    if state_below.ndim == 3:
+        n_samples = state_below.shape[1]
+        init_state = tensor.alloc(0., n_samples, dim)
+        init_memory = tensor.alloc(0., n_samples, dim)
+    # during sampling
+    else:
+        n_samples = 1
+        init_state = tensor.alloc(0., dim)
+        init_memory = tensor.alloc(0., dim)
+
+    # if we have no mask, we assume all the inputs are valid
+    if mask == None:
+        mask = tensor.alloc(1., state_below.shape[0], 1)
+
+    ###########################
+    # one time step of the lstm
+    ###########################
+    def _step(m_, x_, h_, c_):
+        preact = tensor.dot(h_, tparams[_p(prefix, 'U')])
+        preact += x_
+
+        i = tensor.nnet.sigmoid(_tensor_slice(preact, 0, dim))
+        f = tensor.nnet.sigmoid(_tensor_slice(preact, 1, dim))
+        o = tensor.nnet.sigmoid(_tensor_slice(preact, 2, dim))
+        c = tensor.tanh(_tensor_slice(preact, 3, dim))
+
+        c = f * c_ + i * c
+        h = o * tensor.tanh(c)
+
+        return h, c, i, f, o, preact
+
+    state_below = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
+
+    rval, updates = theano.scan(_step,
+                                sequences=[mask, state_below],
+                                outputs_info=[init_state, init_memory, None, None, None, None],
+                                name=_p(prefix, '_layers'),
+                                n_steps=nsteps, profile=False)
+    return rval
+
+# Conditional LSTM layer with Attention
+def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
+    # input to LSTM, similar to the above, we stack the matricies for compactness, do one
+    # dot product, and use the slice function below to get the activations for each "gate"
+    params[_p(prefix,'W')] = np.concatenate([norm_weight(nin,dim),
+                                             norm_weight(nin,dim),
+                                             norm_weight(nin,dim),
+                                             norm_weight(nin,dim)], axis=1)
+
+    # LSTM to LSTM
+    params[_p(prefix,'U')] = np.concatenate([ortho_weight(dim),
+                                             ortho_weight(dim),
+                                             ortho_weight(dim),
+                                             ortho_weight(dim)], axis=1)
+
+    # bias to LSTM
+    params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype('float32')
+
+    # context to LSTM
+    params[_p(prefix,'Wc')] = norm_weight(dimctx, dim*4)
+
+    # attention: context -> hidden
+    params[_p(prefix,'Wc_att')] = norm_weight(dimctx, ortho=False)
+
+    # attention: LSTM -> hidden
+    params[_p(prefix,'Wd_att')] = norm_weight(dim,dimctx)
+
+    # attention: hidden bias
+    params[_p(prefix,'b_att')] = np.zeros((dimctx,)).astype('float32')
+
+    # optional "deep" attention
+    if options['n_layers_att'] > 1:
+        for lidx in xrange(1, options['n_layers_att']):
+            params[_p(prefix, 'W_att_%d' % lidx)] = ortho_weight(dimctx)
+            params[_p(prefix, 'b_att_%d' % lidx)] = np.zeros((dimctx,)).astype('float32')
+
+    # attention:
+    params[_p(prefix,'U_att')] = norm_weight(dimctx, 1)
+    params[_p(prefix, 'c_tt')] = np.zeros((1,)).astype('float32')
+
+    if options['selector']:
+        # attention: selector
+        params[_p(prefix, 'W_sel')] = norm_weight(dim, 1)
+        params[_p(prefix, 'b_sel')] = np.float32(0.)
+
+    return params
+
+def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
+                    mask=None, context=None, one_step=False,
+                    init_memory=None, init_state=None,
+                    trng=None, use_noise=None, **kwargs):
+
+    assert context, 'Context must be provided'
+
+    if one_step:
+        assert init_memory, 'previous memory must be provided'
+        assert init_state, 'previous state must be provided'
+
+    nsteps = state_below.shape[0]
+    if state_below.ndim == 3:
+        n_samples = state_below.shape[1]
+    else:
+        n_samples = 1
+
+    # mask
+    if mask is None:
+        mask = tensor.alloc(1., state_below.shape[0], 1)
+
+    # infer lstm dimension
+    dim = tparams[_p(prefix, 'U')].shape[0]
+
+    # initial/previous state
+    if init_state is None:
+        init_state = tensor.alloc(0., n_samples, dim)
+    # initial/previous memory
+    if init_memory is None:
+        init_memory = tensor.alloc(0., n_samples, dim)
+
+    # projected context
+    pctx_ = tensor.dot(context, tparams[_p(prefix,'Wc_att')]) + tparams[_p(prefix, 'b_att')]
+
+    # Multiple LSTM layers in attention?
+    if options['n_layers_att'] > 1:
+        for lidx in xrange(1, options['n_layers_att']):
+            pctx_ = tensor.dot(pctx_, tparams[_p(prefix,'W_att_%d'%lidx)])+tparams[_p(prefix, 'b_att_%d'%lidx)]
+            # note to self: this used to be options['n_layers_att'] - 1, so no extra non-linearity if n_layers_att < 3
+            if lidx < options['n_layers_att']:
+                pctx_ = tanh(pctx_)
+
+    # projected x
+    # state_below is timesteps*num samples by d in training (TODO change to notation of paper)
+    # this is n * d during sampling
+    state_below = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
+
+    def _step(m_, x_, h_, c_, ct_, pctx_):
+        """ Each variable is one time slice of the LSTM
+        m_ - (mask), x_- (previous word), h_- (hidden state), c_- (lstm memory), ct_- (context),
+        pctx_ (projected context)
+        """
+        # attention computation
+        # [described in  equations (4), (5), (6) in
+        # section "3.1.2 Decoder: Long Short Term Memory Network]
+        pstate_ = tensor.dot(h_, tparams[_p(prefix,'Wd_att')])
+        pctx_ = pctx_ + pstate_[:, None, :]
+        pctx_list = []
+        pctx_list.append(pctx_)
+        pctx_ = tanh(pctx_)
+        alpha = tensor.dot(pctx_, tparams[_p(prefix,'U_att')]) + tparams[_p(prefix, 'c_tt')]
+        alpha_pre = alpha
+        alpha_shp = alpha.shape
+
+        # Soft attention
+        alpha = tensor.nnet.softmax(alpha.reshape([alpha_shp[0],alpha_shp[1]])) # softmax
+        ctx_ = (context * alpha[:,:,None]).sum(1) # current context
+        alpha_sample = alpha # you can return something else reasonable here to debug
+
+        if options['selector']:
+            sel_ = tensor.nnet.sigmoid(tensor.dot(h_, tparams[_p(prefix, 'W_sel')])+tparams[_p(prefix,'b_sel')])
+            sel_ = sel_.reshape([sel_.shape[0]])
+            ctx_ = sel_[:,None] * ctx_
+
+        preact = tensor.dot(h_, tparams[_p(prefix, 'U')])
+        preact += x_
+        preact += tensor.dot(ctx_, tparams[_p(prefix, 'Wc')])
+
+        # Recover the activations to the lstm gates
+        # [equation (1)]
+        i = _tensor_slice(preact, 0, dim)
+        f = _tensor_slice(preact, 1, dim)
+        o = _tensor_slice(preact, 2, dim)
+        i = tensor.nnet.sigmoid(i)
+        f = tensor.nnet.sigmoid(f)
+        o = tensor.nnet.sigmoid(o)
+        c = tensor.tanh(_tensor_slice(preact, 3, dim))
+
+        # compute the new memory/hidden state
+        # if the mask is 0, just copy the previous state
+        c = f * c_ + i * c
+        c = m_[:,None] * c + (1. - m_)[:,None] * c_
+
+        h = o * tensor.tanh(c)
+        h = m_[:,None] * h + (1. - m_)[:,None] * h_
+
+        rval = [h, c, alpha, alpha_sample, ctx_]
+        if options['selector']:
+            rval += [sel_]
+        rval += [pstate_, pctx_, i, f, o, preact, alpha_pre] + pctx_list
+        return rval
+
+    if options['selector']:
+        _step0 = lambda m_, x_, h_, c_, ct_, sel_, pctx_: _step(m_, x_, h_, c_, ct_, pctx_)
+    else:
+        _step0 = lambda m_, x_, h_, c_, ct_, pctx_: _step(m_, x_, h_, c_, ct_, pctx_)
+
+    if one_step:
+        if options['selector']:
+            rval = _step0(mask, state_below, init_state, init_memory, None, None, pctx_)
+        else:
+            rval = _step0(mask, state_below, init_state, init_memory, None, pctx_)
+        return rval
+    else:
+        seqs = [mask, state_below]
+        if options['selector']:
+            outputs_info += [tensor.alloc(0., n_samples)]
+        outputs_info += [None,
+                         None,
+                         None,
+                         None,
+                         None,
+                         None,
+                         None] + [None] # *options['n_layers_att']
+        rval, updates = theano.scan(_step0,
+                                    sequences=seqs,
+                                    outputs_info=outputs_info,
+                                    non_sequences=[pctx_],
+                                    name=_p(prefix, '_layers'),
+                                    n_steps=nsteps, profile=False)
+        return rval, updates
