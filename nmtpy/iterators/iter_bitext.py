@@ -17,7 +17,7 @@ class BiTextIterator(object):
                        trg_data, trg_dict,
                        batch_size,
                        n_words_src=0, n_words_trg=0,
-                       src_name='x', trg_name='y')
+                       src_name='x', trg_name='y'):
 
         # For minibatch shuffling
         random.seed(1234)
