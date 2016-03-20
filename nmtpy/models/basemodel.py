@@ -36,7 +36,6 @@ class BaseModel(object):
 
         # Theano variables
         self.f_log_probs = None
-        self.cost = None
         self.f_init = None
         self.f_next = None
         self.f_update = None
@@ -103,12 +102,12 @@ class BaseModel(object):
 
         return np.array(probs).mean()
 
-    def build_optimizer(self, grads):
+    def build_optimizer(self, cost, grads):
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
         lr = tensor.scalar(name='lr')
         self.f_grad_shared, self.f_update = opt(lr, self.tparams,
                                                 grads, self.inputs.values(),
-                                                self.cost, profile=self.profile,
+                                                cost, profile=self.profile,
                                                 mode=self.func_mode)
 
     def beam_search(self, beam_size=12):

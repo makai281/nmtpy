@@ -35,7 +35,6 @@ TRAIN_DEFAULTS = {
         'alpha_c':            0.,             # Alpha regularization
         'decay_c':            0.0005,         # L2 penalty factor
         'clip_c':             0.,             # Clip gradients above clip_c
-        'norm_cost':          False,          # Normalize cost wrt sentence length
         'seed':               1234,           # RNG seed
         'suffix':             "",             # Model suffix
         'save_iter':          False,          # Save each best valid weights to separate file
@@ -228,7 +227,7 @@ if __name__ == '__main__':
 
     # Build the model
     log.info("Building model")
-    model.build(args.norm_cost)
+    cost, norm_cost = model.build()
 
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
@@ -245,7 +244,7 @@ if __name__ == '__main__':
         for kk, vv in model.tparams.iteritems():
             weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
-        model.cost += weight_decay
+        cost += weight_decay
 
     # FIXME: Report this from old code
     ##############################
@@ -256,7 +255,7 @@ if __name__ == '__main__':
     # apply gradient clipping here
     ################################
     log.info('Computing gradient')
-    grads = tensor.grad(model.cost, wrt=itemlist(model.tparams))
+    grads = tensor.grad(cost, wrt=itemlist(model.tparams))
     if args.clip_c > 0.:
         g2 = 0.
         new_grads = []
@@ -269,7 +268,7 @@ if __name__ == '__main__':
         grads = new_grads
 
     log.info('Building "%s" optimizer' % args.optimizer)
-    model.build_optimizer(grads)
+    model.build_optimizer(cost, grads)
 
    #####################
     # Save model options
