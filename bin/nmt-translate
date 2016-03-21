@@ -136,8 +136,9 @@ class Translator(object):
             if isinstance(self.ref_files, str):
                 self.ref_files = list([self.ref_files])
 
-        log.info("Source file\n  %s" % self.src_file)
-        log.info("Reference files\n")
+        log.info("Source file")
+        log.info("  %s" % self.src_file)
+        log.info("Reference file(s)")
         for f in self.ref_files:
             log.info("  %s" % f)
 
@@ -175,7 +176,6 @@ class Translator(object):
             self.processes[idx].start()
 
         # Send data to worker processes
-        log.info("Distributing sentences to worker processes.")
         for idx, data in enumerate(self.iterator):
             # Is it forced decoding?
             if self.force_dec and self.ref_iterator:
