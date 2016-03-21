@@ -95,6 +95,8 @@ class MultiBleuScorer(object):
 
 """Meteor wrapper."""
 class METEORScorer(object):
+    TMP_HYP  = "/tmp/meteor.hyps"
+    TMP_NREF = "/tmp/meteor.refs"
     def __init__(self, path="~/git/meteor/meteor-1.5.jar"):
 
         self.path = real_path(path)
@@ -105,16 +107,23 @@ class METEORScorer(object):
 
         if isinstance(hyps, list):
             # Create a temporary file
-            with open('/tmp/.hyps.meteor', 'w') as f:
+            with open(self.TMP_HYP, 'w') as f:
                 for hyp in hyps:
                     f.write("%s\n" % hyp)
-            cmdline.append('/tmp/.hyps.meteor')
+            cmdline.append(self.TMP_HYP)
+
         elif isinstance(hyps, str):
             cmdline.append(hyps)
 
         # Make reference files a list
         refs = [refs] if isinstance(refs, str) else refs
-        cmdline.extend(refs)
+        n_refs = len(refs)
+        if n_refs > 1:
+            # Multiple references
+            os.system('paste -d"\\n" %s > %s' % (" ".join(refs), self.TMP_NREF))
+            cmdline.append(self.TMP_NREF)
+        else:
+            cmdline.append(ref[0])
 
         if language == "auto":
             # Take the extension of the 1st reference file, e.g. ".de"
@@ -124,7 +133,16 @@ class METEORScorer(object):
         if norm:
             cmdline.append("-norm")
 
+        if n_refs > 1:
+            # Multiple references
+            cmdline.append("-r %d" % n_refs)
+
         output = check_output(cmdline)
+
+        if os.path.exists(self.TMP_NREF):
+            os.unlink(self.TMP_NREF)
+        if os.path.exists(self.TMP_HYP):
+            os.unlink(self.TMP_HYP)
 
         score = output.splitlines()
         if len(score) == 0:
