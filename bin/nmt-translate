@@ -71,7 +71,7 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
 """Translator starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Translator(object):
-    def __init__(self, beam_size, src_file=None, ref_file=None, nbest=1, n_jobs=10,
+    def __init__(self, beam_size, src_file=None, ref_files=None, nbest=1, n_jobs=10,
                        unnorm=False, seed=1234, force_dec=False, argmax=False):
 
         self.beam_size = beam_size
@@ -81,9 +81,9 @@ class Translator(object):
         if src_file:
             self.src_iter_type, self.src_file = src_file.split(":")
 
-        self.ref_file = None
-        if ref_file:
-            self.ref_iter_type, self.ref_file = ref_file.split(":")
+        self.ref_files = None
+        if ref_files:
+            self.ref_files = ref_files.split(":")
 
         self.nbest = nbest
         self.n_jobs = n_jobs
@@ -126,13 +126,21 @@ class Translator(object):
             self.ref_idict[v] = k
 
         # If not available, translate on validation set
-        if not self.src_file and not self.ref_file:
+        if not self.src_file and not self.ref_files:
+            self.ref_files = self.ref_files if isinstance(self.ref_files, list) else list([self.ref_files])
             log.info("No test sentences file given, assuming validation dataset.")
             self.src_iter_type, self.src_file = self.__obj.data['valid_src']
-            self.ref_iter_type, self.ref_file = self.__obj.data['valid_trg']
+            _, self.ref_files = self.__obj.data['valid_trg']
 
-        log.info("       Source file: %s" % self.src_file)
-        log.info("    Reference file: %s" % self.ref_file)
+            # Allow multiple reference files
+            if isinstance(self.ref_files, str):
+                self.ref_files = list([self.ref_files])
+
+        log.info("Source file\n  %s" % self.src_file)
+        log.info("Reference files\n")
+        for f in self.ref_files:
+            log.info("  %s" % f)
+
         iterator = get_iterator(self.src_iter_type)
         # Sources can be images or text
         if self.src_iter_type == 'img_feats':
@@ -147,8 +155,9 @@ class Translator(object):
 
         if self.force_dec:
             # We need to have an iterator for the references as well
-            iterator = get_iterator(ref_iter_type)
-            self.ref_iterator = iterator(self.ref_file, self.__obj.trg_dict, batch_size=1,
+            assert len(self.ref_files) == 1
+            iterator = get_iterator('text')
+            self.ref_iterator = iterator(self.ref_files[0], self.__obj.trg_dict, batch_size=1,
                                          n_words=self.__obj.n_words_trg,
                                          data_name='y_forced', do_mask=False)
             self.ref_iterator.prepare_batches()
@@ -213,7 +222,7 @@ class Translator(object):
         results = {}
         for metric, _class in get_all_scorers().iteritems():
             c = _class()
-            score = c.compute(self.ref_file, hyp_file)
+            score = c.compute(self.ref_files, hyp_file)
             results[metric] = (str(score), score.score)
         return results
 
@@ -235,7 +244,7 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
     parser.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
     parser.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
-    parser.add_argument('-R', '--ref-file'      , type=str, default=None,  help="Reference sentences for evaluation (default: validation set)")
+    parser.add_argument('-R', '--ref-files'     , type=str, default=None,  help="Reference sentences (ref1,ref2,...) (default: validation set)")
 
     args = parser.parse_args()
     if args.device.startswith("gpu"):
@@ -255,7 +264,7 @@ if __name__ == "__main__":
     os.environ["THEANO_FLAGS"] = "device=%s" % args.device
 
     translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
-                            ref_file=args.ref_file, nbest=args.nbest,
+                            ref_files=args.ref_files, nbest=args.nbest,
                             n_jobs=args.n_jobs,
                             seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
 
@@ -267,7 +276,7 @@ if __name__ == "__main__":
     translator.set_model_params()
     translator.start()
     translator.write_nbest(args.saveto)
-    if translator.ref_file:
+    if translator.ref_files:
         # Compute all metrics
         results = translator.compute_score(args.saveto)
         # NOTE: This dict is expected from nmt-translate for
