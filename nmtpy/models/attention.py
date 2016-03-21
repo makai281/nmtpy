@@ -66,13 +66,16 @@ class Model(BaseModel):
         if 'valid_src' in self.data:
             # Validation data available
             valid_src_type, valid_src_file = self.data['valid_src']
-            valid_trg_type, self.valid_trg_file = self.data['valid_trg']
+            valid_trg_type, self.valid_trg_files = self.data['valid_trg']
             valid_src_iter_class = get_iterator(valid_src_type)
             valid_trg_iter_class = get_iterator(valid_trg_type)
             assert valid_src_type == valid_trg_type == 'bitext'
 
+            # Take the 1st ref file for valid NLL computation
+            if isinstance(self.valid_trg_files, list):
+                self.valid_trg_files = self.valid_trg_files[0]
             self.valid_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
-                                                       self.valid_trg_file, self.trg_dict, batch_size=64,
+                                                       self.valid_trg_files, self.trg_dict, batch_size=64,
                                                        n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
             self.valid_iterator.prepare_batches()
 
