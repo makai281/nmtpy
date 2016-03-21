@@ -135,7 +135,7 @@ class METEORScorer(object):
 
         if n_refs > 1:
             # Multiple references
-            cmdline.append("-r %d" % n_refs)
+            cmdline.extend(["-r", n_refs])
 
         output = check_output(cmdline)
 
