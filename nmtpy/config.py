@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import glob
 from string import digits
 from .helpers import DotDict
 from .sysutils import real_path
@@ -8,9 +9,12 @@ from .sysutils import real_path
 is_path = lambda p: p.startswith(('~', '/', '../', './'))
 def check_get_path(p):
     if is_path(p):
-        p = real_path(p)
-        if not os.path.exists(p):
-            raise Exception("%s doesn't exist." % p)
+        paths = glob.glob(real_path(p))
+        for path in paths:
+            if not os.path.exists(path):
+                raise Exception("%s doesn't exist." % path)
+
+        p = paths[0] if len(paths) == 1 else paths
     return p
 
 def parse_config_option(k, v):
