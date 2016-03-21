@@ -20,15 +20,12 @@ mkdir -p $SL/{train,val} $TL/{train,val} &> /dev/null
 # lowercase->normalize->strip punctuation->tokenize
 for TYPE in train val; do
   for l in $SL $TL; do
-    for f in `ls $ROOT/$l/$TYPE/*`; do
+    for f in `ls --color=none $ROOT/$l/$TYPE/*`; do
       FNAME=`basename $f`
-      OUT="$l/$TYPE/$FNAME.lc"
-      if [ ! -f "$OUT.norm.nopunct.tok.$l" ]; then
+      OUT="$l/$TYPE/$FNAME.norm.lc.nopunct.tok.${l}"
+      if [ ! -f "$OUT" ]; then
         echo $f
-        cat $f | lowercase.perl > $OUT
-        cat $OUT | normalize-punctuation.perl -l $l > $OUT.norm
-        cat $OUT.norm | tr -d '[:punct:]' > $OUT.norm.nopunct
-        cat $OUT.norm.nopunct | tokenizer.perl -l $l -threads 8 > $OUT.norm.nopunct.tok.$l
+        cat $f | normalize-punctuation.perl -l $l | tokenizer.perl -l $l -threads 8 | lowercase.perl | tr -d '[:punct:]' > ${OUT}
       fi
     done
   done
@@ -40,13 +37,15 @@ for TYPE in train val; do
     rm tmp.* &> /dev/null
     OUT="tmp.$TYPE"
     for sf in `ls --color=none $SL/$TYPE/*tok.${SL}`; do
+      echo "Current: $sf"
       for tf in `ls --color=none $TL/$TYPE/*tok.${TL}`; do
-        echo "Merging $sf and $tf"
+        echo "   Merge: $tf"
         paste -d"|" $sf $tf | nl -v0 -w1 -s'|' >> $OUT
       done
     done
 
     # Shuffle
+    echo "Total number of ${SL}-${TL} pairs: `wc -l $OUT`"
     echo "Shuffling"
     shuf < $OUT > ${OUT}.shuf
 
@@ -60,7 +59,7 @@ for TYPE in train val; do
 
     # Clean out imbalanced pairs
     clean-corpus-n-frac.perl tmp.test $SL $TL tmp.test.clean 1 $MAX 3 tmp.lines.retained
-    $SELECT_LINES tmp.img tmp.lines.retained > ${TYPE}_all.shuf.idxs
+    $SELECT_LINES tmp.img tmp.lines.retained 1 > ${TYPE}_all.shuf.idxs
 
     mv tmp.test.clean.$SL ${TYPE}_all.shuf.tok.${SL}
     mv tmp.test.clean.$TL ${TYPE}_all.shuf.tok.${TL}
