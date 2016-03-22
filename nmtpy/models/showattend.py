@@ -4,7 +4,6 @@ from six.moves import zip
 
 # Python
 import os
-import sys
 import cPickle
 import importlib
 
@@ -54,11 +53,14 @@ class Model(BaseModel):
         # We need to find out about modalities
         data = self.options["data"]
 
+        # Do we have an idxs file for image ids?
         if 'train_idx' in data:
-            # We have an idxs file for image ids
             image_idxs = open(data['train_idx']).read().strip().split("\n")
             self.image_idxs = [int(i) for i in image_idxs]
 
+        # NOTE: Since we write the model file ourselves, we
+        # can directly use the relevant iterators instead of trying
+        # to be smart...
         train_src_type, train_src_file = data["train_src"]
         train_trg_type, train_trg_file = data["train_trg"]
         # src iter: img, trg iter: text
@@ -71,7 +73,9 @@ class Model(BaseModel):
                                             n_words=self.n_words_trg,
                                             data_name='y',
                                             do_mask=True)
-        train_trg_iterator.prepare_batches(shuffle=shuffle, sort=sort)
+        # FIXME: Let's avoid this for now
+        #train_trg_iterator.prepare_batches(shuffle=shuffle, sort=sort)
+        train_trg_iterator.prepare_batches()
         batch_idxs = train_trg_iterator.get_idxs()
 
         # This should be image
@@ -90,13 +94,17 @@ class Model(BaseModel):
             valid_batch_size = 64
 
             valid_src_type, valid_src_file = data["valid_src"]
-            valid_trg_type, self.valid_trg_file = data["valid_trg"]
+            valid_trg_type, self.valid_trg_files = data["valid_trg"]
             # src iter: img, trg iter: text
             valid_src_iter = get_iterator(valid_src_type)
             valid_trg_iter = get_iterator(valid_trg_type)
 
+            # Take the 1st ref file for valid NLL computation
+            if isinstance(self.valid_trg_files, list):
+                self.valid_trg_files = self.valid_trg_files[0]
+
             # First load target texts
-            valid_trg_iterator = valid_trg_iter(self.valid_trg_file, self.trg_dict,
+            valid_trg_iterator = valid_trg_iter(self.valid_trg_files, self.trg_dict,
                                                 batch_size=valid_batch_size,
                                                 n_words=self.n_words_trg,
                                                 data_name='y',
@@ -212,26 +220,22 @@ class Model(BaseModel):
         y_flat = y.flatten()
         y_flat_idx = tensor.arange(y_flat.shape[0]) * self.n_words_trg + y_flat
 
-        # NOTE: We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        # cost = cost / y_mask.sum()
         cost = log_probs.flatten()[y_flat_idx]
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
 
-        # This computes the cost given the input tensors
-        # This is normalized wrt batch size afterwards
-        # after doing a full forward pass in validation in val_loss()
         self.f_log_probs = theano.function(self.inputs.values(),
                                            cost,
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-        # Mean cost over batch
-        self.cost = cost.mean()
+        # We may want to normalize the cost by dividing
+        # to the number of target tokens but this needs
+        # scaling the learning rate accordingly.
+        norm_cost = cost / y_mask.sum()
 
-        return self.cost
+        return cost.mean(), norm_cost.mean()
+
 
     def build_sampler(self):
         # shape will be n_timesteps, n_samples, n_convfeats
