@@ -123,7 +123,7 @@ class METEORScorer(object):
             os.system('paste -d"\\n" %s > %s' % (" ".join(refs), self.TMP_NREF))
             cmdline.append(self.TMP_NREF)
         else:
-            cmdline.append(ref[0])
+            cmdline.append(refs[0])
 
         if language == "auto":
             # Take the extension of the 1st reference file, e.g. ".de"
