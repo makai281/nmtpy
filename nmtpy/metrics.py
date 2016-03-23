@@ -95,6 +95,9 @@ class MultiBleuScorer(object):
 
 """Meteor wrapper."""
 class METEORScorer(object):
+    # FIXME: METEOR can consume everything from stdin
+    # Drop this temp files in favor of that mode.
+    # Even better is to directly use the COCO eval tools.
     TMP_HYP  = "/tmp/meteor.hyps"
     TMP_NREF = "/tmp/meteor.refs"
     def __init__(self, path="~/git/meteor/meteor-1.5.jar"):
@@ -120,6 +123,7 @@ class METEORScorer(object):
         n_refs = len(refs)
         if n_refs > 1:
             # Multiple references
+            # FIXME: METEOR can consume everything from stdin
             os.system('paste -d"\\n" %s > %s' % (" ".join(refs), self.TMP_NREF))
             cmdline.append(self.TMP_NREF)
         else:
