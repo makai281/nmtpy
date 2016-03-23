@@ -14,7 +14,13 @@ nmtpy is a suite of Python tools, primarily based on the starter code provided i
 
 ## Installation
 
-Create a link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
+You need the following libraries installed in order to use nmtpy:
+  - numpy
+  - numexpr (optional for fast logarithms)
+  - theano >= 0.8 (or a GIT checkout with `tensor.nnet.logsoftmax` available)
+  - six
+
+After fulfilling the dependencies, create a easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
 
 ```
 python setup.py develop
