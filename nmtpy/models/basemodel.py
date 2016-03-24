@@ -7,7 +7,6 @@ import inspect
 import importlib
 
 from collections import OrderedDict
-from hashlib import sha1
 
 from abc import ABCMeta, abstractmethod
 
@@ -22,8 +21,6 @@ from ..nmtutils import unzip
 class BaseModel(object):
     __metaclass__ = ABCMeta
     def __init__(self, **kwargs):
-        # This is for tracking changes in the source code
-        #self.__base_version = sha1(inspect.getsource(self.__class__)).hexdigest() 
         self.__dict__.update(kwargs)
 
         self.name = os.path.splitext(os.path.basename(self.model_path))[0]
@@ -51,12 +48,6 @@ class BaseModel(object):
 
     def set_trng(self, seed):
         self.trng = RandomStreams(seed)
-
-    def param_stats(self):
-        print "%30s %12s %12s %6s" % ("Name", "min", "max", "NaNs")
-        for name, value in self.tparams.iteritems():
-            value = value.get_value()
-            print "%30s %5.5f %5.5f %s" % (name, value.min(), value.max(), str(np.isnan(value).any()))
 
     def set_nanguard(self):
         self.func_mode = None
