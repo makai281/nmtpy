@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import sys
 import time
 import select
 import cPickle
@@ -41,7 +42,7 @@ def get_valid_evaluation(model_path, pkl_path=None, beam_size=12):
     if pkl_path:
         cmd.extend(["-p", pkl_path])
     # nmt-translate prints a dict of metrics
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=sys.stdout)
     cleanup.register_proc(p.pid)
     out, err = p.communicate()
     cleanup.unregister_proc(p.pid)
