@@ -16,7 +16,6 @@ nmtpy is a suite of Python tools, primarily based on the starter code provided i
 
 You need the following libraries installed in order to use nmtpy:
   - numpy
-  - numexpr (optional for fast logarithms)
   - theano >= 0.8 (or a GIT checkout with `tensor.nnet.logsoftmax` available)
   - six
 

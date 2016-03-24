@@ -4,14 +4,6 @@ import numpy as np
 
 from .typedef import INT
 
-try:
-    # Pretty fast logarithm with MKL. Makes beam_search
-    # faster. Use this if available.
-    import numexpr
-    logarithm = lambda x: numexpr.evaluate("log(x)")
-except ImportError as ie:
-    logarithm = lambda x: np.log(x)
-
 ###################################################
 def forced_decoding(f_init, f_next, inputs, target):
     # get initial state of decoder rnn and encoder context

@@ -13,7 +13,6 @@ setup(
         packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators'],
         install_requires=[
           'numpy',
-          'numexpr',
           'theano',
           'six',
         ],
