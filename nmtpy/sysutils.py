@@ -20,6 +20,11 @@ def ensure_dirs(dirs):
 def real_path(p):
     return os.path.abspath(os.path.expanduser(p))
 
+def get_temp_file():
+    """Returns an automatically deleted after close() tempfile."""
+    suffix = "_nmtpy_%d" % os.getpid()
+    return tempfile.NamedTemporaryFile(suffix=suffix)
+
 def get_valid_evaluation(model_path, beam_size=12):
     trans_fd, trans_fname = tempfile.mkstemp(suffix='.hyp')
     os.close(trans_fd)
