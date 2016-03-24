@@ -19,6 +19,7 @@ from nmtpy.metrics import get_all_scorers
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
 from nmtpy.iterators import get_iterator
+import nmtpy.cleanup as cleanup
 
 log = Logger._logger
 
@@ -95,23 +96,19 @@ class Translator(object):
         # Create worker process pool
         self.processes = [None] * self.n_jobs
 
-
-    def set_model_params(self, opt_dict=None):
+    def set_model_params(self):
         # load model parameters and set theano shared variables
-        if opt_dict:
-            self.tparams = self.__obj.load_params(opt_dict)
-        else:
-            self.tparams = self.__obj.load_params(np.load(self.model_file))
-
+        self.tparams = self.__obj.load_params(np.load(self.model_file))
         self.__obj.set_dropout(False)
 
     def set_model_options(self, model_options, model_file):
+        # pkl file
         self.model_options = model_options
+        # npz file
         self.model_file = model_file
-        self.model_type = os.path.basename(self.model_file).split("-")[0]
 
         # Import the module
-        self.__class = importlib.import_module("nmtpy.models.%s" % self.model_type).Model
+        self.__class = importlib.import_module("nmtpy.models.%s" % self.model_options['model_type']).Model
 
         # FIXME: Remove trng for compatibility with earlier models
         if 'trng' in self.model_options:
@@ -174,6 +171,9 @@ class Translator(object):
                             args=(write_queue, read_queue, idx, self.__obj, self.beam_size, self.unnorm,
                                   self.nbest, self.argmax, self.force_dec, self.seed))
             self.processes[idx].start()
+            cleanup.register_proc(self.processes[idx].pid)
+
+        cleanup.register_handler()
 
         # Send data to worker processes
         for idx, data in enumerate(self.iterator):
@@ -203,8 +203,9 @@ class Translator(object):
         for idx in xrange(self.n_jobs):
             write_queue.put(None)
             self.processes[idx].terminate()
+            cleanup.unregister_proc(self.processes[idx].pid)
 
-    def write_nbest(self, filename):
+    def write_hyps(self, filename):
         with open(filename, 'w') as f:
             if self.force_dec or self.nbest > 1:
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
@@ -228,7 +229,7 @@ class Translator(object):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='translate')
-    parser.add_argument('-j', '--n-jobs'        , type=int, default=6,
+    parser.add_argument('-j', '--n-jobs'        , type=int, default=8,
                                                   help="Number of processes (default: 6, 0: Auto")
     parser.add_argument('-a', '--argmax'        , action="store_true",
                                                   help="Use argmax (1-best) instead of beam search")
@@ -241,10 +242,16 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
     parser.add_argument('-d', '--device'        , default='cpu', help="Where to run beam search.")
-    parser.add_argument('-m', '--model'         , type=str, required=True, help="Model file")
-    parser.add_argument('-o', '--saveto'        , type=str, required=True, help="Output translations file")
-    parser.add_argument('-S', '--src-file'      , type=str, default=None,  help="Source data (text:textfile, img:imgfile) (default: validation set)")
-    parser.add_argument('-R', '--ref-files'     , type=str, default=None,  help="Reference sentences (ref1,ref2,...) (default: validation set)")
+
+    parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
+    parser.add_argument('-p', '--pkl-file'      , type=str, help="pkl file (default: <model_file>.pkl)", default=None)
+    parser.add_argument('-o', '--saveto'        , type=str, help="Output translations file (if not given, only metrics will be printed)",
+                                                  default=None)
+
+    parser.add_argument('-S', '--src-file'      , type=str, help="Source data (text:textfile, img:imgfile) (default: validation set)",
+                                                  default=None)
+    parser.add_argument('-R', '--ref-files'     , type=str, help="Reference sentence files (ref1,ref2,...) (default: validation set)",
+                                                  default=None)
 
     args = parser.parse_args()
     if args.device.startswith("gpu"):
@@ -268,17 +275,28 @@ if __name__ == "__main__":
                             n_jobs=args.n_jobs,
                             seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
 
-    # load model_options
-    with open('%s.pkl' % args.model, 'rb') as f:
+    # load model options
+    if not args.pkl_file:
+        args.pkl_file = args.model + ".pkl"
+
+    with open(args.pkl_file, 'rb') as f:
         model_options = cPickle.load(f)
 
     translator.set_model_options(model_options, args.model)
     translator.set_model_params()
     translator.start()
-    translator.write_nbest(args.saveto)
+
+    out_file = args.saveto
+    if not args.saveto:
+        hypf = get_temp_file(suffix=".nbest_hyps")
+        out_file = hypf.name
+        hypf.close()
+
+    translator.write_hyps(out_file)
+
     if translator.ref_files:
         # Compute all metrics
-        results = translator.compute_score(args.saveto)
+        results = translator.compute_score(out_file)
         # NOTE: This dict is expected from nmt-translate for
         # obtaining the validation results.
         print results

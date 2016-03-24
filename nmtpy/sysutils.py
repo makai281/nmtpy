@@ -7,7 +7,7 @@ import inspect
 import tempfile
 import subprocess
 
-from hashlib import sha1
+from . import cleanup
 
 """System related utility functions."""
 def ensure_dirs(dirs):
@@ -20,37 +20,38 @@ def ensure_dirs(dirs):
 def real_path(p):
     return os.path.abspath(os.path.expanduser(p))
 
-def get_temp_file(suffix=""):
-    """Returns an automatically deleted after close() tempfile."""
-    _suffix = "_nmtpy_%d" % os.getpid()
-    if suffix != "":
-        _suffix += suffix
-    return tempfile.NamedTemporaryFile(suffix=_suffix)
+def get_temp_file(suffix="", name=None, delete=False):
+    """Creates a temporary file under /tmp. If name is not None
+    it will be used as the temporary file's name."""
+    if name:
+        name = os.path.join("/tmp", name)
+        t = open(name, "w")
+        cleanup.register_tmp_file(name)
+    else:
+        _suffix = "_nmtpy_%d" % os.getpid()
+        if suffix != "":
+            _suffix += suffix
 
-def get_valid_evaluation(model_path, beam_size=12):
-    trans_fd, trans_fname = tempfile.mkstemp(suffix='.hyp')
-    os.close(trans_fd)
-    cmd = ["nmt-translate", "-b", str(beam_size),
-           "-m", model_path, "-d", "cpu", "-j", "8", "-o", trans_fname]
-    # let nmt-translate print a dict of metrics
-    result = eval(subprocess.check_output(cmd).strip())
-    os.unlink(trans_fname)
-    return result
+        t = tempfile.NamedTemporaryFile(suffix=_suffix, delete=delete)
+        cleanup.register_tmp_file(t.name)
+    return t
+
+def get_valid_evaluation(model_path, pkl_path=None, beam_size=12):
+    cmd = ["nmt-translate", "-b", str(beam_size), "-m", model_path]
+    if pkl_path:
+        cmd.extend(["-p", pkl_path])
+    # nmt-translate prints a dict of metrics
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    cleanup.register_proc(p.pid)
+    out, err = p.communicate()
+    cleanup.unregister_proc(p.pid)
+    return eval(out.splitlines()[-1].strip())
 
 ### GPU & PBS related functions
 def create_gpu_lock(used_gpu):
-    pid = os.getpid()
-    lockfile = "/tmp/gpu_lock.pid%d.%s" % (pid, used_gpu)
-    with open(lockfile, "w") as lf:
-        lf.write("[Theano] Running PID %d on %s\n" % (pid, used_gpu))
-
-    return lockfile
-
-def remove_gpu_lock(lockfile):
-    try:
-        os.unlink(lockfile)
-    except Exception as e:
-        pass
+    name = "gpu_lock.pid%d.gpu%s" % (os.getpid(), used_gpu)
+    lockfile = get_temp_file(name=name)
+    lockfile.write("[nmtpy] %s\n" % name)
 
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):
@@ -72,15 +73,15 @@ def get_gpu(which='auto'):
     elif which.startswith("gpu"):
         # Don't care about usage. Some cards don't
         # provide that info in nvidia-smi as well.
-        lock_file = create_gpu_lock(int(which.replace("gpu", "")))
-        return which, lock_file
+        create_gpu_lock(int(which.replace("gpu", "")))
+        return which
     # auto favors GPU in the first place
     elif which == 'auto':
         try:
             out = subprocess.check_output(["nvidia-smi", "-q"])
         except OSError as oe:
             # Binary not found, fallback to CPU
-            return "cpu", None
+            return "cpu"
 
         # Find out about GPU usage
         usage = ["None" in l for l in out.split("\n") if "Processes" in l]
@@ -89,7 +90,7 @@ def get_gpu(which='auto'):
             which = usage.index(True)
         except ValueError as ve:
             # No available GPU on this machine
-            return "cpu", None
+            return "cpu"
 
         lock_file = create_gpu_lock(which)
-        return ("gpu%d" % which), lock_file
+        return ("gpu%d" % which)

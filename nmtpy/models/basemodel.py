@@ -15,7 +15,7 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
-from ..sysutils import get_valid_evaluation
+from ..sysutils import get_valid_evaluation, get_temp_file
 from ..nmtutils import unzip
 
 class BaseModel(object):
@@ -102,14 +102,14 @@ class BaseModel(object):
                                                 mode=self.func_mode)
 
     def beam_search(self, beam_size=12):
-        tmp_model = os.path.join("/tmp", self.name) + ".npz"
-        tmp_opts = "%s.pkl" % tmp_model
         # Save model temporarily
-        self.save_params(tmp_model, **unzip(self.tparams))
-        self.save_options(filepath=tmp_opts)
-        result = get_valid_evaluation(tmp_model, beam_size)
-        os.unlink(tmp_model)
-        os.unlink(tmp_opts)
+        with get_temp_file(suffix=".npz", delete=True) as tmpf:
+            self.save_params(tmpf.name, **unzip(self.tparams))
+
+            result = get_valid_evaluation(tmpf.name,
+                                          pkl_path=self.model_path + ".pkl",
+                                          beam_size=beam_size)
+
         return result
 
     @abstractmethod

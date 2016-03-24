@@ -5,7 +5,7 @@ import re
 from subprocess import Popen, PIPE, check_output
 
 from functools import total_ordering
-from .sysutils import find_executable, real_path
+from .sysutils import find_executable, real_path, get_temp_file
 
 @total_ordering
 class METEORScore(object):
@@ -95,11 +95,6 @@ class MultiBleuScorer(object):
 
 """Meteor wrapper."""
 class METEORScorer(object):
-    # FIXME: METEOR can consume everything from stdin
-    # Drop this temp files in favor of that mode.
-    # Even better is to directly use the COCO eval tools.
-    TMP_HYP  = "/tmp/meteor.hyps"
-    TMP_NREF = "/tmp/meteor.refs"
     def __init__(self, path="~/git/meteor/meteor-1.5.jar"):
 
         self.path = real_path(path)
@@ -110,10 +105,11 @@ class METEORScorer(object):
 
         if isinstance(hyps, list):
             # Create a temporary file
-            with open(self.TMP_HYP, 'w') as f:
+            with get_temp_file(suffix=".hyps") as tmpf:
                 for hyp in hyps:
-                    f.write("%s\n" % hyp)
-            cmdline.append(self.TMP_HYP)
+                    tmpf.write("%s\n" % hyp)
+
+                cmdline.append(tmpf.name)
 
         elif isinstance(hyps, str):
             cmdline.append(hyps)
@@ -124,8 +120,11 @@ class METEORScorer(object):
         if n_refs > 1:
             # Multiple references
             # FIXME: METEOR can consume everything from stdin
-            os.system('paste -d"\\n" %s > %s' % (" ".join(refs), self.TMP_NREF))
-            cmdline.append(self.TMP_NREF)
+            tmpff = get_temp_file(suffix=".refs")
+            fname = tmpff.name
+            tmpff.close()
+            os.system('paste -d"\\n" %s > %s' % (" ".join(refs), fname))
+            cmdline.append(fname)
         else:
             cmdline.append(refs[0])
 
@@ -142,11 +141,6 @@ class METEORScorer(object):
             cmdline.extend(["-r", str(n_refs)])
 
         output = check_output(cmdline)
-
-        if os.path.exists(self.TMP_NREF):
-            os.unlink(self.TMP_NREF)
-        if os.path.exists(self.TMP_HYP):
-            os.unlink(self.TMP_HYP)
 
         score = output.splitlines()
         if len(score) == 0:

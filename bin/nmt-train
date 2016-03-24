@@ -5,7 +5,6 @@ import sys
 import time
 import math
 import shutil
-import atexit
 import logging
 import argparse
 import platform
@@ -20,12 +19,14 @@ from nmtpy.logger import Logger
 from nmtpy.typedef import INT
 from nmtpy.sysutils import *
 from nmtpy.nmtutils import itemlist, unzip
+import nmtpy.cleanup as cleanup
+
+cleanup.register_handler()
 
 DEFAULTS = {
         'batch_size':         32,             # Training batch size
         'lrate':              0.0001,         # lrate for SGD
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
-        #'maxlen':             50,             # max sequence length
         'dropout':            0,              # dropout ratio (0: disabled)
         'profile':            False,          # Profile Theano
         'nanguard':           False,          #
@@ -158,10 +159,8 @@ if __name__ == '__main__':
     #############
     # Reserve GPU
     #############
-    args.device_id, lock_file = get_gpu(args.device_id)
+    args.device_id = get_gpu(args.device_id)
     os.environ["THEANO_FLAGS"] = "device=%s" % args.device_id
-    if lock_file:
-        atexit.register(remove_gpu_lock, lock_file)
 
     import theano
     import theano.tensor as tensor
