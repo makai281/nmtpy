@@ -387,53 +387,82 @@ def param_init_lstm(options, params, nin, dim, prefix='lstm'):
      for much cleaner code and slightly faster dot-prods
     """
     # input weights
+    # W_ix: Input x to input gate
+    # W_fx: Input x to forget gate
+    # W_ox: Input x to output gate
+    # W_cx: Input x to cell state
     params[_p(prefix, 'W')] = np.concatenate([norm_weight(nin,dim),
                                               norm_weight(nin,dim),
                                               norm_weight(nin,dim),
                                               norm_weight(nin,dim)], axis=1)
 
     # for the previous hidden activation
+    # W_im: Memory t_1 to input(t)
+    # W_fm: Memory t_1 to forget(t)
+    # W_om: Memory t_1 to output(t)
+    # W_cm: Memory t_1 to cellstate(t)
     params[_p(prefix, 'U')] = np.concatenate([ortho_weight(dim),
                                               ortho_weight(dim),
                                               ortho_weight(dim),
                                               ortho_weight(dim)], axis=1)
+
     params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype('float32')
 
     return params
 
 # This function implements the lstm fprop
 def lstm_layer(tparams, state_below, options, prefix='lstm', mask=None, **kwargs):
+    # number of timesteps
     nsteps = state_below.shape[0]
-    dim = tparams[_p(prefix, 'U')].shape[0]
-
-    # if we are dealing with a mini-batch
-    if state_below.ndim == 3:
-        n_samples = state_below.shape[1]
-        init_state = tensor.alloc(0., n_samples, dim)
-        init_memory = tensor.alloc(0., n_samples, dim)
-    # during sampling
-    else:
-        n_samples = 1
-        init_state = tensor.alloc(0., dim)
-        init_memory = tensor.alloc(0., dim)
 
     # if we have no mask, we assume all the inputs are valid
     if mask == None:
-        mask = tensor.alloc(1., state_below.shape[0], 1)
+        mask = tensor.alloc(1., nsteps, 1)
+
+    # hidden dimension of LSTM layer
+    dim = tparams[_p(prefix, 'U')].shape[0]
+
+    if state_below.ndim == 3:
+        # This is minibatch
+        n_samples = state_below.shape[1]
+
+        # init_state is dim per sample all zero
+        init_state = tensor.alloc(0., n_samples, dim)
+
+        # init_memory is dim per sample all zero
+        init_memory = tensor.alloc(0., n_samples, dim)
+
+    else:
+        # during sampling, only single sample is received
+        n_samples = 1
+        init_state = tensor.alloc(0., dim)
+        init_memory = tensor.alloc(0., dim)
 
     ###########################
     # one time step of the lstm
     ###########################
     def _step(m_, x_, h_, c_):
+        """m_: mask
+           x_: state_below
+           h_: init_state
+           c_: init_memory (cell state)
+        """
+        
         preact = tensor.dot(h_, tparams[_p(prefix, 'U')])
         preact += x_
 
+        # input(t) = sigm(W_ix * x_t + W_im * m_tm1)
         i = tensor.nnet.sigmoid(_tensor_slice(preact, 0, dim))
         f = tensor.nnet.sigmoid(_tensor_slice(preact, 1, dim))
         o = tensor.nnet.sigmoid(_tensor_slice(preact, 2, dim))
+
+        # cellstate(t)?
         c = tensor.tanh(_tensor_slice(preact, 3, dim))
 
+        # cellstate(t) = forget(t) * cellstate(t-1) + input(t) * cellstate(t)
         c = f * c_ + i * c
+
+        # h is the m_t, e.g. memory in tstep T in NIC paper
         h = o * tensor.tanh(c)
 
         return h, c, i, f, o, preact
