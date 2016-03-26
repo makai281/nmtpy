@@ -58,7 +58,7 @@ class ImageFeatsIterator(object):
         if self.norm:
             self.normalize()
 
-        self.shape = self.__data.shape
+        self.dim = self.__data.shape[1]
         self.rewind()
 
     def set_batch_size(self, bs):
