@@ -31,7 +31,6 @@ class MultiIterator(object):
             d.rewind()
 
     def next(self):
-        d = OrderedDict()
         for multi_data in zip(*self.datasets):
             # Get first OrderedDict
             f = multi_data[0]
