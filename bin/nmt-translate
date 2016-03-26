@@ -4,6 +4,7 @@
 
 import os
 import sys
+import glob
 import atexit
 import cPickle
 import argparse
@@ -77,14 +78,12 @@ class Translator(object):
 
         self.beam_size = beam_size
 
-        # NOTE: type is img_feats or text for now
-        self.src_file = None
-        if src_file:
-            self.src_iter_type, self.src_file = src_file.split(":")
-
+        self.src_file = src_file
         self.ref_files = None
+
         if ref_files:
-            self.ref_files = ref_files.split(":")
+            # Add ability to use wildcards
+            self.ref_files = glob.glob(ref_files)
 
         self.nbest = nbest
         self.n_jobs = n_jobs
@@ -110,28 +109,35 @@ class Translator(object):
         # Import the module
         self.__class = importlib.import_module("nmtpy.models.%s" % self.model_options['model_type']).Model
 
-        # FIXME: Remove trng for compatibility with earlier models
+        # Remove trng for compatibility with earlier models
         if 'trng' in self.model_options:
             del self.model_options['trng']
 
         # Create the model
         self.__obj = self.__class(seed=self.seed, **self.model_options)
 
-        # load dictionaries
-        self.ref_idict = {}
-        for k,v in self.__obj.trg_dict.iteritems():
-            self.ref_idict[v] = k
+        # invert dictionary
+        self.ref_idict = dict([[v,k] for k,v in self.__obj.trg_dict.iteritems()])
 
         # If not available, translate on validation set
         if not self.src_file and not self.ref_files:
-            self.ref_files = self.ref_files if isinstance(self.ref_files, list) else list([self.ref_files])
             log.info("No test sentences file given, assuming validation dataset.")
-            self.src_iter_type, self.src_file = self.__obj.data['valid_src']
-            _, self.ref_files = self.__obj.data['valid_trg']
+
+            self.src_file  = self.__obj.data['valid_src']
+            # FIXME: Backward compatibility with old type of config
+            if isinstance(self.src_file, list):
+                self.src_file = self.src_file[-1]
+
+            self.ref_files = self.__obj.data['valid_trg']
 
             # Allow multiple reference files
             if isinstance(self.ref_files, str):
                 self.ref_files = list([self.ref_files])
+            elif isinstance(self.ref_files, list):
+                # FIXME: Backward compatibility with old type of config
+                if not self.ref_files[0].startswith("/"):
+                    self.ref_files.pop(0)
+
 
         log.info("Source file")
         log.info("  %s" % self.src_file)
@@ -139,25 +145,24 @@ class Translator(object):
         for f in self.ref_files:
             log.info("  %s" % f)
 
-        iterator = get_iterator(self.src_iter_type)
-        # Sources can be images or text
-        if self.src_iter_type == 'img_feats':
-            self.iterator = iterator(self.src_file, batch_size=1, do_mask=False, n_timesteps=self.__obj.n_timesteps)
-        elif self.src_iter_type in ('text', 'bitext'):
-            # No need to use the bitext iterator in translation.
-            # Override it with text.
-            iterator = get_iterator('text')
-            self.iterator = iterator(self.src_file, self.__obj.src_dict,
-                                     batch_size=1, n_words=self.__obj.n_words_src)
+        src_iter_type = self.__obj.valid_src_iter
+        trg_iter_type = self.__obj.valid_trg_iter
+
+        if src_iter_type == 'img_feats':
+            self.iterator = get_iterator('img_feats')(self.src_file, batch_size=1,
+                                                      do_mask=False, n_timesteps=self.__obj.n_timesteps)
+        elif src_iter_type in ('text', 'bitext'):
+            # No need to use the bitext iterator in translation, override it with text.
+            self.iterator = get_iterator('text')(self.src_file, self.__obj.src_dict,
+                                                 batch_size=1, n_words=self.__obj.n_words_src)
         self.iterator.prepare_batches()
 
         if self.force_dec:
             # We need to have an iterator for the references as well
             assert len(self.ref_files) == 1
-            iterator = get_iterator('text')
-            self.ref_iterator = iterator(self.ref_files[0], self.__obj.trg_dict, batch_size=1,
-                                         n_words=self.__obj.n_words_trg,
-                                         data_name='y_forced', do_mask=False)
+            self.ref_iterator = get_iterator('text')(self.ref_files[0], self.__obj.trg_dict, batch_size=1,
+                                                     n_words=self.__obj.n_words_trg,
+                                                     data_name='y_forced', do_mask=False)
             self.ref_iterator.prepare_batches()
 
     def start(self):
@@ -248,9 +253,9 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--saveto'        , type=str, help="Output translations file (if not given, only metrics will be printed)",
                                                   default=None)
 
-    parser.add_argument('-S', '--src-file'      , type=str, help="Source data (text:textfile, img:imgfile) (default: validation set)",
+    parser.add_argument('-S', '--src-file'      , type=str, help="Source data (default: validation set)",
                                                   default=None)
-    parser.add_argument('-R', '--ref-files'     , type=str, help="Reference sentence files (ref1,ref2,...) (default: validation set)",
+    parser.add_argument('-R', '--ref-files'     , type=str, help="Reference files delimited by comma or * wildcard (default: validation set)",
                                                   default=None)
 
     args = parser.parse_args()
