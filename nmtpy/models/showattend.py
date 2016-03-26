@@ -20,6 +20,7 @@ from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
 from ..iterators import get_iterator
+
 from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
@@ -45,43 +46,35 @@ class Model(BaseModel):
         self.set_nanguard()
         self.set_trng(seed)
 
+        # Set iterator types here
+        self.train_src_iter = "img_feats"
+        self.train_trg_iter = "text"
+        self.valid_src_iter = "img_feats"
+        self.valid_trg_iter = "text"
+
     def load_data(self, shuffle=False, sort=False):
-        ###############
-        # Training data
-        ###############
-
-        # We need to find out about modalities
-        data = self.options["data"]
-
         # Do we have an idxs file for image ids?
+        image_idxs = None
         if 'train_idx' in data:
-            image_idxs = open(data['train_idx']).read().strip().split("\n")
-            self.image_idxs = [int(i) for i in image_idxs]
-
-        # NOTE: Since we write the model file ourselves, we
-        # can directly use the relevant iterators instead of trying
-        # to be smart...
-        train_src_type, train_src_file = data["train_src"]
-        train_trg_type, train_trg_file = data["train_trg"]
-        # src iter: img, trg iter: text
-        train_src_iter = get_iterator(train_src_type)
-        train_trg_iter = get_iterator(train_trg_type)
+            image_idxs = open(self.data['train_idx']).read().strip().split("\n")
+            image_idxs = [int(i) for i in image_idxs]
 
         # First load target texts
-        train_trg_iterator = train_trg_iter(train_trg_file, self.trg_dict,
-                                            batch_size=self.batch_size,
-                                            n_words=self.n_words_trg,
-                                            data_name='y',
-                                            do_mask=True)
-        # FIXME: Let's avoid this for now
-        #train_trg_iterator.prepare_batches(shuffle=shuffle, sort=sort)
+        train_trg_iterator = get_iterator(self.train_trg_iter)(
+                                    self.data['train_trg'], self.trg_dict,
+                                    batch_size=self.batch_size,
+                                    n_words=self.n_words_trg,
+                                    data_name='y',
+                                    do_mask=True)
         train_trg_iterator.prepare_batches()
-        batch_idxs = train_trg_iterator.get_idxs()
 
         # This should be image
-        train_src_iterator = train_src_iter(train_src_file, batch_size=self.batch_size,
-                                            idxs=batch_idxs, do_mask=False, n_timesteps=self.n_timesteps)
-        train_src_iterator.prepare_batches()
+        train_src_iterator = get_iterator(self.train_src_iter)(
+                                    self.data['train_src'],
+                                    batch_size=self.batch_size,
+                                    idxs=image_idxs,
+                                    do_mask=False,
+                                    n_timesteps=self.n_timesteps)
 
         # Create multi iterator
         self.train_iterator = get_iterator("multi")([train_src_iterator, train_trg_iterator])
@@ -89,36 +82,31 @@ class Model(BaseModel):
         #################
         # Validation data 
         #################
-        if "valid_src" in data:
-            # Validation data available
-            valid_batch_size = 64
+        valid_batch_size = 64
 
-            valid_src_type, valid_src_file = data["valid_src"]
-            valid_trg_type, self.valid_trg_files = data["valid_trg"]
-            # src iter: img, trg iter: text
-            valid_src_iter = get_iterator(valid_src_type)
-            valid_trg_iter = get_iterator(valid_trg_type)
+        valid_trg_files = self.data['valid_trg']
+        if isinstance(valid_trg_files, str):
+            valid_trg_files = list([valid_trg_files])
 
-            # Take the 1st ref file for valid NLL computation
-            if isinstance(self.valid_trg_files, list):
-                self.valid_trg_files = self.valid_trg_files[0]
+        # First load target texts
+        valid_trg_iterator = get_iterator(self.valid_trg_iter)(
+                                    valid_trg_files[0], self.trg_dict,
+                                    batch_size=valid_batch_size,
+                                    n_words=self.n_words_trg,
+                                    data_name='y',
+                                    do_mask=True)
+        valid_trg_iterator.prepare_batches()
 
-            # First load target texts
-            valid_trg_iterator = valid_trg_iter(self.valid_trg_files, self.trg_dict,
-                                                batch_size=valid_batch_size,
-                                                n_words=self.n_words_trg,
-                                                data_name='y',
-                                                do_mask=True)
-            valid_trg_iterator.prepare_batches()
-            batch_idxs = valid_trg_iterator.get_idxs()
+        # This is image features
+        valid_src_iterator = get_iterator(self.valid_src_iter)(
+                                    self.data['valid_src'],
+                                    batch_size=valid_batch_size,
+                                    idxs=None,
+                                    do_mask=False,
+                                    n_timesteps=self.n_timesteps)
 
-            # This should be image
-            valid_src_iterator = valid_src_iter(valid_src_file, batch_size=valid_batch_size,
-                                                idxs=batch_idxs, do_mask=False, n_timesteps=self.n_timesteps)
-            valid_src_iterator.prepare_batches()
-
-            # Create multi iterator
-            self.valid_iterator = get_iterator("multi")([valid_src_iterator, valid_trg_iterator])
+        # Create multi iterator
+        self.valid_iterator = get_iterator("multi")([valid_src_iterator, valid_trg_iterator])
 
     def init_params(self):
         params = OrderedDict()
@@ -170,7 +158,7 @@ class Model(BaseModel):
         # initial decoder state: -> rnn_dim, e.g. 1000
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='linear')
 
         # NOTE: Don't change afterwards here, the rest should be OK
         # word embedding (target), we will shift the target sequence one time step
@@ -252,7 +240,7 @@ class Model(BaseModel):
         # initial decoder state: -> rnn_dim, e.g. 1000
         # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='linear')
 
         # NOTE: No need to compute ctx as input is ctx as well.
         # But this will require changes in other parts of the code
