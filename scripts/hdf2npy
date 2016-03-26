@@ -29,6 +29,10 @@ if __name__ == '__main__':
     sizes.append(splits['val'].stop - splits['val'].start)
     sizes.append(feats.shape[0] - (sizes[0] + sizes[1]))
 
+    full_size = sum(sizes)
+    print "Full dataset has %d samples" % full_size
+
+
     fname = os.path.splitext(os.path.basename(h5file))[0]
     for i, sp in enumerate(['train', 'val', 'test']):
         print 'Reading %s into numpy array' % sp
@@ -37,3 +41,8 @@ if __name__ == '__main__':
         split_fname = os.path.join(os.path.dirname(h5file), "%s.%s" % (fname, sp))
         print 'Saving numpy array to %s.npy' % split_fname
         np.save(split_fname, mat)
+
+    full_mat = np.empty((full_size, feat_size), dtype=np.float32)
+    feats.read_direct(full_mat)
+
+    np.save(os.path.splitext(h5file)[0], full_mat)
