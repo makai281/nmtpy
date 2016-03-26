@@ -45,39 +45,33 @@ class Model(BaseModel):
         self.set_nanguard()
         self.set_trng(seed)
 
+        # Set iterator types here
+        self.train_iter = "bitext"
+        self.valid_src_iter = "bitext"
+        self.valid_trg_iter = "bitext"
+
     def load_data(self, shuffle=False, sort=False, invert=False):
-        # We need to find out about modalities
-        train_src_type, train_src_file = self.data['train_src']
-        train_trg_type, train_trg_file = self.data['train_trg']
-        train_src_iter_class = get_iterator(train_src_type)
-        train_trg_iter_class = get_iterator(train_trg_type)
-
-        # This is the only option
-        assert train_src_type == train_trg_type == 'bitext'
-
-        self.train_iterator = train_src_iter_class(train_src_file, self.src_dict,
-                                                   train_trg_file, self.trg_dict,
-                                                   batch_size=self.batch_size,
-                                                   n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
+        self.train_iterator = get_iterator(self.train_iter)(
+                                self.data['train_src'], self.src_dict,
+                                self.data['train_trg'], self.trg_dict,
+                                batch_size=self.batch_size,
+                                n_words_src=self.n_words_src,
+                                n_words_trg=self.n_words_trg)
 
         # Prepare batches
         self.train_iterator.prepare_batches(shuffle=shuffle, sort=sort, invert=invert)
 
-        if 'valid_src' in self.data:
-            # Validation data available
-            valid_src_type, valid_src_file = self.data['valid_src']
-            valid_trg_type, self.valid_trg_files = self.data['valid_trg']
-            valid_src_iter_class = get_iterator(valid_src_type)
-            valid_trg_iter_class = get_iterator(valid_trg_type)
-            assert valid_src_type == valid_trg_type == 'bitext'
+        # Validation
+        valid_trg_files = self.data['valid_trg']
+        if isinstance(valid_trg_files, str):
+            valid_trg_files = list([valid_trg_files])
 
-            # Take the 1st ref file for valid NLL computation
-            if isinstance(self.valid_trg_files, list):
-                self.valid_trg_files = self.valid_trg_files[0]
-            self.valid_iterator = valid_src_iter_class(valid_src_file, self.src_dict,
-                                                       self.valid_trg_files, self.trg_dict, batch_size=64,
-                                                       n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
-            self.valid_iterator.prepare_batches()
+        # Take the first validation item for NLL computation
+        self.valid_iterator = get_iterator(self.valid_src_iter)(
+                                self.data['valid_src'], self.src_dict,
+                                valid_trg_files[0], self.trg_dict, batch_size=64,
+                                n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
+        self.valid_iterator.prepare_batches()
 
     def init_params(self):
         params = OrderedDict()
@@ -215,6 +209,11 @@ class Model(BaseModel):
         # scaling the learning rate accordingly.
         norm_cost = cost / y_mask.sum()
 
+        # For alpha regularization
+        self.x_mask = x_mask
+        self.y_mask = y_mask
+        self.alphas = alphas
+
         return cost.mean(), norm_cost.mean()
 
     def build_sampler(self):
@@ -286,4 +285,10 @@ class Model(BaseModel):
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
-
+    def add_alpha_regularizer(self, cost, alpha_c):
+        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
+        alpha_reg = alpha_c * (
+            (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), 'float32')[:, None] -
+             self.alphas.sum(0))**2).sum(1).mean()
+        cost += alpha_reg
+        return cost
