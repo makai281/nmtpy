@@ -16,7 +16,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
 from ..sysutils import get_valid_evaluation, get_temp_file
-from ..nmtutils import unzip
+from ..nmtutils import unzip, itemlist
 
 class BaseModel(object):
     __metaclass__ = ABCMeta
@@ -93,7 +93,32 @@ class BaseModel(object):
 
         return np.array(probs).mean()
 
-    def build_optimizer(self, cost, grads):
+    def add_l2_weight_decay(self, cost, decay_c):
+        decay_c = theano.shared(np.float32(decay_c), name='decay_c')
+        weight_decay = 0.
+        for _, vv in self.tparams.iteritems():
+            weight_decay += (vv ** 2).sum()
+        weight_decay *= decay_c
+        cost += weight_decay
+        return cost
+
+    def add_alpha_regularizer(self, cost, alpha_c):
+        # This should be reimplemented in attentional models
+        return cost
+
+    def build_optimizer(self, cost, clip_c):
+        grads = tensor.grad(cost, wrt=itemlist(self.tparams))
+        if clip_c > 0.:
+            g2 = 0.
+            new_grads = []
+            for g in grads:
+                g2 += (g**2).sum()
+            for g in grads:
+                new_grads.append(tensor.switch(g2 > (clip_c**2),
+                                               g / tensor.sqrt(g2) * clip_c,
+                                               g))
+            grads = new_grads
+
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
         lr = tensor.scalar(name='lr')
         self.f_grad_shared, self.f_update = opt(lr, self.tparams,
