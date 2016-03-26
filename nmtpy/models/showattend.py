@@ -55,7 +55,7 @@ class Model(BaseModel):
     def load_data(self, shuffle=False, sort=False):
         # Do we have an idxs file for image ids?
         image_idxs = None
-        if 'train_idx' in data:
+        if 'train_idx' in self.data:
             image_idxs = open(self.data['train_idx']).read().strip().split("\n")
             image_idxs = [int(i) for i in image_idxs]
 
