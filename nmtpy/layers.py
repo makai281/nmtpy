@@ -381,7 +381,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
 #################
 # LSTM (from SAT)
 #################
-def param_init_lstm(options, params, nin, dim, prefix='lstm'):
+def param_init_lstm(params, nin, dim, forget_bias=0, prefix='lstm'):
     """
      Stack the weight matrices for all the gates
      for much cleaner code and slightly faster dot-prods
@@ -406,18 +406,16 @@ def param_init_lstm(options, params, nin, dim, prefix='lstm'):
                                               ortho_weight(dim),
                                               ortho_weight(dim)], axis=1)
 
-    params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype('float32')
+    b = np.zeros((4 * dim,)).astype('float32')
+    b[dim: 2*dim] = forget_bias
+    params[_p(prefix, 'b')] = b
 
     return params
 
 # This function implements the lstm fprop
-def lstm_layer(tparams, state_below, options, prefix='lstm', mask=None, **kwargs):
+def lstm_layer(tparams, state_below, prefix='lstm', init_state=None, init_memory=None, **kwargs):
     # number of timesteps
     nsteps = state_below.shape[0]
-
-    # if we have no mask, we assume all the inputs are valid
-    if mask == None:
-        mask = tensor.alloc(1., nsteps, 1)
 
     # hidden dimension of LSTM layer
     dim = tparams[_p(prefix, 'U')].shape[0]
@@ -426,29 +424,33 @@ def lstm_layer(tparams, state_below, options, prefix='lstm', mask=None, **kwargs
         # This is minibatch
         n_samples = state_below.shape[1]
 
-        # init_state is dim per sample all zero
-        init_state = tensor.alloc(0., n_samples, dim)
+        if not init_state:
+            # init_state is dim per sample all zero
+            init_state = tensor.alloc(0., n_samples, dim)
 
-        # init_memory is dim per sample all zero
-        init_memory = tensor.alloc(0., n_samples, dim)
+        if not init_memory:
+            # init_memory is dim per sample all zero
+            init_memory = tensor.alloc(0., n_samples, dim)
 
     else:
         # during sampling, only single sample is received
         n_samples = 1
-        init_state = tensor.alloc(0., dim)
-        init_memory = tensor.alloc(0., dim)
+        if not init_state:
+            init_state = tensor.alloc(0., dim)
+        if not init_memory:
+            init_memory = tensor.alloc(0., dim)
 
     ###########################
     # one time step of the lstm
     ###########################
-    def _step(m_, x_, h_, c_):
-        """m_: mask
+    def _step(x_, m_, c_):
+        """
            x_: state_below
-           h_: init_state
-           c_: init_memory (cell state)
+           m_: init_memory
+           c_: init_cell_state (this is actually not used when initializing)
         """
         
-        preact = tensor.dot(h_, tparams[_p(prefix, 'U')])
+        preact = tensor.dot(m_, tparams[_p(prefix, 'U')])
         preact += x_
 
         # input(t) = sigm(W_ix * x_t + W_im * m_tm1)
@@ -462,16 +464,16 @@ def lstm_layer(tparams, state_below, options, prefix='lstm', mask=None, **kwargs
         # cellstate(t) = forget(t) * cellstate(t-1) + input(t) * cellstate(t)
         c = f * c_ + i * c
 
-        # h is the m_t, e.g. memory in tstep T in NIC paper
-        h = o * tensor.tanh(c)
+        # m_t, e.g. memory in tstep T in NIC paper
+        m = o * tensor.tanh(c)
 
-        return h, c, i, f, o, preact
+        return m, c
 
     state_below = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
 
     rval, updates = theano.scan(_step,
-                                sequences=[mask, state_below],
-                                outputs_info=[init_state, init_memory, None, None, None, None],
+                                sequences=[state_below],
+                                outputs_info=[init_memory, init_state],
                                 name=_p(prefix, '_layers'),
                                 n_steps=nsteps, profile=False)
     return rval
