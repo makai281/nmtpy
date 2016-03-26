@@ -33,9 +33,9 @@ DEFAULTS = {
         }
 
 TRAIN_DEFAULTS = {
-        'alpha_c':            0.,             # Alpha regularization
         'decay_c':            0.0005,         # L2 penalty factor
         'clip_c':             0.,             # Clip gradients above clip_c
+        'alpha_c':            0.,             # Alpha regularization for attentional models
         'seed':               1234,           # RNG seed
         'suffix':             "",             # Model suffix
         'save_iter':          False,          # Save each best valid weights to separate file
@@ -234,44 +234,19 @@ if __name__ == '__main__':
     log.info('Building sampler')
     model.build_sampler()
 
-    #####################################
     # apply L2 regularization on weights
-    #####################################
     if args.decay_c > 0.:
-        decay_c = theano.shared(np.float32(args.decay_c), name='decay_c')
-        weight_decay = 0.
-        for kk, vv in model.tparams.iteritems():
-            weight_decay += (vv ** 2).sum()
-        weight_decay *= decay_c
-        cost += weight_decay
+        cost = model.add_l2_weight_decay(cost, args.decay_c)
 
-    # FIXME: Report this from old code
-    ##############################
-    # regularize attention weights
-    ##############################
+    # This is a NO-OP if not reimplemented in the model
+    if args.alpha_c > 0.:
+        cost = model.add_alpha_regularizer(cost, args.alpha_c)
 
-    ################################
-    # apply gradient clipping here
-    ################################
-    log.info('Computing gradient')
-    grads = tensor.grad(cost, wrt=itemlist(model.tparams))
-    if args.clip_c > 0.:
-        g2 = 0.
-        new_grads = []
-        for g in grads:
-            g2 += (g**2).sum()
-        for g in grads:
-            new_grads.append(tensor.switch(g2 > (args.clip_c**2),
-                                           g / tensor.sqrt(g2) * args.clip_c,
-                                           g))
-        grads = new_grads
-
+    # Build optimizer
     log.info('Building "%s" optimizer' % args.optimizer)
-    model.build_optimizer(cost, grads)
+    model.build_optimizer(cost, args.clip_c)
 
-   #####################
     # Save model options
-    #####################
     model.save_options()
 
     ################
