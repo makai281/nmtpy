@@ -126,7 +126,7 @@ class BaseModel(object):
                                                 cost, profile=self.profile,
                                                 mode=self.func_mode)
 
-    def beam_search(self, beam_size=12):
+    def run_beam_search(self, beam_size=12):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save_params(tmpf.name, **unzip(self.tparams))
