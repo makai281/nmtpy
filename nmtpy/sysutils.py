@@ -37,8 +37,8 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(model_path, pkl_path=None, beam_size=12):
-    cmd = ["nmt-translate", "-b", str(beam_size), "-m", model_path]
+def get_valid_evaluation(model_path, beam_size, n_jobs, pkl_path=None):
+    cmd = ["nmt-translate", "-b", str(beam_size), "-j", str(n_jobs), "-m", model_path]
     if pkl_path:
         cmd.extend(["-p", pkl_path])
     # nmt-translate prints a dict of metrics
