@@ -3,8 +3,8 @@
 import os
 import re
 from subprocess import Popen, PIPE, check_output
-
 from functools import total_ordering
+
 from .sysutils import find_executable, real_path, get_temp_file
 
 @total_ordering
@@ -95,9 +95,11 @@ class MultiBleuScorer(object):
 
 """Meteor wrapper."""
 class METEORScorer(object):
-    def __init__(self, path="~/git/meteor/meteor-1.5.jar"):
+    def __init__(self):
+        self.path = real_path(os.environ['METEOR_JAR'])
+        if not os.path.exists(self.path):
+            raise Exception("METEOR jar file not found.")
 
-        self.path = real_path(path)
         self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]
 
     def compute(self, refs, hyps, language="auto", norm=True):
