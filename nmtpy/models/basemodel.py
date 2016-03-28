@@ -126,7 +126,7 @@ class BaseModel(object):
                                                 cost, profile=self.profile,
                                                 mode=self.func_mode)
 
-    def run_beam_search(self, beam_size=12, n_jobs=8):
+    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu'):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save_params(tmpf.name, **unzip(self.tparams))
@@ -134,7 +134,8 @@ class BaseModel(object):
             result = get_valid_evaluation(tmpf.name,
                                           pkl_path=self.model_path + ".pkl",
                                           beam_size=beam_size,
-                                          n_jobs=n_jobs)
+                                          n_jobs=n_jobs,
+                                          metric=metric)
 
         return result
 
