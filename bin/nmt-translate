@@ -15,7 +15,7 @@ import numpy as np
 
 from nmtpy.logger import Logger
 from nmtpy.config import Config
-from nmtpy.search import beam_search, gen_sample, forced_decoding
+from nmtpy.search import gen_sample, forced_decoding
 from nmtpy.metrics import get_all_scorers
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
@@ -29,8 +29,7 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(seed)
     model.build_sampler()
-    f_init, f_next = model.f_init, model.f_next
-    # If argmax is True, no beam-search is done
+
     while True:
         req = queue.get()
 
@@ -44,6 +43,7 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
         if force_dec:
             target = data_dict['y_forced']
             del data_dict['y_forced']
+            f_init, f_next = model.f_init, model.f_next
             sample, score = forced_decoding(f_init, f_next, data_dict.values(), target)
             sample = [sample]
             score = np.array(score)
@@ -51,12 +51,13 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
         elif argmax:
             # Get the 1best for each distribution
             # FIXME: Should pass trng?
+            f_init, f_next = model.f_init, model.f_next
             sample, score = gen_sample(f_init, f_next, data_dict.values(), maxlen=50, argmax=True)
             sample = [sample]
             score = np.array(score)
         else:
-            # beam search given an input sequence and obtain scores
-            sample, score = beam_search(f_init, f_next, data_dict.values(), beam_size=beam_size, maxlen=50)
+            # Use model specific beam search
+            sample, score = model.beam_search(data_dict.values(), beam_size=beam_size, maxlen=50)
 
         # normalize scores according to sequence lengths
         if not unnormalized:
