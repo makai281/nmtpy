@@ -301,7 +301,7 @@ if __name__ == '__main__':
                 if args.valid_metric != 'px':
                     t = time.time()
                     log.info("Starting beam search")
-                    results = model.beam_search(beam_size=12)
+                    results = model.run_beam_search(beam_size=12)
                     log.info("Done: %.2f seconds" % (time.time() - t))
                     # We'll receive every available metric such as BLEU, METEOR, etc.
                     valid_results.append(results)
