@@ -54,8 +54,7 @@ def param_init_fflayer(params, prefix='ff', nin=None, nout=None, ortho=True):
 
     return params
 
-def fflayer(tparams, state_below, prefix='ff',
-            activ='lambda x: tanh(x)', **kwargs):
+def fflayer(tparams, state_below, prefix='ff', activ='lambda x: tanh(x)'):
     return eval(activ) (
         tensor.dot(state_below, tparams[_p(prefix, 'W')]) +
         tparams[_p(prefix, 'b')]
@@ -84,7 +83,7 @@ def param_init_gru(params, prefix='gru', nin=None, dim=None):
     return params
 
 
-def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode=None, **kwargs):
+def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode=None):
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
@@ -217,9 +216,8 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
 
 def gru_cond_layer(tparams, state_below, prefix='gru',
                    mask=None, context=None, one_step=False,
-                   init_memory=None, init_state=None,
-                   context_mask=None, profile=False, mode=None,
-                   **kwargs):
+                   init_state=None, context_mask=None,
+                   profile=False, mode=None):
 
     assert context, 'Context must be provided'
 
@@ -360,7 +358,6 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
                    tparams[_p(prefix, 'bx_nl')]]
 
     if one_step:
-        # NOTE: According to the SAT paper, initial ctx is learned with an FF as well
         rval = _step(*(seqs + [init_state, None, None, pctx_, context] + shared_vars))
     else:
         outputs_info=[init_state,
@@ -413,7 +410,12 @@ def param_init_lstm(params, nin, dim, forget_bias=0, prefix='lstm'):
     return params
 
 # This function implements the lstm fprop
-def lstm_layer(tparams, state_below, prefix='lstm', init_state=None, init_memory=None, **kwargs):
+def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step=False, prefix='lstm'):
+
+    if one_step:
+        assert init_memory, 'previous memory must be provided'
+        assert init_state, 'previous state must be provided'
+
     # number of timesteps
     nsteps = state_below.shape[0]
 
@@ -423,22 +425,20 @@ def lstm_layer(tparams, state_below, prefix='lstm', init_state=None, init_memory
     if state_below.ndim == 3:
         # This is minibatch
         n_samples = state_below.shape[1]
-
-        if not init_state:
-            # init_state is dim per sample all zero
-            init_state = tensor.alloc(0., n_samples, dim)
-
-        if not init_memory:
-            # init_memory is dim per sample all zero
-            init_memory = tensor.alloc(0., n_samples, dim)
-
     else:
         # during sampling, only single sample is received
         n_samples = 1
-        if not init_state:
-            init_state = tensor.alloc(0., dim)
-        if not init_memory:
-            init_memory = tensor.alloc(0., dim)
+
+    if init_state is None:
+        # init_state is dim per sample all zero
+        init_state = tensor.alloc(0., n_samples, dim)
+
+    if init_memory is None:
+        # init_memory is dim per sample all zero
+        init_memory = tensor.alloc(0., n_samples, dim)
+
+    # This maps the input to LSTM dimensionality
+    state_below = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
 
     ###########################
     # one time step of the lstm
@@ -469,18 +469,19 @@ def lstm_layer(tparams, state_below, prefix='lstm', init_state=None, init_memory
 
         return m, c
 
-    state_below = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
-
-    rval, updates = theano.scan(_step,
-                                sequences=[state_below],
-                                outputs_info=[init_memory, init_state],
-                                name=_p(prefix, '_layers'),
-                                n_steps=nsteps, profile=False)
+    if one_step:
+        rval = _step(state_below, init_memory, init_state)
+    else:
+        rval, updates = theano.scan(_step,
+                                    sequences=[state_below],
+                                    outputs_info=[init_memory, init_state],
+                                    name=_p(prefix, '_layers'),
+                                    n_steps=nsteps, profile=False)
     return rval
 
 # Conditional LSTM layer with Attention
 def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
-    # input to LSTM, similar to the above, we stack the matricies for compactness, do one
+    # input to LSTM, similar to the above, we stack the matrices for compactness, do one
     # dot product, and use the slice function below to get the activations for each "gate"
     params[_p(prefix,'W')] = np.concatenate([norm_weight(nin,dim),
                                              norm_weight(nin,dim),
@@ -528,7 +529,7 @@ def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
 def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
                     mask=None, context=None, one_step=False,
                     init_memory=None, init_state=None,
-                    trng=None, use_noise=None, **kwargs):
+                    trng=None, use_noise=None):
 
     assert context, 'Context must be provided'
 
