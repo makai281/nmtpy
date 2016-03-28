@@ -50,10 +50,9 @@ class BiTextIterator(object):
 
     def set_batch_size(self, bs):
         self.batch_size = bs
+        self.prepare_batches()
 
     def rewind(self):
-        if self.invert:
-            self.__minibatches.reverse()
         self.__iter = iter(self.__minibatches)
 
     def __iter__(self):
@@ -101,31 +100,15 @@ class BiTextIterator(object):
         sf.close()
         tf.close()
 
-    def prepare_batches(self, shuffle=False, sort=False, invert=False):
+    def prepare_batches(self):
         sample_idxs = np.arange(self.n_samples)
         self.__minibatches = []
-        self.invert = invert
-
-        if sort:
-            # Sort samples by target sentence length
-            sample_idxs = sorted(sample_idxs, key=lambda i: len(self.__seqs[i][1]))
-        elif shuffle:
-            # Shuffle samples
-            np.random.shuffle(sample_idxs)
 
         for i in range(0, self.n_samples, self.batch_size):
             batch_idxs = sample_idxs[i:i + self.batch_size]
             x, x_mask = mask_data([self.__seqs[i][0] for i in batch_idxs])
             y, y_mask = mask_data([self.__seqs[i][1] for i in batch_idxs])
             self.__minibatches.append((batch_idxs, x, x_mask, y, y_mask))
-
-        if sort and shuffle:
-            # FIXME: This will break get_idxs and image features
-            # as the leftover batch will not be at the end
-            random.shuffle(self.__minibatches)
-            sample_idxs = []
-            for batch in self.__minibatches:
-                sample_idxs.extend(batch[0])
 
         self.__iter = iter(self.__minibatches)
         self.__idxs = sample_idxs
@@ -167,15 +150,3 @@ if __name__ == '__main__':
                 print "Key already available: %s" % src_sent
             else:
                 d[src_sent] = trg_sent
-
-    iterator.prepare_batches(shuffle=True, sort=True)
-    for batch in iterator:
-        for s,t in zip(batch['x'].T, batch['y'].T):
-            src_sent = idx_to_sent(src_idict, s)
-            trg_sent = idx_to_sent(trg_idict, t)
-            if d[src_sent] != trg_sent:
-                print "Warning: %s -> %s" % (src_sent, trg_sent)
-    idxs2 = iterator.get_idxs()
-
-    if np.allclose(idxs1, idxs2):
-        print "all close"

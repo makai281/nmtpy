@@ -39,6 +39,7 @@ class TextIterator(object):
 
     def set_batch_size(self, bs):
         self.batch_size = bs
+        self.prepare_batches()
 
     def rewind(self):
         self.__iter = iter(self.__minibatches)
@@ -78,29 +79,14 @@ class TextIterator(object):
 
         self.n_samples = len(self.__idxs)
 
-    def prepare_batches(self, shuffle=False, sort=False):
+    def prepare_batches(self):
         sample_idxs = np.arange(self.n_samples)
         self.__minibatches = []
-        if sort:
-            # Sort samples by sentence length
-            sample_idxs = sorted(sample_idxs, key=lambda i: len(self.__seqs[i]))
-        elif shuffle:
-            # Shuffle samples
-            np.random.shuffle(sample_idxs)
 
         for i in range(0, self.n_samples, self.batch_size):
             batch_idxs = sample_idxs[i:i + self.batch_size]
             x, x_mask = mask_data([self.__seqs[i] for i in batch_idxs])
             self.__minibatches.append((batch_idxs, x, x_mask))
-
-        # Shuffle sorted batches
-        if sort and shuffle:
-            # FIXME: This will break get_idxs and image features
-            # as the leftover batch will not be at the end
-            random.shuffle(self.__minibatches)
-            sample_idxs = []
-            for batch in self.__minibatches:
-                sample_idxs.extend(batch[0])
 
         self.__iter = iter(self.__minibatches)
         self.__idxs = sample_idxs

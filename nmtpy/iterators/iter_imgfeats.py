@@ -63,6 +63,7 @@ class ImageFeatsIterator(object):
 
     def set_batch_size(self, bs):
         self.batch_size = bs
+        self.rewind()
 
     def prepare_batches(self):
         pass
@@ -109,9 +110,6 @@ def test_image_iterator():
 
     sorted_idxs = np.arange(orig_data.shape[0])
     subset_idxs = sorted_idxs[:768]
-    shuffled_idxs = np.arange(orig_data.shape[0])
-    np.random.shuffle(shuffled_idxs)
-    shuffled_data = orig_data[shuffled_idxs]
 
     orig_data_5 = orig_data[:]
     orig_data_5.shape = (orig_data_5.shape[0], 256, -1)
@@ -156,18 +154,6 @@ def test_image_iterator():
         print "3rd test OK"
 
         a = None
-        it = ImageFeatsIterator(data_file, batch_size=bs, idxs=shuffled_idxs, do_mask=True)
-        for batch in it:
-            img = batch[it.data_name]
-            if a is None:
-                a = img
-            else:
-                a = np.vstack([a, img])
-
-        assert np.allclose(shuffled_data, a), "idxs=sorted, bs=%d, FAIL" % bs   
-        print "4th test OK"
-
-        a = None
         it = ImageFeatsIterator(data_file, batch_size=bs, idxs=None, do_mask=True, n_timesteps=256)
         for batch in it:
             img = batch[it.data_name]
@@ -177,7 +163,7 @@ def test_image_iterator():
                 a = np.concatenate([a, img], axis=1)
 
         assert np.allclose(orig_data_5, a), "idxs=sorted, bs=%d, FAIL" % bs
-        print "5th test OK"
+        print "4th test OK"
 
 
 if __name__ == '__main__':

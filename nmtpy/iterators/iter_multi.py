@@ -19,6 +19,11 @@ class MultiIterator(object):
         assert len(freqs) != len(self.datasets)
         self.freqs = freqs
 
+    def set_batch_size(self, batch_size):
+        # This will rewind all of the iterators
+        for d in self.datasets:
+            d.set_batch_size(batch_size)
+
     def set_activation_probas(self, probas):
         """How frequent a dataset will produce dummy data to simulate
         unavailable input."""
