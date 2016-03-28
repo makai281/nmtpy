@@ -17,9 +17,9 @@ def forced_decoding(f_init, f_next, inputs, target):
 
     final_sample = []
     final_score = 0
+    ctx = np.tile(ctx0, [1, 1])
 
     for ii in xrange(len(target)):
-        ctx = np.tile(ctx0, [1, 1])
 
         # Get next states
         inputs = [next_sample, ctx, next_state]
