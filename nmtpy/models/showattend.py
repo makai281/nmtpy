@@ -52,7 +52,7 @@ class Model(BaseModel):
         self.valid_src_iter = "img_feats"
         self.valid_trg_iter = "text"
 
-    def load_data(self, shuffle=False, sort=False):
+    def load_data(self):
         # Do we have an idxs file for image ids?
         image_idxs = None
         if 'train_idx' in self.data:

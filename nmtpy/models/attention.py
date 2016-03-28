@@ -51,7 +51,7 @@ class Model(BaseModel):
         self.valid_src_iter = "bitext"
         self.valid_trg_iter = "bitext"
 
-    def load_data(self, shuffle=False, sort=False, invert=False):
+    def load_data(self):
         self.train_iterator = get_iterator(self.train_iter)(
                                 self.data['train_src'], self.src_dict,
                                 self.data['train_trg'], self.trg_dict,
@@ -60,7 +60,7 @@ class Model(BaseModel):
                                 n_words_trg=self.n_words_trg)
 
         # Prepare batches
-        self.train_iterator.prepare_batches(shuffle=shuffle, sort=sort, invert=invert)
+        self.train_iterator.prepare_batches()
 
         # Validation
         valid_trg_files = self.data['valid_trg']
