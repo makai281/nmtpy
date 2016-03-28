@@ -3,6 +3,7 @@ from six.moves import zip
 
 # Python
 import os
+import copy
 import cPickle
 import inspect
 import importlib
@@ -105,9 +106,9 @@ class Model(BaseModel):
     def build(self):
         # description string: #words x #samples
         x = tensor.matrix('x', dtype=INT)
-        x_mask = tensor.matrix('x_mask', dtype='float32')
+        x_mask = tensor.matrix('x_mask', dtype=FLOAT)
         y = tensor.matrix('y', dtype=INT)
-        y_mask = tensor.matrix('y_mask', dtype='float32')
+        y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
         self.inputs['x'] = x
         self.inputs['x_mask'] = x_mask
@@ -241,12 +242,12 @@ class Model(BaseModel):
         # ctx_mean = tensor.concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
-        outs = [init_state, ctx]
+        outs = [ctx, init_state]
         self.f_init = theano.function([x], outs, name='f_init', profile=self.profile)
 
         # x: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
-        init_state = tensor.matrix('init_state', dtype='float32')
+        init_state = tensor.matrix('init_state', dtype=FLOAT)
 
         # if it's the first word, emb should be all zero and it is indicated by -1
         emb = tensor.switch(y[:, None] < 0,
@@ -285,10 +286,113 @@ class Model(BaseModel):
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
+    def beam_search(self, inputs, beam_size=12, maxlen=50):
+        # Final results and their scores
+        final_sample = []
+        final_score  = []
+
+        live_beam = 1
+        dead_beam = 0
+
+        # Initially we have one empty hypothesis with a score of 0
+        hyp_states  = []
+        hyp_samples = [[]]
+        hyp_scores  = np.zeros(1).astype(FLOAT)
+
+        # get initial state of decoder rnn and encoder context vectors
+        # ctx0: the set of context vectors leading to the next_state
+        # with a shape of (n_words x 1 x ctx_dim)
+        # next_state: mean context vector (ctx0.mean()) passed through FF with a final
+        # shape of (1 x 1 x ctx_dim)
+        ctx0, next_state = self.f_init(*inputs)
+
+        # Beginning-of-sentence indicator is -1
+        next_w = -1 * np.ones((1,)).astype(INT)
+
+        maxlen = min(maxlen, inputs[0].shape[0] * 3)
+
+        for ii in xrange(maxlen):
+            # Always starts with the initial tstep's context vectors
+            # e.g. we have a ctx0 of shape (n_words x 1 x ctx_dim)
+            # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
+            # thus we create sth like a batch of live_beam size with every word duplicated
+            # for further state expansion.
+            tiled_ctx = np.tile(ctx0, [live_beam, 1])
+
+            # Get next states
+            # In the first iteration, we provide -1 and obtain the log_p's for the
+            # first word. In the following iterations tiled_ctx becomes a batch
+            # of duplicated left hypotheses. tiled_ctx is always the same except
+            # the 2nd dimension as the context vectors of the source sequence
+            # is always the same regardless of the decoding step.
+            next_log_p, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
+
+            # Compute sum of log_p's for the current n-gram hypotheses and flatten them
+            cand_scores = hyp_scores[:, None] - next_log_p
+            cand_flat = cand_scores.flatten()
+
+            # Take the best beam_size-dead_beam hypotheses
+            ranks_flat = cand_flat.argsort()[:(beam_size-dead_beam)]
+
+            # Get their costs
+            costs = cand_flat[ranks_flat]
+
+            # Find out to which initial hypothesis idx this was belonging
+            trans_indices = ranks_flat / self.n_words_trg
+            # Find out the idx of the appended word
+            word_indices = ranks_flat % self.n_words_trg
+
+            # New states, scores and samples
+            new_hyp_states  = []
+            new_hyp_samples = []
+            new_hyp_scores  = np.zeros(beam_size-dead_beam).astype(FLOAT)
+
+            # Iterate over the hypotheses and add them to new_* lists
+            for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
+                new_hyp_samples.append(hyp_samples[ti]+[wi])
+                new_hyp_scores[idx] = copy.copy(costs[idx])
+                new_hyp_states.append(copy.copy(next_state[ti]))
+
+            # check the finished samples
+            new_live_beam = 0
+            hyp_samples = []
+            hyp_scores = []
+            hyp_states = []
+
+            for idx in xrange(len(new_hyp_samples)):
+                if new_hyp_samples[idx][-1] == 0:
+                    # EOS detected
+                    final_sample.append(new_hyp_samples[idx])
+                    final_score.append(new_hyp_scores[idx])
+                    dead_beam += 1
+                else:
+                    new_live_beam += 1
+                    hyp_samples.append(new_hyp_samples[idx])
+                    hyp_scores.append(new_hyp_scores[idx])
+                    hyp_states.append(new_hyp_states[idx])
+
+            hyp_scores = np.array(hyp_scores)
+            live_beam = new_live_beam
+
+            if new_live_beam < 1 or dead_beam >= beam_size:
+                break
+
+            # Take the idxs of each hyp's last word
+            next_w = np.array([w[-1] for w in hyp_samples])
+            next_state = np.array(hyp_states)
+
+        # dump every remaining hypotheses
+        if live_beam > 0:
+            for idx in xrange(live_beam):
+                final_sample.append(hyp_samples[idx])
+                final_score.append(hyp_scores[idx])
+
+        return final_sample, final_score
+
     def add_alpha_regularizer(self, cost, alpha_c):
-        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
+        alpha_c = theano.shared(alpha_c.astype(FLOAT), name='alpha_c')
         alpha_reg = alpha_c * (
-            (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), 'float32')[:, None] -
+            (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), FLOAT)[:, None] -
              self.alphas.sum(0))**2).sum(1).mean()
         cost += alpha_reg
         return cost
