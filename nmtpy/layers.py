@@ -412,9 +412,9 @@ def param_init_lstm(params, nin, dim, forget_bias=0, prefix='lstm'):
 # This function implements the lstm fprop
 def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step=False, prefix='lstm'):
 
-    if one_step:
-        assert init_memory, 'previous memory must be provided'
-        assert init_state, 'previous state must be provided'
+    #if one_step:
+    #    assert init_memory, 'previous memory must be provided'
+    #    assert init_state, 'previous state must be provided'
 
     # number of timesteps
     nsteps = state_below.shape[0]
