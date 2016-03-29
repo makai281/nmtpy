@@ -15,7 +15,6 @@ import numpy as np
 
 from nmtpy.logger import Logger
 from nmtpy.config import Config
-from nmtpy.search import gen_sample, forced_decoding
 from nmtpy.metrics import get_scorer
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
@@ -43,11 +42,9 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
         if force_dec:
             target = data_dict['y_forced']
             del data_dict['y_forced']
-            f_init, f_next = model.f_init, model.f_next
-            sample, score = forced_decoding(f_init, f_next, data_dict.values(), target)
+            sample, score = model.gen_sample(data_dict.values(), target=target)
             sample = [sample]
             score = np.array(score)
-
         elif argmax:
             # Get the 1best for each distribution
             sample, score = model.gen_sample(data_dict.values(), maxlen=50, argmax=argmax)

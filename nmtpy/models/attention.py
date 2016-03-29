@@ -217,6 +217,14 @@ class Model(BaseModel):
 
         return cost.mean(), norm_cost.mean()
 
+    def add_alpha_regularizer(self, cost, alpha_c):
+        alpha_c = theano.shared(alpha_c.astype(FLOAT), name='alpha_c')
+        alpha_reg = alpha_c * (
+            (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), FLOAT)[:, None] -
+             self.alphas.sum(0))**2).sum(1).mean()
+        cost += alpha_reg
+        return cost
+
     def build_sampler(self):
         x = tensor.matrix('x', dtype=INT)
         xr = x[::-1]
@@ -280,10 +288,14 @@ class Model(BaseModel):
         # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
 
+        # Sample from the softmax distribution
+        next_probs = tensor.exp(next_log_probs)
+        next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
+
         # compile a function to do the whole thing above
         # next hidden state to be used
         inputs = [y, ctx, init_state]
-        outs = [next_log_probs, next_state]
+        outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50):
@@ -304,11 +316,12 @@ class Model(BaseModel):
         # with a shape of (n_words x 1 x ctx_dim)
         # next_state: mean context vector (ctx0.mean()) passed through FF with a final
         # shape of (1 x 1 x ctx_dim)
-        ctx0, next_state = self.f_init(*inputs)
+        ctx0, next_state = self.f_init(inputs[0])
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,)).astype(INT)
 
+        # maxlen or 3 times source length
         maxlen = min(maxlen, inputs[0].shape[0] * 3)
 
         for ii in xrange(maxlen):
@@ -325,7 +338,7 @@ class Model(BaseModel):
             # of duplicated left hypotheses. tiled_ctx is always the same except
             # the 2nd dimension as the context vectors of the source sequence
             # is always the same regardless of the decoding step.
-            next_log_p, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
+            next_log_p, _, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
@@ -389,10 +402,45 @@ class Model(BaseModel):
 
         return final_sample, final_score
 
-    def add_alpha_regularizer(self, cost, alpha_c):
-        alpha_c = theano.shared(alpha_c.astype(FLOAT), name='alpha_c')
-        alpha_reg = alpha_c * (
-            (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), FLOAT)[:, None] -
-             self.alphas.sum(0))**2).sum(1).mean()
-        cost += alpha_reg
-        return cost
+    def gen_sample(self, inputs, maxlen=50, argmax=False, target=None):
+        final_sample = []
+        final_score = 0
+
+        next_state, ctx0 = self.f_init(inputs[0])
+
+        # Beginning-of-sentence indicator is -1
+        next_word = np.array([-1], dtype=INT)
+
+        ctx = np.tile(ctx0, [1, 1])
+
+        # If target is not None, this means we'll do a forced decoding
+        forced = False
+        if target is not None:
+            maxlen = len(target)
+            forced = True
+
+        for ii in xrange(maxlen):
+            # Get next states
+            inputs = [next_word, ctx, next_state]
+            next_log_p, next_word, next_state = self.f_next(*inputs)
+
+            if forced:
+                nw = target[ii]
+
+            elif argmax:
+                # argmax() works the same for both probas and log_probas
+                nw = next_log_p[0].argmax()
+
+            else:
+                # Multinomial sampling
+                nw = next_word[0]
+
+            # Add the word idx
+            final_sample.append(nw)
+            final_score += next_log_p[0, nw]
+
+            # EOS
+            if nw == 0:
+                break
+
+        return sample, sample_score
