@@ -47,9 +47,11 @@ class BaseModel(object):
         self.test_iterator = None
 
     def set_trng(self, seed):
+        """Sets the seed for Theano RNG."""
         self.trng = RandomStreams(seed)
 
     def set_nanguard(self):
+        """Enables nanguard for theano functions."""
         self.func_mode = None
         if self.nanguard:
             from theano.compile.nanguardmode import NanGuardMode
@@ -58,7 +60,8 @@ class BaseModel(object):
                                           big_is_error=False)
 
     def set_dropout(self, val):
-        # Enable use_dropout in training. (Effective if dropout exists)
+        """Sets dropout indicator for activation scaling
+        if dropout is available through configuration."""
         self.use_dropout.set_value(float(val))
 
     def load_params(self, params):
@@ -140,21 +143,49 @@ class BaseModel(object):
 
         return result
 
+    def generate_samples(self, batch_dict, n):
+        # If you implement this in your class and set sample_freq
+        # accordingly in the model configuration, the training loop
+        # will periodically sample translations for debugging
+        # or informational purposes. If you don't, this is a NOP.
+        pass
+
+    ##########################################################
+    # For all the abstract methods below, you can take a look
+    # at attention.py to understand how they are implemented.
+    # Remember that you have to implement these methods in your
+    # own model.
+    ##########################################################
+
     @abstractmethod
     def load_data(self):
+        # Load and prepare your training and validation data
+        # inside this function.
         pass
 
     @abstractmethod
     def init_params(self):
+        # Initialize the weights and biases of your network
+        # through the helper functions provided in layers.py.
         pass
 
     @abstractmethod
     def build(self):
+        # This builds the computational graph of your network.
         pass
 
     @abstractmethod
     def build_sampler(self):
+        # This is quite similar to build() but works in a
+        # sequential manner for beam-search or sampling.
         pass
 
-    def generate_samples(self, batch_dict, n):
+    @abstractmethod
+    def beam_search(self, inputs):
+        # Beam search can change a lot based on the RNN
+        # layer, types of input etc. Look at the attention model
+        # and copy it into your class and modify it correctly.
+
+        # nmt-translate will also used the relevant beam_search
+        # based on the model type.
         pass
