@@ -130,7 +130,7 @@ class BaseModel(object):
                                                 cost, profile=self.profile,
                                                 mode=self.func_mode)
 
-    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', out_file=None):
+    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save_params(tmpf.name, **unzip(self.tparams))
@@ -140,6 +140,7 @@ class BaseModel(object):
                                           beam_size=beam_size,
                                           n_jobs=n_jobs,
                                           metric=metric,
+                                          mode=mode,
                                           out_file=out_file)
 
         return result

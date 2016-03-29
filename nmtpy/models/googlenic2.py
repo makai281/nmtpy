@@ -49,14 +49,17 @@ class Model(BaseModel):
         # Not used for this model but a None necessary for nmt-translate
         self.n_timesteps = None
 
-        # Set iterator types here
-        self.train_src_iter = "flickr"
-        self.valid_src_iter = "flickr"
-
-    def load_valid_data(self, batch_size=64):
+    def load_valid_data(self, from_translate=False):
+        batch_size = 1 if from_translate else 64
         self.valid_iterator = IterFlickr(self.data['pkl_file'], "test", batch_size, self.trg_dict, self.n_words_trg)
         self.valid_iterator.prepare_batches()
         self.img_dim = self.valid_iterator.img_dim
+
+        if from_translate:
+            self.valid_ref_files = self.data['valid_trg']
+
+            if isinstance(self.valid_ref_files, str):
+                self.valid_ref_files = list([self.valid_ref_files])
 
     def load_data(self):
         self.train_iterator = IterFlickr(self.data['pkl_file'], "train", self.batch_size, self.trg_dict, self.n_words_trg)
@@ -242,6 +245,8 @@ class Model(BaseModel):
         final_sample = [final_sample]
         final_score = np.array(final_score)
 
+        return final_sample, final_score
+
     def beam_search(self, inputs, beam_size=12, maxlen=50):
         # Final results and their scores
         final_sample = []
@@ -351,7 +356,7 @@ class Model(BaseModel):
         for i in np.random.choice(x_img.shape[0], n_samples, replace=False):
             sample, _ = self.gen_sample({'x_img': x_img[i][None, :]})
             truth = idx_to_sent(self.trg_idict, y[:, i])
-            sample = idx_to_sent(self.trg_idict, sample)
+            sample = idx_to_sent(self.trg_idict, sample[0])
             samples.append((None, truth, sample))
 
         return samples

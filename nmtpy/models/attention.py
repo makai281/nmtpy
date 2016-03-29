@@ -46,13 +46,27 @@ class Model(BaseModel):
         self.set_nanguard()
         self.set_trng(seed)
 
-        # Set iterator types here
-        self.train_iter = "bitext"
-        self.valid_src_iter = "bitext"
-        self.valid_trg_iter = "bitext"
+    def load_valid_data(self, from_translate=False):
+        self.valid_ref_files = self.data['valid_trg']
+        if isinstance(self.valid_ref_files, str):
+            self.valid_ref_files = list([self.valid_ref_files])
+
+        if from_translate:
+            self.valid_iterator = get_iterator("text")(
+                                    self.data['valid_src'], self.src_dict,
+                                    batch_size=1,
+                                    n_words=self.n_words_src)
+        else:
+            # Take the first validation item for NLL computation
+            self.valid_iterator = get_iterator("bitext")(
+                                    self.data['valid_src'], self.src_dict,
+                                    self.valid_ref_files[0], self.trg_dict, batch_size=64,
+                                    n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
+
+        self.valid_iterator.prepare_batches()
 
     def load_data(self):
-        self.train_iterator = get_iterator(self.train_iter)(
+        self.train_iterator = get_iterator("bitext")(
                                 self.data['train_src'], self.src_dict,
                                 self.data['train_trg'], self.trg_dict,
                                 batch_size=self.batch_size,
@@ -61,18 +75,7 @@ class Model(BaseModel):
 
         # Prepare batches
         self.train_iterator.prepare_batches()
-
-        # Validation
-        valid_trg_files = self.data['valid_trg']
-        if isinstance(valid_trg_files, str):
-            valid_trg_files = list([valid_trg_files])
-
-        # Take the first validation item for NLL computation
-        self.valid_iterator = get_iterator(self.valid_src_iter)(
-                                self.data['valid_src'], self.src_dict,
-                                valid_trg_files[0], self.trg_dict, batch_size=64,
-                                n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
-        self.valid_iterator.prepare_batches()
+        self.load_valid_data()
 
     def init_params(self):
         params = OrderedDict()
