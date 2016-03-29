@@ -64,10 +64,10 @@ def fflayer(tparams, state_below, prefix='ff', activ='tanh'):
 ###########
 # GRU layer
 ###########
-def param_init_gru(params, prefix='gru', nin=None, dim=None):
+def param_init_gru(params, nin, dim, scale=0.01, prefix='gru'):
     # embedding to gates transformation weights, biases
-    params[_p(prefix, 'W')]  = np.concatenate([norm_weight(nin, dim),
-                                               norm_weight(nin, dim)], axis=1)
+    params[_p(prefix, 'W')]  = np.concatenate([norm_weight(nin, dim, scale=scale),
+                                               norm_weight(nin, dim, scale=scale)], axis=1)
     params[_p(prefix, 'b')]  = np.zeros((2 * dim,)).astype(FLOAT)
 
     # recurrent transformation weights for gates
@@ -75,7 +75,7 @@ def param_init_gru(params, prefix='gru', nin=None, dim=None):
                                                ortho_weight(dim)], axis=1)
 
     # embedding to hidden state proposal weights, biases
-    params[_p(prefix, 'Wx')] = norm_weight(nin, dim)
+    params[_p(prefix, 'Wx')] = norm_weight(nin, dim, scale=scale)
     params[_p(prefix, 'bx')] = np.zeros((dim,)).astype(FLOAT)
 
     # recurrent transformation weights for hidden state proposal
@@ -163,7 +163,7 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
 
 
 # Conditional GRU layer with Attention
-def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
+def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
                         nin_nonlin=None, dim_nonlin=None):
 
     # By default dimctx is 2*gru_dim, e.g. 2000
@@ -175,14 +175,14 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
     if dim_nonlin is None:
         dim_nonlin = dim
 
-    params[_p(prefix, 'W')]             = np.concatenate([norm_weight(nin, dim),
-                                                          norm_weight(nin, dim)], axis=1)
+    params[_p(prefix, 'W')]             = np.concatenate([norm_weight(nin, dim, scale=scale),
+                                                          norm_weight(nin, dim, scale=scale)], axis=1)
     params[_p(prefix, 'b')]             = np.zeros((2 * dim,)).astype(FLOAT)
 
     params[_p(prefix, 'U')]             = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
 
-    params[_p(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin)
+    params[_p(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin, scale=scale)
 
     params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
     params[_p(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype(FLOAT)
@@ -195,21 +195,21 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
     params[_p(prefix, 'bx_nl')]         = np.zeros((dim_nonlin,)).astype(FLOAT)
 
     # context to GRU
-    params[_p(prefix, 'Wc')]            = norm_weight(dimctx, dim*2)
+    params[_p(prefix, 'Wc')]            = norm_weight(dimctx, dim*2, scale=scale)
 
-    params[_p(prefix, 'Wcx')]           = norm_weight(dimctx, dim)
+    params[_p(prefix, 'Wcx')]           = norm_weight(dimctx, dim, scale=scale)
 
     # attention: combined -> hidden
-    params[_p(prefix, 'W_comb_att')]    = norm_weight(dim, dimctx)
+    params[_p(prefix, 'W_comb_att')]    = norm_weight(dim, dimctx, scale=scale)
 
     # attention: context -> hidden
-    params[_p(prefix, 'Wc_att')]        = norm_weight(dimctx)
+    params[_p(prefix, 'Wc_att')]        = norm_weight(dimctx, scale=scale)
 
     # attention: hidden bias
     params[_p(prefix, 'b_att')]         = np.zeros((dimctx,)).astype(FLOAT)
 
     # attention: This gives the alpha's
-    params[_p(prefix, 'U_att')]         = norm_weight(dimctx, 1)
+    params[_p(prefix, 'U_att')]         = norm_weight(dimctx, 1, scale=scale)
     params[_p(prefix, 'c_att')]         = np.zeros((1,)).astype(FLOAT)
 
     return params
@@ -379,7 +379,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
 #################
 # LSTM (from SAT)
 #################
-def param_init_lstm(params, nin, dim, forget_bias=0, prefix='lstm'):
+def param_init_lstm(params, nin, dim, forget_bias=0, scale=0.01, prefix='lstm'):
     """
      Stack the weight matrices for all the gates
      for much cleaner code and slightly faster dot-prods
@@ -389,10 +389,10 @@ def param_init_lstm(params, nin, dim, forget_bias=0, prefix='lstm'):
     # W_fx: Input x to forget gate
     # W_ox: Input x to output gate
     # W_cx: Input x to cell state
-    params[_p(prefix, 'W')] = np.concatenate([norm_weight(nin,dim),
-                                              norm_weight(nin,dim),
-                                              norm_weight(nin,dim),
-                                              norm_weight(nin,dim)], axis=1)
+    params[_p(prefix, 'W')] = np.concatenate([norm_weight(nin,dim, scale=scale),
+                                              norm_weight(nin,dim, scale=scale),
+                                              norm_weight(nin,dim, scale=scale),
+                                              norm_weight(nin,dim, scale=scale)], axis=1)
 
     # for the previous hidden activation
     # W_im: Memory t_1 to input(t)
@@ -481,13 +481,13 @@ def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step
     return rval
 
 # Conditional LSTM layer with Attention
-def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
+def param_init_lstm_cond(params, options, nin, dim, dimctx, scale=0.01, prefix='lstm_cond'):
     # input to LSTM, similar to the above, we stack the matrices for compactness, do one
     # dot product, and use the slice function below to get the activations for each "gate"
-    params[_p(prefix,'W')] = np.concatenate([norm_weight(nin,dim),
-                                             norm_weight(nin,dim),
-                                             norm_weight(nin,dim),
-                                             norm_weight(nin,dim)], axis=1)
+    params[_p(prefix,'W')] = np.concatenate([norm_weight(nin,dim, scale=scale),
+                                             norm_weight(nin,dim, scale=scale),
+                                             norm_weight(nin,dim, scale=scale),
+                                             norm_weight(nin,dim, scale=scale)], axis=1)
 
     # LSTM to LSTM
     params[_p(prefix,'U')] = np.concatenate([ortho_weight(dim),
@@ -499,13 +499,13 @@ def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
     params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype(FLOAT)
 
     # context to LSTM
-    params[_p(prefix,'Wc')] = norm_weight(dimctx, dim*4)
+    params[_p(prefix,'Wc')] = norm_weight(dimctx, dim*4, scale=scale)
 
     # attention: context -> hidden
-    params[_p(prefix,'Wc_att')] = norm_weight(dimctx, ortho=False)
+    params[_p(prefix,'Wc_att')] = norm_weight(dimctx, scale=scale, ortho=False)
 
     # attention: LSTM -> hidden
-    params[_p(prefix,'Wd_att')] = norm_weight(dim,dimctx)
+    params[_p(prefix,'Wd_att')] = norm_weight(dim,dimctx, scale=scale)
 
     # attention: hidden bias
     params[_p(prefix,'b_att')] = np.zeros((dimctx,)).astype(FLOAT)
@@ -517,12 +517,12 @@ def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
             params[_p(prefix, 'b_att_%d' % lidx)] = np.zeros((dimctx,)).astype(FLOAT)
 
     # attention:
-    params[_p(prefix,'U_att')] = norm_weight(dimctx, 1)
+    params[_p(prefix,'U_att')] = norm_weight(dimctx, 1, scale=scale)
     params[_p(prefix, 'c_tt')] = np.zeros((1,)).astype(FLOAT)
 
     if options['selector']:
         # attention: selector
-        params[_p(prefix, 'W_sel')] = norm_weight(dim, 1)
+        params[_p(prefix, 'W_sel')] = norm_weight(dim, 1, scale=scale)
         params[_p(prefix, 'b_sel')] = np.float32(0.)
 
     return params
