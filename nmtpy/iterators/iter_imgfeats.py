@@ -5,7 +5,7 @@ from six.moves import zip
 import numpy as np
 
 from collections import OrderedDict
-from ..typedef import INT, FLOAT
+from ..typedef import *
 
 class ImageFeatsIterator(object):
     def __init__(self, filename, batch_size, norm=False,
