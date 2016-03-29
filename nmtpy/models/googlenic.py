@@ -239,6 +239,34 @@ class Model(BaseModel):
 
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
+    def gen_sample(self, inputs, maxlen=50, argmax=True):
+        sample = []
+        sample_score = 0
+
+        # get initial state of decoder rnn and encoder context
+        next_memory, next_state = self.f_init(inputs[0])
+
+        # Beginning-of-sentence indicator
+        next_w = np.array([-1.], dtype=INT)
+
+        for ii in xrange(maxlen):
+            inputs = [next_w, next_memory, next_state]
+            next_log_p, next_memory, next_state = self.f_next(*inputs)
+
+            if argmax:
+                nw = next_log_p[0].argmax()
+            else:
+                nw = next_sample[0]
+
+            sample.append(nw)
+            sample_score += next_log_p[0, nw]
+
+            # EOS
+            if nw == 0:
+                break
+
+        return sample, sample_score
+
     def beam_search(self, inputs, beam_size=12, maxlen=50):
         # Final results and their scores
         final_sample = []
