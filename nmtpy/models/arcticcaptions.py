@@ -148,9 +148,9 @@ class Model(BaseModel):
     def build(self):
         # description string: #words x #samples,
         x = tensor.matrix('x', dtype='int64')
-        mask = tensor.matrix('mask', dtype='float32')
+        mask = tensor.matrix('mask', dtype=FLOAT)
         # context: #samples x #annotations x dim
-        ctx = tensor.tensor3('ctx', dtype='float32')
+        ctx = tensor.tensor3('ctx', dtype=FLOAT)
 
         n_timesteps = x.shape[0]
         n_samples = x.shape[1]
