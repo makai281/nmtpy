@@ -50,9 +50,7 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
 
         elif argmax:
             # Get the 1best for each distribution
-            # FIXME: Should pass trng?
-            f_init, f_next = model.f_init, model.f_next
-            sample, score = gen_sample(f_init, f_next, data_dict.values(), maxlen=50, argmax=True)
+            sample, score = model.gen_sample(data_dict.values(), maxlen=50, argmax=argmax)
             sample = [sample]
             score = np.array(score)
         else:
