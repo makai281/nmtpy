@@ -250,7 +250,7 @@ class Model(BaseModel):
         # ctx_mean = tensor.concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
-        outs = [ctx, init_state]
+        outs = [init_state, ctx]
         self.f_init = theano.function([x], outs, name='f_init', profile=self.profile)
 
         # x: 1 x 1
@@ -316,7 +316,7 @@ class Model(BaseModel):
         # with a shape of (n_words x 1 x ctx_dim)
         # next_state: mean context vector (ctx0.mean()) passed through FF with a final
         # shape of (1 x 1 x ctx_dim)
-        ctx0, next_state = self.f_init(inputs[0])
+        next_state, ctx0 = self.f_init(inputs[0])
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,)).astype(INT)

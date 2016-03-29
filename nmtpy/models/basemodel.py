@@ -17,6 +17,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 from ..sysutils import get_valid_evaluation, get_temp_file
 from ..nmtutils import unzip, itemlist
+from ..typedef import *
 
 class BaseModel(object):
     __metaclass__ = ABCMeta
@@ -143,11 +144,18 @@ class BaseModel(object):
 
         return result
 
-    def gen_sample(self, inputs, maxlen, argmax=False, target=None):
+    def gen_sample(self, input_dict, maxlen=50, argmax=False):
         # A method that samples or takes the max proba's or
         # does a forced decoding depending on the parameters.
         final_sample = []
         final_score = 0
+
+        target = None
+        if "y_true" in input_dict:
+            # We're doing forced decoding
+            target = input_dict.pop("y_true")
+
+        inputs = input_dict.values()
 
         # Make it work with multiple inputs as well
         if len(inputs) == 1:
@@ -158,20 +166,13 @@ class BaseModel(object):
         # Beginning-of-sentence indicator is -1
         next_word = np.array([-1], dtype=INT)
 
-        ctx = np.tile(ctx0, [1, 1])
-
-        # If target is not None, this means we'll do a forced decoding
-        forced = False
-        if target is not None:
-            maxlen = len(target)
-            forced = True
+        tiled_ctx = np.tile(ctx0, [1, 1])
 
         for ii in xrange(maxlen):
             # Get next states
-            inputs = [next_word, ctx, next_state]
-            next_log_p, next_word, next_state = self.f_next(*inputs)
+            next_log_p, next_word, next_state = self.f_next(*[next_word, tiled_ctx, next_state])
 
-            if forced:
+            if target is not None:
                 nw = target[ii]
 
             elif argmax:
@@ -186,11 +187,14 @@ class BaseModel(object):
             final_sample.append(nw)
             final_score += next_log_p[0, nw]
 
-            # EOS
+            # NOTE: I think we should exit before adding EOS score
             if nw == 0:
                 break
 
-        return sample, sample_score
+        final_sample = [final_sample]
+        final_score = np.array(final_score)
+
+        return final_sample, final_score
 
     ##########################################################
     # For all the abstract methods below, you can take a look

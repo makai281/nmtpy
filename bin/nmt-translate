@@ -24,10 +24,23 @@ import nmtpy.cleanup as cleanup
 log = Logger._logger
 
 """Worker process which does beam search."""
-def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, argmax=False, force_dec=False, seed=1234):
+def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, seed=1234, mode="beamsearch"):
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(seed)
     model.build_sampler()
+
+    def __get_func_call(mode):
+        if mode == "beamsearch":
+            return 'model.beam_search(data_dict.values(), beam_size=beam_size)'
+
+        if mode == "forced":
+            return 'model.gen_sample(data_dict)'
+
+        if mode == "argmax":
+            return 'model.gen_sample(data_dict, argmax=True)'
+
+        if mode == "sample":
+            return 'model.gen_sample(data_dict)'
 
     while True:
         req = queue.get()
@@ -36,23 +49,10 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
         if req is None:
             break
 
+        # Get data from queue
         idx, data_dict = req[0], req[1]
-        sidx = 0
 
-        if force_dec:
-            target = data_dict['y_forced']
-            del data_dict['y_forced']
-            sample, score = model.gen_sample(data_dict.values(), target=target)
-            sample = [sample]
-            score = np.array(score)
-        elif argmax:
-            # Get the 1best for each distribution
-            sample, score = model.gen_sample(data_dict.values(), maxlen=50, argmax=argmax)
-            sample = [sample]
-            score = np.array(score)
-        else:
-            # Use model specific beam search
-            sample, score = model.beam_search(data_dict.values(), beam_size=beam_size, maxlen=50)
+        sample, score = eval(__get_func_call(mode))
 
         # normalize scores according to sequence lengths
         if not unnormalized:
@@ -69,8 +69,8 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, a
 """Translator starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Translator(object):
-    def __init__(self, beam_size, src_file=None, ref_files=None, nbest=1, n_jobs=10,
-                       unnorm=False, seed=1234, force_dec=False, argmax=False):
+    def __init__(self, beam_size, src_file=None, ref_files=None, nbest=1, n_jobs=8,
+                       unnorm=False, seed=1234, mode="beamsearch"):
 
         self.beam_size = beam_size
 
@@ -84,9 +84,8 @@ class Translator(object):
         self.nbest = nbest
         self.n_jobs = n_jobs
         self.unnorm = unnorm
-        self.argmax = argmax
-        self.force_dec = force_dec
         self.seed = seed
+        self.mode = mode
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
@@ -134,7 +133,6 @@ class Translator(object):
                 if not self.ref_files[0].startswith("/"):
                     self.ref_files.pop(0)
 
-
         log.info("Source file")
         log.info("  %s" % self.src_file)
         log.info("Reference file(s)")
@@ -153,12 +151,12 @@ class Translator(object):
                                                  batch_size=1, n_words=self.__obj.n_words_src)
         self.iterator.prepare_batches()
 
-        if self.force_dec:
+        if self.mode == "forced":
             # We need to have an iterator for the references as well
             assert len(self.ref_files) == 1
             self.ref_iterator = get_iterator('text')(self.ref_files[0], self.__obj.trg_dict, batch_size=1,
                                                      n_words=self.__obj.n_words_trg,
-                                                     data_name='y_forced', do_mask=False)
+                                                     data_name='y_true', do_mask=False)
             self.ref_iterator.prepare_batches()
 
     def start(self):
@@ -170,7 +168,7 @@ class Translator(object):
             self.processes[idx] = \
                     Process(target=translate_model,
                             args=(write_queue, read_queue, idx, self.__obj, self.beam_size, self.unnorm,
-                                  self.nbest, self.argmax, self.force_dec, self.seed))
+                                  self.nbest, self.seed, self.mode))
             self.processes[idx].start()
             cleanup.register_proc(self.processes[idx].pid)
 
@@ -179,8 +177,8 @@ class Translator(object):
         # Send data to worker processes
         for idx, data in enumerate(self.iterator):
             # Is it forced decoding?
-            if self.force_dec and self.ref_iterator:
-                data['y_forced'] = (next(self.ref_iterator)[1])['y_forced'].flatten()
+            if self.mode == "forced" and self.ref_iterator:
+                data['y_true'] = (next(self.ref_iterator))['y_true'].flatten()
             write_queue.put((idx, data))
 
         self.n_sentences = idx + 1
@@ -208,7 +206,7 @@ class Translator(object):
 
     def write_hyps(self, filename):
         with open(filename, 'w') as f:
-            if self.force_dec or self.nbest > 1:
+            if self.mode == "forced" or self.nbest > 1:
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
                     if not isinstance(tr, list):
                         tr = [tr]
@@ -232,17 +230,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='translate')
     parser.add_argument('-j', '--n-jobs'        , type=int, default=8,
                                                   help="Number of processes (default: 8, 0: Auto")
-    parser.add_argument('-a', '--argmax'        , action="store_true",
-                                                  help="Use argmax (1-best) instead of beam search")
     parser.add_argument('-b', '--beam-size'     , type=int, default=12,
                                                   help="Beam size (only for beam-search case)")
     parser.add_argument('-N', '--nbest'         , type=int, default=1,
                                                   help="Output n-best list size (only for beam-search case)")
-    parser.add_argument('-f', '--force-decoding', help="Obtain TM scores for the given reference set instead of translation",
-                                                  action="store_true")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
     parser.add_argument('-d', '--device'        , default='cpu', help="Where to run beam search.")
+    parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
     parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (blue or bleu,meteor)", default="bleu")
@@ -274,8 +269,7 @@ if __name__ == "__main__":
 
     translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
                             ref_files=args.ref_files, nbest=args.nbest,
-                            n_jobs=args.n_jobs,
-                            seed=args.seed, force_dec=args.force_decoding, argmax=args.argmax)
+                            n_jobs=args.n_jobs, seed=args.seed, mode=args.decoder)
 
     # load model options
     if not args.pkl_file:
