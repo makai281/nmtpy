@@ -132,11 +132,11 @@ class Model(BaseModel):
     def build(self):
         # Image features and all-1 mask
         # shape will be n_timesteps, n_samples, n_convfeats (196, bs, 512)
-        x_img = tensor.tensor3('x_img', dtype='float32')
+        x_img = tensor.tensor3('x_img', dtype=FLOAT)
 
         # Target sentences: n_timesteps, n_samples
         y = tensor.matrix('y', dtype=INT)
-        y_mask = tensor.matrix('y_mask', dtype='float32')
+        y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
         # Fixed # of timesteps for convolutional patches, e.g. 196
         n_timesteps = x_img.shape[0]
@@ -153,7 +153,7 @@ class Model(BaseModel):
         # Take mean across the first axis which are the timesteps, e.g. conv patches
         # No need to multiply by all-one masks
         # ctx_mean: 1 x n_convfeat (512) x n_samples
-        ctx_mean = tensor.mean(x_img, axis=0, dtype='float32')
+        ctx_mean = tensor.mean(x_img, axis=0, dtype=FLOAT)
 
         # initial decoder state: -> rnn_dim, e.g. 1000
         # NOTE: Try with linear activation as well
@@ -228,7 +228,7 @@ class Model(BaseModel):
     def build_sampler(self):
         # shape will be n_timesteps, n_samples, n_convfeats
         # context is the convolutional vectors themselves
-        ctx = tensor.tensor3('x_img', dtype='float32')
+        ctx = tensor.tensor3('x_img', dtype=FLOAT)
         n_timesteps = ctx.shape[0]
         n_samples = ctx.shape[1]
 
@@ -249,7 +249,7 @@ class Model(BaseModel):
 
         # x: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
-        init_state = tensor.matrix('init_state', dtype='float32')
+        init_state = tensor.matrix('init_state', dtype=FLOAT)
 
         # if it's the first word, emb should be all zero and it is indicated by -1
         emb = tensor.switch(y[:, None] < 0,
