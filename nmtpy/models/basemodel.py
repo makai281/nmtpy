@@ -143,17 +143,59 @@ class BaseModel(object):
 
         return result
 
-    def generate_samples(self, batch_dict, n):
-        # If you implement this in your class and set sample_freq
-        # accordingly in the model configuration, the training loop
-        # will periodically sample translations for debugging
-        # or informational purposes. If you don't, this is a NOP.
-        pass
+    def gen_sample(self, inputs, maxlen, argmax=False, target=None):
+        # A method that samples or takes the max proba's or
+        # does a forced decoding depending on the parameters.
+        final_sample = []
+        final_score = 0
+
+        # Make it work with multiple inputs as well
+        if len(inputs) == 1:
+            next_state, ctx0 = self.f_init(inputs[0])
+        else:
+            next_state, ctx0 = self.f_init(*inputs)
+
+        # Beginning-of-sentence indicator is -1
+        next_word = np.array([-1], dtype=INT)
+
+        ctx = np.tile(ctx0, [1, 1])
+
+        # If target is not None, this means we'll do a forced decoding
+        forced = False
+        if target is not None:
+            maxlen = len(target)
+            forced = True
+
+        for ii in xrange(maxlen):
+            # Get next states
+            inputs = [next_word, ctx, next_state]
+            next_log_p, next_word, next_state = self.f_next(*inputs)
+
+            if forced:
+                nw = target[ii]
+
+            elif argmax:
+                # argmax() works the same for both probas and log_probas
+                nw = next_log_p[0].argmax()
+
+            else:
+                # Multinomial sampling
+                nw = next_word[0]
+
+            # Add the word idx
+            final_sample.append(nw)
+            final_score += next_log_p[0, nw]
+
+            # EOS
+            if nw == 0:
+                break
+
+        return sample, sample_score
 
     ##########################################################
     # For all the abstract methods below, you can take a look
     # at attention.py to understand how they are implemented.
-    # Remember that you have to implement these methods in your
+    # Remember that you NEED to implement these methods in your
     # own model.
     ##########################################################
 
@@ -189,3 +231,4 @@ class BaseModel(object):
         # nmt-translate will also used the relevant beam_search
         # based on the model type.
         pass
+
