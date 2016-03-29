@@ -5,7 +5,7 @@ from theano import tensor
 
 from .nmtutils import *
 from .nmtutils import _p
-from .nmtutils.typedef import *
+from .typedef import *
 
 # Shorthands for activations
 tanh = tensor.tanh
