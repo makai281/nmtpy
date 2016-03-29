@@ -390,3 +390,17 @@ class Model(BaseModel):
                 final_score.append(hyp_scores[idx])
 
         return final_sample, final_score
+
+    def generate_samples(self, batch_dict, n_samples):
+        x_img = batch_dict['x_img']
+        y = batch_dict['y']
+
+        samples = []
+        n_samples = np.minimum(n_samples, x_img.shape[0])
+        for i in np.random.choice(x_img.shape[0], n_samples, replace=False):
+            sample, _ = self.gen_sample({'x_img': x_img[i][None, :]})
+            truth = idx_to_sent(self.trg_idict, y[:, i])
+            sample = idx_to_sent(self.trg_idict, sample)
+            samples.append((None, truth, sample))
+
+        return samples
