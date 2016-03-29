@@ -5,6 +5,7 @@ from theano import tensor
 
 from .nmtutils import *
 from .nmtutils import _p
+from .nmtutils.typedef import *
 
 # Shorthands for activations
 tanh = tensor.tanh
@@ -48,13 +49,13 @@ def get_new_layer(name):
 #####################################################################
 # feedforward layer: affine transformation + point-wise nonlinearity
 #####################################################################
-def param_init_fflayer(params, prefix='ff', nin=None, nout=None, ortho=True):
-    params[_p(prefix, 'W')] = norm_weight(nin, nout, scale=0.01, ortho=ortho)
-    params[_p(prefix, 'b')] = np.zeros((nout,)).astype('float32')
+def param_init_fflayer(params, nin, nout, scale=0.01, ortho=True, prefix='ff'):
+    params[_p(prefix, 'W')] = norm_weight(nin, nout, scale=scale, ortho=ortho)
+    params[_p(prefix, 'b')] = np.zeros((nout,)).astype(FLOAT)
 
     return params
 
-def fflayer(tparams, state_below, prefix='ff', activ='lambda x: tanh(x)'):
+def fflayer(tparams, state_below, prefix='ff', activ='tanh'):
     return eval(activ) (
         tensor.dot(state_below, tparams[_p(prefix, 'W')]) +
         tparams[_p(prefix, 'b')]
@@ -67,7 +68,7 @@ def param_init_gru(params, prefix='gru', nin=None, dim=None):
     # embedding to gates transformation weights, biases
     params[_p(prefix, 'W')]  = np.concatenate([norm_weight(nin, dim),
                                                norm_weight(nin, dim)], axis=1)
-    params[_p(prefix, 'b')]  = np.zeros((2 * dim,)).astype('float32')
+    params[_p(prefix, 'b')]  = np.zeros((2 * dim,)).astype(FLOAT)
 
     # recurrent transformation weights for gates
     params[_p(prefix, 'U')]  = np.concatenate([ortho_weight(dim),
@@ -75,7 +76,7 @@ def param_init_gru(params, prefix='gru', nin=None, dim=None):
 
     # embedding to hidden state proposal weights, biases
     params[_p(prefix, 'Wx')] = norm_weight(nin, dim)
-    params[_p(prefix, 'bx')] = np.zeros((dim,)).astype('float32')
+    params[_p(prefix, 'bx')] = np.zeros((dim,)).astype(FLOAT)
 
     # recurrent transformation weights for hidden state proposal
     params[_p(prefix, 'Ux')] = ortho_weight(dim)
@@ -176,7 +177,7 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
 
     params[_p(prefix, 'W')]             = np.concatenate([norm_weight(nin, dim),
                                                           norm_weight(nin, dim)], axis=1)
-    params[_p(prefix, 'b')]             = np.zeros((2 * dim,)).astype('float32')
+    params[_p(prefix, 'b')]             = np.zeros((2 * dim,)).astype(FLOAT)
 
     params[_p(prefix, 'U')]             = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
@@ -184,14 +185,14 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
     params[_p(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin)
 
     params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
-    params[_p(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype('float32')
+    params[_p(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype(FLOAT)
 
     params[_p(prefix, 'U_nl')]          = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
-    params[_p(prefix, 'b_nl')]          = np.zeros((2 * dim_nonlin,)).astype('float32')
+    params[_p(prefix, 'b_nl')]          = np.zeros((2 * dim_nonlin,)).astype(FLOAT)
 
     params[_p(prefix, 'Ux_nl')]         = ortho_weight(dim_nonlin)
-    params[_p(prefix, 'bx_nl')]         = np.zeros((dim_nonlin,)).astype('float32')
+    params[_p(prefix, 'bx_nl')]         = np.zeros((dim_nonlin,)).astype(FLOAT)
 
     # context to GRU
     params[_p(prefix, 'Wc')]            = norm_weight(dimctx, dim*2)
@@ -205,11 +206,11 @@ def param_init_gru_cond(params, nin, dim, dimctx, prefix='gru_cond',
     params[_p(prefix, 'Wc_att')]        = norm_weight(dimctx)
 
     # attention: hidden bias
-    params[_p(prefix, 'b_att')]         = np.zeros((dimctx,)).astype('float32')
+    params[_p(prefix, 'b_att')]         = np.zeros((dimctx,)).astype(FLOAT)
 
     # attention: This gives the alpha's
     params[_p(prefix, 'U_att')]         = norm_weight(dimctx, 1)
-    params[_p(prefix, 'c_att')]         = np.zeros((1,)).astype('float32')
+    params[_p(prefix, 'c_att')]         = np.zeros((1,)).astype(FLOAT)
 
     return params
 
@@ -403,7 +404,7 @@ def param_init_lstm(params, nin, dim, forget_bias=0, prefix='lstm'):
                                               ortho_weight(dim),
                                               ortho_weight(dim)], axis=1)
 
-    b = np.zeros((4 * dim,)).astype('float32')
+    b = np.zeros((4 * dim,)).astype(FLOAT)
     b[dim: 2*dim] = forget_bias
     params[_p(prefix, 'b')] = b
 
@@ -495,7 +496,7 @@ def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
                                              ortho_weight(dim)], axis=1)
 
     # bias to LSTM
-    params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype('float32')
+    params[_p(prefix,'b')] = np.zeros((4 * dim,)).astype(FLOAT)
 
     # context to LSTM
     params[_p(prefix,'Wc')] = norm_weight(dimctx, dim*4)
@@ -507,17 +508,17 @@ def param_init_lstm_cond(options, params, nin, dim, dimctx, prefix='lstm_cond'):
     params[_p(prefix,'Wd_att')] = norm_weight(dim,dimctx)
 
     # attention: hidden bias
-    params[_p(prefix,'b_att')] = np.zeros((dimctx,)).astype('float32')
+    params[_p(prefix,'b_att')] = np.zeros((dimctx,)).astype(FLOAT)
 
     # optional "deep" attention
     if options['n_layers_att'] > 1:
         for lidx in xrange(1, options['n_layers_att']):
             params[_p(prefix, 'W_att_%d' % lidx)] = ortho_weight(dimctx)
-            params[_p(prefix, 'b_att_%d' % lidx)] = np.zeros((dimctx,)).astype('float32')
+            params[_p(prefix, 'b_att_%d' % lidx)] = np.zeros((dimctx,)).astype(FLOAT)
 
     # attention:
     params[_p(prefix,'U_att')] = norm_weight(dimctx, 1)
-    params[_p(prefix, 'c_tt')] = np.zeros((1,)).astype('float32')
+    params[_p(prefix, 'c_tt')] = np.zeros((1,)).astype(FLOAT)
 
     if options['selector']:
         # attention: selector
