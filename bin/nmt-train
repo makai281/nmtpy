@@ -24,6 +24,7 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 DEFAULTS = {
+        'weight_scale':       0.01,           # Scale of the uniform distribution for weight init
         'batch_size':         32,             # Training batch size
         'lrate':              0.0001,         # lrate for SGD
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
@@ -44,15 +45,19 @@ TRAIN_DEFAULTS = {
         'patience':           10,             # Early stopping patience
         'max_epochs':         100,            # Max number of epochs to train
         'max_iteration':      1e6,            # Max number of updates to train
-        'valid_burnin':       0,              # number of epochs to wait before validation
+        'valid_start':        1,              # Epoch which validation will start
         'valid_freq':         0,              # 0: End of epochs
         'valid_metric':       'bleu',         # bleu, px, meteor
         'njobs':              8,              # # of parallel CPU tasks to do beam-search
         }
 
 def setup(args):
-    if "meteor_path" in args:
-        os.environ['METEOR_JAR'] = args['meteor_path']
+    # Check METEOR path
+    if args.valid_metric == "meteor":
+        if "meteor_path" in args:
+            os.environ['METEOR_JAR'] = args['meteor_path']
+        else:
+            raise Exception("You need to provide 'meteor-path' in your configuration.")
 
     # Find out dimensional information
     dim_str = ""
@@ -74,6 +79,8 @@ def setup(args):
         name += "-decay_%.5f" % args.decay_c
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
+    if args.weight_scale != 0.01:
+        name += "wscale_%.3f" % args.weight_scale
     if args.dropout > 0:
         name += "-dropout_%.1f" % args.dropout
     if args.seed != 1234:
@@ -217,7 +224,7 @@ if __name__ == '__main__':
 
     # Build the model
     log.info("Building model")
-    cost, norm_cost = model.build()
+    cost = model.build()
 
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
@@ -240,22 +247,35 @@ if __name__ == '__main__':
     # Save model options
     model.save_options()
 
+    early_stop      = False
+    uidx            = 0
+    bad_counter     = 0
+    valid_losses    = []
+    metric_history  = []
+    metric_results  = []
+    cur_lrate       = args.lrate
+
+    # Helper method for summary
+    def dump_val_summary():
+        if len(metric_history) > 0:
+            best_metric_idx = np.argmax(np.array(metric_history))
+            best_valid = metric_results[best_metric_idx]
+            for _, v in sorted(best_valid.iteritems()):
+                log.info("[Validation %3d] Best %s" % (best_metric_idx + 1, v[0]))
+        else:
+            best_valid_idx = np.argmin(np.array(valid_losses))
+            log.info('[Validation %3d] Best loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
+
     ################
     # Training loop
     ################
-    bad_counter = 0
-    uidx = 0
-    early_stop = False
-    valid_results = []
-    valid_history = []
-    metric_history = []
-    cur_lrate = args.lrate
-
-    for eidx in xrange(1, args.max_epochs+1):
-        train_history = []
+    for eidx in xrange(1, args.max_epochs + 1):
         msg = 'Starting epoch %d' % eidx
         log.info(msg)
         log.info('-' * len(msg))
+
+        # Train error list
+        train_losses = []
 
         for batch_dict in model.train_iterator:
             uidx += 1
@@ -265,49 +285,54 @@ if __name__ == '__main__':
 
             # compute cost, grads and copy grads to shared variables
             ud_start = time.time()
-            cost = model.f_grad_shared(*batch_dict.values())
-            if np.isnan(cost):
+            train_losses.append(model.f_grad_shared(*batch_dict.values()))
+            if np.isnan(train_losses[-1]):
                 raise Exception("NaN in cost")
             model.f_update(cur_lrate)
             ud = time.time() - ud_start
-            train_history.append(cost)
 
             # verbose
             if uidx % 10 == 0:
-                log.info("Epoch: %4d, update: %7d, Cost: %10.2f, Time: %.3f" % (eidx, uidx, cost, ud))
-
+                norm_cost = model.f_norm_cost(*batch_dict.values())
+                log.info("Epoch: %4d, update: %7d, Cost: %10.2f (%.3f), Time: %.3f" % (eidx, uidx, train_losses[-1], norm_cost, ud))
 
            ###############################################################
             # Validate model on validation set and early stop if necessary
-            # Wait valid_burnin epochs before starting validation
             ###############################################################
-            if do_valid and eidx >= args.valid_burnin and uidx % args.valid_freq == 0:
+            if do_valid and eidx >= args.valid_start and uidx % args.valid_freq == 0:
                 # Compute validation loss
                 model.set_dropout(False)
-                valid_err = model.val_loss()
-                valid_history.append(valid_err)
+                valid_losses.append(model.val_loss())
 
-                if np.isnan(valid_err):
+                if np.isnan(valid_losses[-1]):
                     raise Exception("NaN in validation loss")
 
+                # Start beam-search if validation metric is different from NLL/PX
                 if args.valid_metric != 'px':
                     t = time.time()
                     log.info("Starting beam search")
-                    results = model.run_beam_search(beam_size=12, n_jobs=args.njobs, metric=args.valid_metric)
+                    results = model.run_beam_search(beam_size=12,
+                                                    n_jobs=args.njobs,
+                                                    metric=args.valid_metric,
+                                                    out_file="val_%d.txt" % (len(metric_history) + 1))
                     log.info("Done: %.2f seconds" % (time.time() - t))
-                    # We'll receive every available metric such as BLEU, METEOR, etc.
-                    valid_results.append(results)
+
+                    # We'll receive the requested metrics in a dict
+                    metric_results.append(results)
                     for _, v in sorted(results.iteritems()):
                         log.info("[Validation %2d] %s" % (len(metric_history)+1, v[0]))
+                    log.info("[Validation %2d] LOSS = %5.5f" % (len(valid_losses), valid_losses[-1]))
+
+                    # Pick the one selected as valid_metric and add it to metric_history
                     metric_history.append(results[args.valid_metric][1])
 
-                log.info("[Validation %2d] LOSS = %5.5f" % (len(valid_history), valid_err))
-
                 # Is this the best model?
-                best = False
-                if args.valid_metric != 'px' and metric_history[-1] >= np.array(metric_history).max():
+                # Also save if we have no models saved so far.
+                best = (len(metric_history) == 1)
+                if len(metric_history) > 1 and metric_history[-1] > np.array(metric_history[:-1]).max():
                     best = True
-                elif args.valid_metric == 'px' and valid_history[-1] <= np.array(valid_history).min():
+                elif len(valid_losses) > 1 and args.valid_metric == 'px' and \
+                        valid_losses[-1] < np.array(valid_losses[:-1]).min():
                     best = True
 
                 if best:
@@ -316,7 +341,7 @@ if __name__ == '__main__':
 
                     # Save the best model or the current model if no best model is found so far
                     model.save_params(args.model_path,
-                                      valid_history=valid_history,
+                                      valid_losses=valid_losses,
                                       metric_history=metric_history,
                                       uidx=uidx, **unzip(model.tparams))
 
@@ -326,16 +351,25 @@ if __name__ == '__main__':
                         model_path_uidx = '%s.iter%d.npz' % (os.path.splitext(args.model_path)[0], uidx)
                         shutil.copy(args.model_path, model_path_uidx)
 
-                elif len(valid_history) > args.patience:
-                    if args.valid_metric != 'px' and metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
-                        bad_counter += 1
-                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
-                    if args.valid_metric == 'px' and valid_history[-1] >= np.array(valid_history)[-args.patience:].min():
+                elif len(valid_losses) > args.patience:
+                    # We passed the limit for checking patience
+                    is_bad = False
+                    if args.valid_metric == 'px':
+                        if valid_losses[-1] >= np.array(valid_losses)[-args.patience:].min():
+                            is_bad = True
+                    else:
+                        if metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
+                            is_bad = True
+
+                    if is_bad:
                         bad_counter += 1
                         log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
 
-                # Remember who are we :)
-                log.info("Model is --> %s" % model.name)
+                # Remember who we are
+                msg = "Model is --> %s" % model.name
+                log.info('-' * len(msg))
+                log.info(msg)
+                dump_val_summary()
 
                 if bad_counter > args.patience:
                     early_stop = True
@@ -347,24 +381,16 @@ if __name__ == '__main__':
                 early_stop = True
                 break
 
-        train_history = np.array(train_history)
-        log.info("Epoch %d finished with mean/median batch loss: %.3f, %.3f" % \
-                    (eidx, train_history.mean(), np.median(train_history)))
+        # Epoch finished
+        train_losses = np.array(train_losses)
+        log.info("Epoch %d finished with mean batch loss: %.3f" % (eidx, train_losses.mean()))
 
         if early_stop:
             log.info('Early Stopped.')
             break
 
-    #####################
-    # Dump final results
-    #####################
-    best_valid_idx = np.argmin(np.array(valid_history))
-    log.info('[Validation %3d] Best loss %5.5f' % (best_valid_idx, valid_history[best_valid_idx]))
-
-    if len(metric_history) > 0 and args.valid_metric != 'px':
-        best_metric_idx = np.argmax(np.array(metric_history))
-        best_valid = valid_results[best_metric_idx]
-        for _, v in sorted(best_valid.iteritems()):
-            log.info("[Validation %3d] Best %s" % (best_metric_idx, v[0]))
-
+    ################################
+    # Dump final validation results
+    ################################
+    dump_val_summary()
     sys.exit(0)
