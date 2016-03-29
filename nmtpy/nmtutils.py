@@ -2,7 +2,7 @@ import numpy as np
 import cPickle
 
 from collections import OrderedDict
-from .typedef import INT
+from .typedef import *
 
 class DotDict(dict):
     def __init__(self, *args, **kwargs):
@@ -67,8 +67,7 @@ def load_params(path, params):
 def ortho_weight(ndim):
     W = np.random.randn(ndim, ndim)
     u, s, v = np.linalg.svd(W)
-    return u.astype('float32')
-
+    return u.astype(FLOAT)
 
 # weight initializer, normal by default
 def norm_weight(nin, nout=None, scale=0.01, ortho=True):
@@ -78,7 +77,7 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True):
         W = ortho_weight(nin)
     else:
         W = scale * np.random.randn(nin, nout)
-    return W.astype('float32')
+    return W.astype(FLOAT)
 
 ################
 def mask_data(seqs, n_tsteps=-1):
@@ -90,7 +89,7 @@ def mask_data(seqs, n_tsteps=-1):
 
     # Shape is (t_steps, samples)
     x = np.zeros((maxlen, n_samples)).astype(INT)
-    x_mask = np.zeros_like(x).astype(np.float32)
+    x_mask = np.zeros_like(x).astype(FLOAT)
 
     for idx, s_x in enumerate(seqs):
         x[:lengths[idx], idx] = s_x
