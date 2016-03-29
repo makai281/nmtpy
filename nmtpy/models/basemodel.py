@@ -194,6 +194,12 @@ class BaseModel(object):
 
         return final_sample, final_score
 
+
+    def generate_samples(self, batch_dict, n_samples):
+        # Silently fail if generate_samples is not reimplemented
+        # in child classes
+        return None
+
     ##########################################################
     # For all the abstract methods below, you can take a look
     # at attention.py to understand how they are implemented.
