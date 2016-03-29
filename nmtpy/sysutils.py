@@ -38,7 +38,7 @@ def get_temp_file(suffix="", name=None, delete=False):
     return t
 
 def get_valid_evaluation(model_path, beam_size, n_jobs, metric, pkl_path=None, out_file=None):
-    cmd = ["nmt-translate", "-b", str(beam_size), "-a",
+    cmd = ["nmt-translate", "-b", str(beam_size),
            "-j", str(n_jobs), "-m", model_path, "-M", metric]
     if pkl_path:
         cmd.extend(["-p", pkl_path])
