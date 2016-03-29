@@ -154,6 +154,7 @@ class BaseModel(object):
         if "y_true" in input_dict:
             # We're doing forced decoding
             target = input_dict.pop("y_true")
+            maxlen = len(target)
 
         inputs = input_dict.values()
 
@@ -166,11 +167,9 @@ class BaseModel(object):
         # Beginning-of-sentence indicator is -1
         next_word = np.array([-1], dtype=INT)
 
-        tiled_ctx = np.tile(ctx0, [1, 1])
-
         for ii in xrange(maxlen):
             # Get next states
-            next_log_p, next_word, next_state = self.f_next(*[next_word, tiled_ctx, next_state])
+            next_log_p, next_word, next_state = self.f_next(*[next_word, ctx0, next_state])
 
             if target is not None:
                 nw = target[ii]
@@ -183,13 +182,12 @@ class BaseModel(object):
                 # Multinomial sampling
                 nw = next_word[0]
 
+            if nw == 0:
+                break
+
             # Add the word idx
             final_sample.append(nw)
             final_score += next_log_p[0, nw]
-
-            # NOTE: I think we should exit before adding EOS score
-            if nw == 0:
-                break
 
         final_sample = [final_sample]
         final_score = np.array(final_score)
