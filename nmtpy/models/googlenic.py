@@ -116,14 +116,14 @@ class Model(BaseModel):
         params = OrderedDict()
 
         # Target language embedding matrix
-        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim)
+        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_scale)
 
         # Main LSTM block
         params = get_new_layer('lstm')[0](params, nin=self.trg_emb_dim, dim=self.rnn_dim, forget_bias=0, prefix='lstm_decoder')
 
         # FF layer adapting image feature space to word embedding dimension
-        params = get_new_layer('ff')[0](params, prefix='ff_img2emb'    , nin=self.img_dim, nout=self.trg_emb_dim)
-        params = get_new_layer('ff')[0](params, prefix='ff_lstm2softmax', nin=self.rnn_dim, nout=self.n_words_trg)
+        params = get_new_layer('ff')[0](params, nin=self.img_dim, nout=self.trg_emb_dim, scale=self.weight_scale, prefix='ff_img2emb')
+        params = get_new_layer('ff')[0](params, nin=self.rnn_dim, nout=self.n_words_trg, scale=self.weight_scale, prefix='ff_lstm2softmax')
 
         self.initial_params = params
 
@@ -131,14 +131,14 @@ class Model(BaseModel):
         # Target sentences: n_timesteps, n_samples
         y = tensor.matrix('y', dtype=INT)
         y_flat = y.flatten()
-        y_mask = tensor.matrix('y_mask', dtype='float32')
+        y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
         # Volatile # of timesteps for target sentences
         n_timesteps_trg = y.shape[0]
         n_samples = y.shape[1]
 
         # image: n_samples, img_dim
-        x_img = tensor.matrix('x_img', dtype='float32')
+        x_img = tensor.matrix('x_img', dtype=FLOAT)
 
         # Store tensors
         self.inputs['x_img'] = x_img
@@ -190,12 +190,15 @@ class Model(BaseModel):
         # We may want to normalize the cost by dividing
         # to the number of target tokens but this needs
         # scaling the learning rate accordingly.
-        norm_cost = cost / y_mask.sum()
+        self.f_norm_cost = theano.function(self.inputs.values(),
+                                           (cost / y_mask.sum()).mean(),
+                                           mode=self.func_mode,
+                                           profile=self.profile)
 
-        return cost.mean(), norm_cost.mean()
+        return cost.mean()
 
     def build_sampler(self):
-        x_img  = tensor.matrix('x_img', dtype='float32')
+        x_img  = tensor.matrix('x_img', dtype=FLOAT)
         y_prev = tensor.vector('y_sampler', dtype=INT)
 
         # Image context as initial input to the LSTM
@@ -216,8 +219,8 @@ class Model(BaseModel):
 
         # apply one step of LSTM
         # init_memory will be an input to f_next() by the caller
-        init_memory = tensor.matrix('init_memory', dtype='float32')
-        init_state  = tensor.matrix('init_state' , dtype='float32')
+        init_memory = tensor.matrix('init_memory', dtype=FLOAT)
+        init_state  = tensor.matrix('init_state' , dtype=FLOAT)
         rval = get_new_layer('lstm')[1](self.tparams, emb, one_step=True,
                                         init_memory=init_memory, init_state=init_state,
                                         prefix='lstm_decoder')
@@ -317,7 +320,7 @@ class Model(BaseModel):
             new_hyp_states  = []
             new_hyp_samples = []
             new_hyp_memories= []
-            new_hyp_scores  = np.zeros(beam_size-dead_beam).astype('float32')
+            new_hyp_scores  = np.zeros(beam_size-dead_beam).astype(FLOAT)
 
             # Iterate over the hypotheses
             # and add them to new_* lists
