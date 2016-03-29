@@ -26,16 +26,16 @@ for TYPE in train valid; do
   done
 
   # Filter corpus
-  clean-corpus-n-frac.perl tmp_${TYPE} $SL $TL ${OUT}.tok 1 $MAX 3 tmp_${TYPE}.lines.retained
+  clean-corpus-n-frac.perl tmp_${TYPE} $SL $TL ${OUT}.tok 1 $MAX 3 ${TYPE}.lines
   cat ${OUT}.tok.$SL | lowercase.perl > ${OUT}.lc.tok.$SL
   cat ${OUT}.tok.$TL | lowercase.perl > ${OUT}.lc.tok.$TL
 done
 
 ## Lium's split
-for l in $SL $TL; do
-  $SELECT_LINES tmp_train.$l lium_train.id 1 > lium_train.norm.tok.$l
-  cat lium_train.norm.tok.$l | lowercase.perl > lium_train.norm.lc.tok.$l
-done
+#for l in $SL $TL; do
+#  $SELECT_LINES tmp_train.$l lium_train.id 1 > lium_train.norm.tok.$l
+#  cat lium_train.norm.tok.$l | lowercase.perl > lium_train.norm.lc.tok.$l
+#done
 
 rm tmp_*
 $BDIC *train*lc.tok.$TL *train*tok.$SL
