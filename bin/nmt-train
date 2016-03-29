@@ -80,7 +80,7 @@ def setup(args):
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
     if args.weight_scale != 0.01:
-        name += "wscale_%.3f" % args.weight_scale
+        name += "-weights_%.3f" % args.weight_scale
     if args.dropout > 0:
         name += "-dropout_%.1f" % args.dropout
     if args.seed != 1234:
