@@ -116,40 +116,40 @@ class Translator(object):
 
         # If not available, translate on validation set
         if not self.src_file and not self.ref_files:
-            log.info("No test sentences file given, assuming validation dataset.")
-
-            self.src_file  = self.__obj.data['valid_src']
-            # FIXME: Backward compatibility with old type of config
-            if isinstance(self.src_file, list):
-                self.src_file = self.src_file[-1]
-
+            log.info("No test data given, assuming validation dataset.")
             self.ref_files = self.__obj.data['valid_trg']
 
             # Allow multiple reference files
             if isinstance(self.ref_files, str):
                 self.ref_files = list([self.ref_files])
-            elif isinstance(self.ref_files, list):
+
+            log.info("Reference file(s)")
+            for f in self.ref_files:
+                log.info("  %s" % f)
+
+            if self.__obj.valid_src_iter == 'flickr':
+                self.__obj.load_valid_data(batch_size=1)
+                self.iterator = self.__obj.valid_iterator
+            else:
+                self.src_file  = self.__obj.data['valid_src']
                 # FIXME: Backward compatibility with old type of config
-                if not self.ref_files[0].startswith("/"):
-                    self.ref_files.pop(0)
+                if isinstance(self.src_file, list):
+                    self.src_file = self.src_file[-1]
 
-        log.info("Source file")
-        log.info("  %s" % self.src_file)
-        log.info("Reference file(s)")
-        for f in self.ref_files:
-            log.info("  %s" % f)
+                src_iter_type = self.__obj.valid_src_iter
+                trg_iter_type = self.__obj.valid_trg_iter
 
-        src_iter_type = self.__obj.valid_src_iter
-        trg_iter_type = self.__obj.valid_trg_iter
+                log.info("Source file")
+                log.info("  %s" % self.src_file)
 
-        if src_iter_type == 'img_feats':
-            self.iterator = get_iterator('img_feats')(self.src_file, batch_size=1,
-                                                      do_mask=False, n_timesteps=self.__obj.n_timesteps)
-        elif src_iter_type in ('text', 'bitext'):
-            # No need to use the bitext iterator in translation, override it with text.
-            self.iterator = get_iterator('text')(self.src_file, self.__obj.src_dict,
-                                                 batch_size=1, n_words=self.__obj.n_words_src)
-        self.iterator.prepare_batches()
+                if src_iter_type == 'img_feats':
+                    self.iterator = get_iterator('img_feats')(self.src_file, batch_size=1,
+                                                              do_mask=False, n_timesteps=self.__obj.n_timesteps)
+                elif src_iter_type in ('text', 'bitext'):
+                    # No need to use the bitext iterator in translation, override it with text.
+                    self.iterator = get_iterator('text')(self.src_file, self.__obj.src_dict,
+                                                         batch_size=1, n_words=self.__obj.n_words_src)
+                self.iterator.prepare_batches()
 
         if self.mode == "forced":
             # We need to have an iterator for the references as well
