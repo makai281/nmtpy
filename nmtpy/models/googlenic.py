@@ -172,13 +172,13 @@ class Model(BaseModel):
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         # Apply logsoftmax (stable version)
-        next_log_probs = tensor.nnet.logsoftmax(
+        log_probs = -tensor.nnet.logsoftmax(
                 logit.reshape([logit.shape[0]*logit.shape[1], logit.shape[2]]))
 
         # cost
         y_flat_idx = tensor.arange(y_flat.shape[0]) * self.n_words_trg + y_flat
 
-        cost = -next_log_probs.flatten()[y_flat_idx]
+        cost = log_probs.flatten()[y_flat_idx]
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
 
@@ -236,39 +236,60 @@ class Model(BaseModel):
         # Apply logsoftmax (stable version)
         next_log_probs = tensor.nnet.logsoftmax(logit)
 
+        # Sample from the softmax distribution
+        next_probs = tensor.exp(next_log_probs)
+        next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
+
         # init_memory and init_state has dims 1 x rnn_dim for the first call
         inputs  = [y_prev, init_memory, init_state]
-        outs    = [next_log_probs, m_t, c_t]
+        outs    = [next_log_probs, next_word, m_t, c_t]
 
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
-    def gen_sample(self, inputs, maxlen=50, argmax=True):
-        sample = []
-        sample_score = 0
+    def gen_sample(self, input_dict, maxlen=50, argmax=False):
+        final_sample = []
+        final_score  = 0
 
-        # get initial state of decoder rnn and encoder context
+        target = None
+        if "y_true" in input_dict:
+            # We're doing forced decoding
+            target = input_dict.pop("y_true")
+            maxlen = len(target)
+
+        inputs = input_dict.values()
+
+        # First outputs of LSTM (m_0, c_0) after feeding the image features
         next_memory, next_state = self.f_init(inputs[0])
 
-        # Beginning-of-sentence indicator
-        next_w = np.array([-1.], dtype=INT)
+        # Beginning-of-sentence indicator is -1
+        next_word = np.array([-1], dtype=INT)
 
         for ii in xrange(maxlen):
-            inputs = [next_w, next_memory, next_state]
-            next_log_p, next_memory, next_state = self.f_next(*inputs)
+            # Get next states
+            inputs = [next_word, next_memory, next_state]
+            next_log_p, next_word, next_memory, next_state = self.f_next(*inputs)
 
-            if argmax:
+            if target is not None:
+                nw = target[ii]
+
+            elif argmax:
+                # argmax() works the same for both probas and log_probas
                 nw = next_log_p[0].argmax()
+
             else:
-                nw = next_sample[0]
+                # Multinomial sampling
+                nw = next_word[0]
 
-            sample.append(nw)
-            sample_score += next_log_p[0, nw]
+            # Add the word idx
+            final_sample.append(nw)
+            final_score += next_log_p[0, nw]
 
-            # EOS
+            # NOTE: I think we should exit before adding EOS score
             if nw == 0:
                 break
 
-        return sample, sample_score
+        final_sample = [final_sample]
+        final_score = np.array(final_score)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50):
         # Final results and their scores
@@ -299,7 +320,7 @@ class Model(BaseModel):
         for ii in xrange(maxlen):
             # Get next states
             inputs = [next_w, next_memory, next_state]
-            next_log_p, next_memory, next_state = self.f_next(*inputs)
+            next_log_p, _, next_memory, next_state = self.f_next(*inputs)
 
             # Beam search
             cand_scores = hyp_scores[:, None] - next_log_p
@@ -310,11 +331,10 @@ class Model(BaseModel):
             # Get their costs
             costs = cand_flat[ranks_flat]
 
-            voc_size = next_log_p.shape[1]
             # Find out to which hypothesis idx this was belonging
-            trans_indices = ranks_flat / voc_size
+            trans_indices = ranks_flat / self.n_words_trg
             # Find out the just added word idx
-            word_indices = ranks_flat % voc_size
+            word_indices = ranks_flat % self.n_words_trg
 
             # New states, scores and samples
             new_hyp_states  = []
