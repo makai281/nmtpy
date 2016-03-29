@@ -3,7 +3,7 @@
 import os
 import glob
 from string import digits
-from .helpers import DotDict
+from .nmtutils import DotDict
 from .sysutils import real_path
 
 is_path = lambda p: p.startswith(('~', '/', '../', './'))

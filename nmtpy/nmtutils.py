@@ -4,6 +4,11 @@ import cPickle
 from collections import OrderedDict
 from .typedef import INT
 
+class DotDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(DotDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
 def load_dictionary(fname):
     ivocab = {}
     with open(fname, "rb") as f:
