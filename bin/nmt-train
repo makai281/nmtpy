@@ -48,6 +48,7 @@ TRAIN_DEFAULTS = {
         'valid_start':        1,              # Epoch which validation will start
         'valid_freq':         0,              # 0: End of epochs
         'valid_metric':       'bleu',         # bleu, px, meteor
+        'sample_freq':        0,              # Sampling frequency during training (0: disabled)
         'njobs':              8,              # # of parallel CPU tasks to do beam-search
         }
 
@@ -295,6 +296,17 @@ if __name__ == '__main__':
             if uidx % 10 == 0:
                 norm_cost = model.f_norm_cost(*batch_dict.values())
                 log.info("Epoch: %4d, update: %7d, Cost: %10.2f (%.3f), Time: %.3f" % (eidx, uidx, train_losses[-1], norm_cost, ud))
+
+            # sample?
+            if args.sample_freq > 0 and uidx % args.sample_freq == 0:
+                samples = model.generate_samples(batch_dict, n_samples=5)
+                if samples is not None:
+                    src, truth, sample = samples
+                    if src:
+                        log.info("Source: %s" % src)
+                    if truth:
+                        log.info(" Truth: %s" % truth)
+                    log.info("Sample: %s" % sample)
 
            ###############################################################
             # Validate model on validation set and early stop if necessary
