@@ -18,11 +18,11 @@ from pycocoevalcap.meteor.meteor import Meteor
 parser = argparse.ArgumentParser(
     description="""This takes two text files and a path the references (source, references),
      computes bleu, meteor, rouge and cider metrics""", formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument("-p", "--pretty", action='store_true', help='Dump results in a pretty way.')
 parser.add_argument("hypothesis", type=argparse.FileType('r'),
                 help="The hypothesis files")
 parser.add_argument("references", type=argparse.FileType('r'), nargs="+",
                 help="Path to all the reference files")
-
 
 def load_textfiles(references, hypothesis):
     print "The number of references is {}".format(len(references))
@@ -34,7 +34,6 @@ def load_textfiles(references, hypothesis):
     if len(hypo) != len(refs):
         raise ValueError("There is a sentence number mismatch between the inputs")
     return refs, hypo
-
 
 def score(ref, hypo):
     """
@@ -61,4 +60,9 @@ def score(ref, hypo):
 if __name__ == '__main__':
     args = parser.parse_args()
     ref, hypo = load_textfiles(args.references, args.hypothesis)
-    print score(ref, hypo)
+    scores = score(ref, hypo)
+    if args.pretty:
+        for metric in sorted(scores.keys()):
+            print "%15s: %15.5f" % (metric, scores[metric])
+    else:
+        print scores
