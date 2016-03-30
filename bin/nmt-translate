@@ -126,7 +126,7 @@ class Translator(object):
             for f in self.ref_files:
                 log.info("  %s" % f)
 
-        if self.mode == "forced":
+        elif self.mode == "forced":
             # We need to have an iterator for the references as well
             assert len(self.ref_files) == 1
             self.ref_iterator = get_iterator('text')(
