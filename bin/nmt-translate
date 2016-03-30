@@ -119,9 +119,8 @@ class Translator(object):
             self.iterator.prepare_batches()
             self.ref_files = self.__obj.valid_ref_files
 
-            if 'valid_src' in self.__obj.data:
-                log.info("Source file")
-                log.info("  %s" % self.__obj.data['valid_src'])
+            log.info("Source")
+            log.info("  %s" % self.iterator)
 
             log.info("Reference file(s)")
             for f in self.ref_files:

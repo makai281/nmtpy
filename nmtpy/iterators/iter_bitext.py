@@ -48,6 +48,9 @@ class BiTextIterator(object):
 
         self.read()
 
+    def __repr__(self):
+        return "src: %s, trg: %s" % (self.src_data, self.trg_data)
+
     def set_batch_size(self, bs):
         self.batch_size = bs
         self.prepare_batches()

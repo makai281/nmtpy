@@ -61,6 +61,9 @@ class ImageFeatsIterator(object):
         self.dim = self.__data.shape[1]
         self.rewind()
 
+    def __repr__(self):
+        return self.filename
+
     def set_batch_size(self, bs):
         self.batch_size = bs
         self.rewind()

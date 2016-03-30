@@ -37,6 +37,9 @@ class TextIterator(object):
         # Directly read it
         self.read()
 
+    def __repr__(self):
+        return self.data
+
     def set_batch_size(self, bs):
         self.batch_size = bs
         self.prepare_batches()

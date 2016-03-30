@@ -23,6 +23,7 @@ class IterFlickr(object):
         self.split = pkl_split
 
         self.batch_size = batch_size
+        self.shuffle = False
 
         self.src_name = src_name
         self.trg_name = trg_name
@@ -35,11 +36,17 @@ class IterFlickr(object):
 
         self.read()
 
+    def __repr__(self):
+        return "%s (split: %s)" % (self.pkl_file, self.split)
+
     def set_batch_size(self, bs):
         self.batch_size = bs
         self.prepare_batches()
 
     def rewind(self):
+        if self.shuffle:
+            random.shuffle(self.__minibatches)
+
         self.__iter = iter(self.__minibatches)
 
     def __iter__(self):
@@ -79,6 +86,7 @@ class IterFlickr(object):
 
     def prepare_batches(self, shuffle=False):
         if shuffle:
+            self.shuffle = True
             random.shuffle(self.__seqs)
 
         self.__minibatches = []
