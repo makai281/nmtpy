@@ -114,9 +114,10 @@ class IterFlickr(object):
 ### Test
 if __name__ == '__main__':
     import os
+    vocab, ivocab = load_dictionary(os.path.expanduser("~/data/flickr30k/tok/dictionary.pkl"))
+
     feats_pkl = os.path.expanduser("~/data/flickr30k/features-karpathy.pkl")
-    trg_dict_file = os.path.expanduser("~/data/flickr30k/tok/min5_dictionary.pkl")
-    it = IterFlickr(feats_pkl, "train", 32, cPickle.load(open(trg_dict_file)))
+    it = IterFlickr(feats_pkl, "train", 32, vocab)
     it.prepare_batches(shuffle=True)
 
     bs = []
@@ -128,3 +129,6 @@ if __name__ == '__main__':
     bsizes = sorted(list(set(bs)), reverse=True)
     assert bsizes[0] == it.batch_size
     assert bsizes[1] == it.n_samples % it.batch_size
+
+    tit = IterFlickr(feats_pkl, "test", 1, vocab)
+    tit.prepare_batches(shuffle=False)
