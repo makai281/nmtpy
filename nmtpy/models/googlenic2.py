@@ -114,13 +114,16 @@ class Model(BaseModel):
         x_shifted = tensor.set_subtensor(x_shifted[2:], x)
         x_shifted = tensor.set_subtensor(x_shifted[0], x_m1)
 
+        # init_state and init_memory are not given so they will start as zero
         rval = get_new_layer('lstm')[1](self.tparams, x_shifted, prefix='lstm_decoder')
         # lstm returns memory state m(t) and cell state c(t)
         # for each sequence in the batch: (n_trg_timesteps, n_samples, rnn_dim)
+
         m_t = rval[0]
 
         # This prepares m(t) for softmax
-        logit = get_new_layer('ff')[1](self.tparams, m_t, prefix='ff_lstm2softmax', activ='linear')
+        # Skip m_0 as it isn't fed to the softmax for sequence generation
+        logit = get_new_layer('ff')[1](self.tparams, m_t[1:], prefix='ff_lstm2softmax', activ='linear')
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -141,14 +144,6 @@ class Model(BaseModel):
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        self.f_norm_cost = theano.function(self.inputs.values(),
-                                           (cost / y_mask.sum()).mean(),
-                                           mode=self.func_mode,
-                                           profile=self.profile)
-
         return cost.mean()
 
     def build_sampler(self):
@@ -163,7 +158,8 @@ class Model(BaseModel):
         rval = get_new_layer('lstm')[1](self.tparams, x_m1, one_step=True, prefix='lstm_decoder')
         m_0, c_0 = rval
 
-        # initial state
+        # This receives the image from sampling related codes
+        # and returns the first memory and cell state, m_0 and c_0
         self.f_init = theano.function([x_img], [m_0, c_0], name='f_init', profile=self.profile)
 
         # if it's the first word, emb should be all zero and it is indicated by -1
