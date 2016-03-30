@@ -16,5 +16,11 @@ setup(
           'theano',
           'six',
         ],
-        scripts=['bin/nmt-train', 'bin/nmt-translate', 'bin/nmt-build-dict'],
+        scripts=[
+                    # These will be installed into your system
+                    'bin/nmt-train',
+                    'bin/nmt-translate',
+                    'bin/nmt-build-dict',
+                    'bin/nmt-coco-metrics',
+                ]
         zip_safe=False)
