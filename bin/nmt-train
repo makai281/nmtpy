@@ -325,8 +325,7 @@ if __name__ == '__main__':
                     results = model.run_beam_search(beam_size=12,
                                                     n_jobs=args.njobs,
                                                     metric=args.valid_metric,
-                                                    mode=args.decoder_mode,
-                                                    out_file="val_%d.txt" % (len(metric_history) + 1))
+                                                    mode=args.decoder_mode)
                     log.info("Done: %.2f seconds" % (time.time() - t))
 
                     # We'll receive the requested metrics in a dict
