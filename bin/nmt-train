@@ -295,8 +295,7 @@ if __name__ == '__main__':
 
             # verbose
             if uidx % 10 == 0:
-                norm_cost = model.f_norm_cost(*batch_dict.values())
-                log.info("Epoch: %4d, update: %7d, Cost: %10.2f (%.3f), Time: %.3f" % (eidx, uidx, train_losses[-1], norm_cost, ud))
+                log.info("Epoch: %4d, update: %7d, Cost: %10.2f, Time: %.3f" % (eidx, uidx, train_losses[-1], ud))
 
             # sample?
             if args.sample_freq > 0 and uidx % args.sample_freq == 0:
