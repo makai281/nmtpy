@@ -69,7 +69,7 @@ We provide a set of implemented methods common to each model in `nmtpy/models/ba
 the model options and parameters, to enable/disable dropout, to initialize shared variables, etc. Feel
 free to look at the `basemodel` for further details.
 
-If you'd like to implement a completely new model, you can start by copying the NMT with attention [0] implementation
+If you'd like to implement a completely new model, you can start by copying the NMT with attention [1] implementation
 `attention.py` under a different name, let's say `my_new_model.py` into the `nmtpy/models` folder.
 
 Next step is to reimplement the methods for your model:
@@ -84,8 +84,8 @@ for that method.
 
 ### Model list
 
-  - NMT with attention [0]: `nmtpy/models/attention.py`
-  - Show and Tell [1]: `nmtpy/models/googlenic.py`
+  - NMT with attention [1]: `nmtpy/models/attention.py`
+  - Show and Tell [2]: `nmtpy/models/googlenic.py`
 
 ## Configuration
 
@@ -134,7 +134,6 @@ Now the model name will be set as `attention-embedding_dim_620-rnn_dim_1000-adad
 
 ## References
 
-[0]: Bahdanau, D., Cho, K., & Bengio, Y. (2014). Neural machine translation by jointly learning to align and translate. arXiv preprint arXiv:1409.0473.
-
-[1]: Vinyals, O., Toshev, A., Bengio, S., & Erhan, D. (2015). Show and tell: A neural image caption generator. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 3156-3164).
+  1. Bahdanau, D., Cho, K., & Bengio, Y. (2014). Neural machine translation by jointly learning to align and translate. arXiv preprint arXiv:1409.0473.
+  2. Vinyals, O., Toshev, A., Bengio, S., & Erhan, D. (2015). Show and tell: A neural image caption generator. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 3156-3164).
   
