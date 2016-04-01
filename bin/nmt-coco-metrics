@@ -63,6 +63,7 @@ if __name__ == '__main__':
     scores = score(ref, hypo)
     if args.pretty:
         for metric in sorted(scores.keys()):
-            print "%15s: %15.5f" % (metric, scores[metric])
+            print "%s: %3.5f" % (metric, scores[metric]),
+        print
     else:
         print scores
