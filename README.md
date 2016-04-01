@@ -22,10 +22,19 @@ You need the following libraries installed in order to use nmtpy:
 After fulfilling the dependencies, create a easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
 
 ```
-python setup.py develop
+$ python setup.py develop
 ```
 
 This is also crucial for `nmt-train` in case you create a new model file under `nmtpy/models`.
+
+### Meteor paraphrases
+
+The library now includes the official COCO evaluation tools of Microsoft which is used
+to compute BLEU1-4, METEOR, CIDEr and ROUGE for captioning tasks. The folder `pycocoevalcap`
+contains all the necessary tools for this except the paraphrase files for METEOR which
+are too big to put inside a GIT repository. If you'd like to use the new `nmt-coco-metrics`
+script to evaluate your translations/captions, you need to run the `download.sh` script
+inside `pycocoevalcap/meteor/data` to fetch the paraphrase files.
 
 ## Utilities
 
