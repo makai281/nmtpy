@@ -20,7 +20,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import get_iterator
+from ..iterators.iter_flickr import IterFlickr
 
 from ..models.basemodel import BaseModel
 
@@ -49,68 +49,22 @@ class Model(BaseModel):
         # Not used for this model but a None necessary for nmt-translate
         self.n_timesteps = None
 
-        # Set iterator types here
-        self.train_src_iter = "img_feats"
-        self.train_trg_iter = "text"
-        self.valid_src_iter = "img_feats"
-        self.valid_trg_iter = "text"
+    def load_valid_data(self, from_translate=False):
+        batch_size = 1 if from_translate else 64
+        self.valid_iterator = IterFlickr(self.data['pkl_file'], "test", batch_size, self.trg_dict, self.n_words_trg)
+        self.valid_iterator.prepare_batches()
+        self.img_dim = self.valid_iterator.img_dim
+
+        if from_translate:
+            self.valid_ref_files = self.data['valid_trg']
+
+            if isinstance(self.valid_ref_files, str):
+                self.valid_ref_files = list([self.valid_ref_files])
 
     def load_data(self):
-        # Do we have an idxs file for image ids?
-        image_idxs = None
-        if 'train_idx' in self.data:
-            image_idxs = open(self.data['train_idx']).read().strip().split("\n")
-            image_idxs = [int(i) for i in image_idxs]
-
-        # First load target texts
-        train_trg_iterator = get_iterator(self.train_trg_iter)(
-                                    self.data['train_trg'], self.trg_dict,
-                                    batch_size=self.batch_size,
-                                    n_words=self.n_words_trg,
-                                    data_name='y',
-                                    do_mask=True)
-        train_trg_iterator.prepare_batches()
-
-        # This should be image
-        train_src_iterator = get_iterator(self.train_src_iter)(
-                                    self.data['train_src'],
-                                    batch_size=self.batch_size,
-                                    idxs=image_idxs,
-                                    do_mask=False)
-
-        # Get image feature dimension
-        self.img_dim = train_src_iterator.dim
-
-        # Create multi iterator
-        self.train_iterator = get_iterator("multi")([train_src_iterator, train_trg_iterator])
-
-        #################
-        # Validation data 
-        #################
-        valid_batch_size = 64
-
-        valid_trg_files = self.data['valid_trg']
-        if isinstance(valid_trg_files, str):
-            valid_trg_files = list([valid_trg_files])
-
-        # First load target texts
-        valid_trg_iterator = get_iterator(self.valid_trg_iter)(
-                                    valid_trg_files[0], self.trg_dict,
-                                    batch_size=valid_batch_size,
-                                    n_words=self.n_words_trg,
-                                    data_name='y',
-                                    do_mask=True)
-        valid_trg_iterator.prepare_batches()
-
-        # This is image features
-        valid_src_iterator = get_iterator(self.valid_src_iter)(
-                                    self.data['valid_src'],
-                                    batch_size=valid_batch_size,
-                                    idxs=None,
-                                    do_mask=False)
-
-        # Create multi iterator
-        self.valid_iterator = get_iterator("multi")([valid_src_iterator, valid_trg_iterator])
+        self.train_iterator = IterFlickr(self.data['pkl_file'], "train", self.batch_size, self.trg_dict, self.n_words_trg)
+        self.train_iterator.prepare_batches(shuffle=True)
+        self.load_valid_data()
 
     def init_params(self):
         params = OrderedDict()
@@ -160,13 +114,16 @@ class Model(BaseModel):
         x_shifted = tensor.set_subtensor(x_shifted[2:], x)
         x_shifted = tensor.set_subtensor(x_shifted[0], x_m1)
 
+        # init_state and init_memory are not given so they will start as zero
         rval = get_new_layer('lstm')[1](self.tparams, x_shifted, prefix='lstm_decoder')
         # lstm returns memory state m(t) and cell state c(t)
         # for each sequence in the batch: (n_trg_timesteps, n_samples, rnn_dim)
+
         m_t = rval[0]
 
         # This prepares m(t) for softmax
-        logit = get_new_layer('ff')[1](self.tparams, m_t, prefix='ff_lstm2softmax', activ='linear')
+        # Skip m_0 as it isn't fed to the softmax for sequence generation
+        logit = get_new_layer('ff')[1](self.tparams, m_t[1:], prefix='ff_lstm2softmax', activ='linear')
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -187,14 +144,6 @@ class Model(BaseModel):
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        self.f_norm_cost = theano.function(self.inputs.values(),
-                                           (cost / y_mask.sum()).mean(),
-                                           mode=self.func_mode,
-                                           profile=self.profile)
-
         return cost.mean()
 
     def build_sampler(self):
@@ -209,7 +158,8 @@ class Model(BaseModel):
         rval = get_new_layer('lstm')[1](self.tparams, x_m1, one_step=True, prefix='lstm_decoder')
         m_0, c_0 = rval
 
-        # initial state
+        # This receives the image from sampling related codes
+        # and returns the first memory and cell state, m_0 and c_0
         self.f_init = theano.function([x_img], [m_0, c_0], name='f_init', profile=self.profile)
 
         # if it's the first word, emb should be all zero and it is indicated by -1
@@ -290,6 +240,8 @@ class Model(BaseModel):
 
         final_sample = [final_sample]
         final_score = np.array(final_score)
+
+        return final_sample, final_score
 
     def beam_search(self, inputs, beam_size=12, maxlen=50):
         # Final results and their scores
@@ -400,7 +352,7 @@ class Model(BaseModel):
         for i in np.random.choice(x_img.shape[0], n_samples, replace=False):
             sample, _ = self.gen_sample({'x_img': x_img[i][None, :]})
             truth = idx_to_sent(self.trg_idict, y[:, i])
-            sample = idx_to_sent(self.trg_idict, sample)
+            sample = idx_to_sent(self.trg_idict, sample[0])
             samples.append((None, truth, sample))
 
         return samples
