@@ -22,5 +22,5 @@ setup(
                     'bin/nmt-translate',
                     'bin/nmt-build-dict',
                     'bin/nmt-coco-metrics',
-                ]
+                ],
         zip_safe=False)
