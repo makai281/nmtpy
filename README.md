@@ -43,6 +43,7 @@ Once you do the installation correctly, you'll have access to 3 scripts in your 
 - `nmt-train`: Main training loop
 - `nmt-translate`: The utility which does the beam-search and translation generation.
 - `nmt-build-dict`: The utility to create vocabulary files (.pkl) from corpora.
+- `nmt-coco-metrics`: Evaluates a translation file with multiple references using BLEU1-4, METEOR, CIDEr and ROUGE.
 
 ## Preprocessing
 
@@ -55,26 +56,36 @@ it creates a frequency-ordered dictionary containing the full vocabulary. If you
 and `n-words-trg` to a value different than zero, that value becomes the upper limit for the
 corresponding vocabulary.
 
-## Models
+## Iterators
 
-The only kind-of-stable model in the repository is the NMT with attention model [0] which is implemented
-in `nmtpy/models/attention.py`.
+There are several iterators under `nmtpy/iterators` which are evolving in a fast pace so don't
+consider them stable. After experimenting with the code for a while, I realized that **the best**
+way to organize your data is to create a .pkl (pickle) file and to implement an iterator specific
+to your data & model.
+
+## Models
 
 We provide a set of implemented methods common to each model in `nmtpy/models/basemodel.py` to load, save
 the model options and parameters, to enable/disable dropout, to initialize shared variables, etc. Feel
 free to look at the `basemodel` for further details.
 
-If you'd like to implement a completely new model, you can start by copying `attention.py` under a different
-name, let's say `my_new_model.py` in the `nmtpy/models` folder.
+If you'd like to implement a completely new model, you can start by copying the NMT with attention [0] implementation
+`attention.py` under a different name, let's say `my_new_model.py` into the `nmtpy/models` folder.
 
-Next step is to implement the following set of abstract methods for your model:
+Next step is to reimplement the methods for your model:
   - `load_data()`
   - `init_params()`
   - `build()`
   - `build_sampler()`
+  - `beam_search()`
 
-(Note that you can also redefine an already existing method if your model needs modifications for that
-method.)
+Note that you can also redefine an already existing method in `basemodel` if your model needs modifications
+for that method.
+
+### Model list
+
+  - NMT with attention [0]: `nmtpy/models/attention.py`
+  - Show and Tell [1]: `nmtpy/models/googlenic.py`
 
 ## Configuration
 
@@ -124,3 +135,5 @@ Now the model name will be set as `attention-embedding_dim_620-rnn_dim_1000-adad
 ## References
 
 [0]: Bahdanau, D., Cho, K., & Bengio, Y. (2014). Neural machine translation by jointly learning to align and translate. arXiv preprint arXiv:1409.0473.
+[1]: Vinyals, O., Toshev, A., Bengio, S., & Erhan, D. (2015). Show and tell: A neural image caption generator. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 3156-3164).
+  
