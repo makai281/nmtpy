@@ -1,4 +1,4 @@
-import iter_text, iter_bitext, iter_imgfeats, iter_multi, iter_flickr
+import iter_text, iter_bitext, iter_imgfeats, iter_multi, iter_flickr, iter_wmt16
 
 def get_iterator(name):
     iters = {
@@ -7,5 +7,6 @@ def get_iterator(name):
                 "img_feats" : iter_imgfeats.ImageFeatsIterator,
                 "multi"     : iter_multi.MultiIterator,
                 "flickr"    : iter_flickr.IterFlickr,
+                "wmt16"     : iter_wmt16.WMT16Iterator,
             }
     return iters[name]
