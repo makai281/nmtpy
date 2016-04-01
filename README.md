@@ -135,5 +135,6 @@ Now the model name will be set as `attention-embedding_dim_620-rnn_dim_1000-adad
 ## References
 
 [0]: Bahdanau, D., Cho, K., & Bengio, Y. (2014). Neural machine translation by jointly learning to align and translate. arXiv preprint arXiv:1409.0473.
+
 [1]: Vinyals, O., Toshev, A., Bengio, S., & Erhan, D. (2015). Show and tell: A neural image caption generator. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 3156-3164).
   
