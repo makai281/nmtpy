@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+import argparse
+import numpy as np
+import h5py
+import random
+
+from itertools import izip
+
+def get_imgfeats_array(fname):
+    print "Loading %s" % fname
+    if fname.endswith(".npy"):
+        return np.load(fname)
+    elif "hdf5" in fname:
+        # Read HDF5 file
+        hf = h5py.File(fname, 'r')
+        feats = hf['feats']
+        data = np.empty((feats.shape[0], feats.shape[1]), dtype=np.float32)
+        feats.read_direct(data)
+        hf.close()
+        return data
+
+def get_sentence_tokens(fname):
+    sents = []
+    with open(fname, 'r') as f:
+        for sent in f:
+            # Strip and split from whitespace
+            sents.append(sent.strip().split(" "))
+
+    return sents
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='prepare-pkl')
+
+    parser.add_argument('-i', '--image-feats'   , type=str, required=True, help="Path to image feats file.")
+    parser.add_argument('-n', '--image-idx'     , type=str, required=True, help="Image idxs for each sentence pair.")
+    parser.add_argument('-f', '--image-list'    , type=str, required=True, help="Ordered list of images for the image-feats file.")
+    parser.add_argument('-o', '--output'        , type=str, required=True, help="Output file.")
+    parser.add_argument('-s', '--srcfile'       , type=str, required=True, help="Source training sentences.")
+    parser.add_argument('-t', '--trgfile'       , type=str, required=True, help="Target training sentences.")
+    parser.add_argument('-S', '--validsrcfile'  , type=str, required=False,help="Source dev sentences.")
+    parser.add_argument('-T', '--validtrgfile'  , type=str, required=False,help="Target dev sentences.")
+
+    args = parser.parse_args()
+
+    img_feats = get_imgfeats_array(args.image_feats)
+    print "Image features: %s" % str(img_feats.shape)
+
+    # Read source and target sentences
+    print "Reading source and target training sentences..."
+    src_sents = get_sentence_tokens(args.srcfile)
+    trg_sents = get_sentence_tokens(args.trgfile)
+
+    assert len(src_sents) == len(trg_sents)
+    print "Number of sentence pairs: %d" % len(src_sents)
+
+    # This is for keeping track of which sentence pair belongs to which
+    # image. This is important after filtering out some sentences
+    # and the order is messed up.
+    # In Flickr30k en->de task, 2 sentences are buggy. When we remove
+    # them we're left with 28998 sentences with a broken order.
+    with open(args.image_idx, 'r') as f:
+        # NOTE: Lines retained files of clean-corpus starts from 1!
+        image_idxs = [int(i)-1 for i in f.read().strip().split("\n")]
+    print "Found %d image idxs in %s" % (len(image_idxs), args.image_idx)
+
+    # Let's also keep image file names
+    with open(args.image_list, 'r') as f:
+        image_list = [i for i in f.read().strip().split("\n")]
+
+    # We should have same amount of images as the feats array's first dimension
+    assert len(image_list) == img_feats.shape[0]
+
+    #######################
+    # Create the dictionary
+    #######################
+    data = {}
+    data['feats'] = img_feats
+
+    # Actual data split boundaries
+    trains = [0, 28999]
+    valids = [29000, 30013]
+    tests  = [30014, 31014]
+
+    # Let's do this a list of tuples (srcsent, trgsent, imgid, imgfilename)
+    train_list = []
+    for idx, (s, t) in enumerate(izip(src_sents, trg_sents)):
+        img_id = image_idxs[idx]
+        assert trains[1] >= img_id >= trains[0]
+        train_list.append((s, t, img_id, image_list[img_id]))
+
+    data['train'] = train_list
+
+    if args.validsrcfile and args.validtrgfile:
+        valid_list = []
+        print "Reading source and target validation sentences..."
+        src_dev_sents = get_sentence_tokens(args.validsrcfile)
+        trg_dev_sents = get_sentence_tokens(args.validtrgfile)
+        assert len(src_dev_sents) == len(trg_dev_sents)
+
+        # NOTE: Let's assume the validation sentences are ordered for now
+        # otherwise we also need a lines retained file for validation
+        for idx, (s, t) in enumerate(izip(src_dev_sents, trg_dev_sents)):
+            # Add validation offset
+            img_id = valids[0] + idx
+            valid_list.append((s, t, img_id, image_list[img_id]))
+
+        data['valid'] = valid_list
+
+    # Save the data
+    np.savez(args.output, **data)
