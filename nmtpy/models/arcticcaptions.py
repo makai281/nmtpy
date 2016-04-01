@@ -262,12 +262,4 @@ class Model(BaseModel):
         self.inputs['y'] = y
         self.inputs['y_mask'] = y_mask
 
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        norm_cost = cost / y_mask.sum()
-
-        return cost.mean(), norm_cost.mean()
-
-
-    def build_sampler(self):
+        return cost.mean()

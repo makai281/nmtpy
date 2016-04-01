@@ -208,17 +208,12 @@ class Model(BaseModel):
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        norm_cost = cost / y_mask.sum()
-
         # For alpha regularization
         self.x_mask = x_mask
         self.y_mask = y_mask
         self.alphas = alphas
 
-        return cost.mean(), norm_cost.mean()
+        return cost.mean()
 
     def add_alpha_regularizer(self, cost, alpha_c):
         alpha_c = theano.shared(alpha_c.astype(FLOAT), name='alpha_c')

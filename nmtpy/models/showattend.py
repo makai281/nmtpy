@@ -217,12 +217,8 @@ class Model(BaseModel):
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        norm_cost = cost / y_mask.sum()
 
-        return cost.mean(), norm_cost.mean()
+        return cost.mean()
 
     def build_sampler(self):
         # shape will be n_timesteps, n_samples, n_convfeats
