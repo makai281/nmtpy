@@ -3,25 +3,22 @@ from six.moves import range
 from six.moves import zip
 
 import random
-import cPickle
 from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import mask_data, idx_to_sent, load_dictionary
-from ..typedef  import INT, FLOAT
+from nmtpy.nmtutils import mask_data, idx_to_sent, load_dictionary
+from nmtpy.typedef  import INT, FLOAT
 
 class WMT16Iterator(object):
-    def __init__(self, pkl_file, pkl_splits, batch_size,
+    def __init__(self, npz_file, splits, batch_size,
                  trg_dict, src_dict=None, src_img=True,
                  n_words_trg=0, n_words_src=0,
                  shuffle=False):
 
         self.n_samples = 0
-        self.__minibatches = []
-        self.__iter = None
         self.__seqs = []
-        self.__return_keys = []
+        self.__keys = []
 
         # For minibatch shuffling
         random.seed(1234)
@@ -29,11 +26,11 @@ class WMT16Iterator(object):
         # Input images may be optional as well
         self.src_img = src_img
 
-        # PKL file
-        self.pkl_file = pkl_file
+        # npz file
+        self.npz_file = npz_file
 
         # split can be "train" or "train,valid", etc.
-        self.splits = pkl_splits.split(",")
+        self.splits = splits.split(",")
 
         # Target word dictionary and short-list limit
         self.trg_dict = trg_dict
@@ -52,37 +49,38 @@ class WMT16Iterator(object):
 
         # src_name can be multiple like 'x_img', 'x',  trg_name is 'y'
         if self.src_dict:
-            self.__return_keys.extend(["x", "x_mask"])
+            self.__keys.extend(["x", "x_mask"])
 
         if self.src_img:
             # Image features and target sentences
-            self.__return_keys.append("x_img")
+            self.__keys.append("x_img")
 
         # target sentences should always be available    
-        self.__return_keys.extend(["y", "y_mask"])
+        self.__keys.extend(["y", "y_mask"])
 
         # Read the data
         self.read()
 
     def __repr__(self):
-        return "%s (splits: %s)" % (self.pkl_file, self.splits)
+        return self.npz_file
 
     def set_batch_size(self, bs):
-        """Sets the batch size and reorganizes minibatches."""
+        """Sets the batch size and recreates batch idxs."""
         self.batch_size = bs
-        self.prepare_batches()
+
+        # Create batch idxs
+        self.__batches = [xrange(i, min(i+self.batch_size, self.n_samples)) \
+                            for i in range(0, self.n_samples, self.batch_size)]
 
     def rewind(self):
-        """Rewinds the iterator and shuffles if requested."""
+        """Reshuffle if requested."""
         if self.shuffle:
-            random.shuffle(self.__minibatches)
-
-        self.__iter = iter(self.__minibatches)
+            random.shuffle(self.__seqs)
 
     def __iter__(self):
         return self
 
-    def __sent_to_idx(vocab, tokens, limit):
+    def __sent_to_idx(self, vocab, tokens, limit):
         idxs = []
         for w in tokens:
             # Get token, 1 if not available
@@ -93,46 +91,50 @@ class WMT16Iterator(object):
         return idxs
 
     def read(self):
-        """Reads the .pkl file and fills in the informations."""
+        """Reads the .npz file and fills in the informations."""
         ##############
-        with open(self.pkl_file) as f:
-            d = cPickle.load(f)
+        f = np.load(self.npz_file)
 
         # These are the image features
-        self.feats = d['feats']
+        self.feats = f['feats']
+        d = {}
 
-        # 4096 for VGG FC, 2048 for ResNet FC
-        # For conv this would be 512*14*14 = 100352
+        # Load splits
+        for sp in ("train", "valid", "test"):
+            if sp in f:
+                d[sp] = f[sp].tolist()
+
+        f.close()
+
+        # Let the reshaping work to the model's load_data() file
         self.img_dim = self.feats.shape[1]
 
-        # Add ability to read multiple splits which will
-        # help during final training on both train and valid
-        for spl in self.splits:
-            for src, trg, imgid, imgfilename in d['sents'][spl]:
-                # We keep imgid's if requested
-                seq = {'x_img' : imgid if self.src_img else None}
-                # We always have target sentences
-                seq['y'] = self.__sent_to_idx(self.trg_dict, trg, self.n_words_trg)
-                # We put None's if the caller didn't request source sentences
-                seq['x'] = self.__sent_to_idx(self.src_dict, src, self.n_words_src) if self.src_dict else None
-                # Append it to the sequences
-                self.__seqs.append(seq)
+        # Read training samples
+        for src, trg, imgid, imgfilename in d['train']:
+            # We keep imgid's if requested
+            seq = {'x_img' : imgid if self.src_img else None}
+            # We always have target sentences
+            seq['y'] = self.__sent_to_idx(self.trg_dict, trg, self.n_words_trg)
+            # We put None's if the caller didn't request source sentences
+            seq['x'] = self.__sent_to_idx(self.src_dict, src, self.n_words_src) if self.src_dict else None
+            # Append it to the sequences
+            self.__seqs.append(seq)
 
         # Save sentence count
         self.n_samples = len(self.__seqs)
 
-    def prepare_batches(self):
+        # Shuffle sequences. This doesn't harm anything as
+        # imgid's are also in the sequences.
         if self.shuffle:
-            # Shuffle data
             random.shuffle(self.__seqs)
 
-        self.__minibatches = []
+        # Create batch idxs
+        self.set_batch_size(self.batch_size)
 
-        # Batch idxs
-        batches = [xrange(i, min(i+self.batch_size, self.n_samples)) \
-                for i in range(0, self.n_samples, self.batch_size)]
-
-        for idxs in batches:
+    def next(self):
+        try:
+            # Get batch idxs
+            idxs = next(self.__batches)
             if self.src_dict:
                 x, x_mask = mask_data([self.__seqs[i]['x'] for i in idxs])
                 self.__minibatches.extend([x, x_mask])
@@ -146,15 +148,8 @@ class WMT16Iterator(object):
             self.__minibatches.extend([y, y_mask])
 
 
-        self.__iter = iter(self.__minibatches)
-
-    def next(self):
-        try:
-            data = next(self.__iter)
         except StopIteration as si:
             self.rewind()
             raise
-        except AttributeError as ae:
-            raise Exception("You need to call prepare_batches() first.")
         else:
-            return OrderedDict([(k, data[k]) for k in self.__return_keys])
+            return OrderedDict([(k, data[k]) for k in self.__keys])
