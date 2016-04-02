@@ -4,6 +4,7 @@ from six.moves import zip
 
 # Python
 import os
+import copy
 import cPickle
 import importlib
 
@@ -37,7 +38,6 @@ class Model(BaseModel):
 
         # Convolutional feature dim
         self.n_convfeats = 512
-        self.n_timesteps = 196 # 14x14 patches
 
         # Collect options
         self.options = dict(self.__dict__)
@@ -46,67 +46,25 @@ class Model(BaseModel):
         self.set_nanguard()
         self.set_trng(seed)
 
-        # Set iterator types here
-        self.train_src_iter = "img_feats"
-        self.train_trg_iter = "text"
-        self.valid_src_iter = "img_feats"
-        self.valid_trg_iter = "text"
-
     def load_data(self):
-        # Do we have an idxs file for image ids?
-        image_idxs = None
-        if 'train_idx' in self.data:
-            image_idxs = open(self.data['train_idx']).read().strip().split("\n")
-            image_idxs = [int(i) for i in image_idxs]
+        self.train_iterator = get_iterator("wmt16")(
+                self.data['npz_file'], "train", self.batch_size,
+                self.trg_dict, n_words_trg=self.n_words_trg,
+                shuffle=True, reshape_img=[512, 196])
+        self.load_valid_data()
 
-        # First load target texts
-        train_trg_iterator = get_iterator(self.train_trg_iter)(
-                                    self.data['train_trg'], self.trg_dict,
-                                    batch_size=self.batch_size,
-                                    n_words=self.n_words_trg,
-                                    data_name='y',
-                                    do_mask=True)
-        train_trg_iterator.prepare_batches()
+    def load_valid_data(self, from_translate=False):
+        batch_size = 1 if from_translate else 64
+        self.valid_iterator = get_iterator("wmt16")(
+                self.data['npz_file'], "valid", batch_size,
+                self.trg_dict, n_words_trg=self.n_words_trg,
+                shuffle=False, reshape_img=[512, 196])
 
-        # This should be image
-        train_src_iterator = get_iterator(self.train_src_iter)(
-                                    self.data['train_src'],
-                                    batch_size=self.batch_size,
-                                    idxs=image_idxs,
-                                    do_mask=False,
-                                    n_timesteps=self.n_timesteps)
+        if from_translate:
+            self.valid_ref_files = self.data['valid_trg']
 
-        # Create multi iterator
-        self.train_iterator = get_iterator("multi")([train_src_iterator, train_trg_iterator])
-
-        #################
-        # Validation data 
-        #################
-        valid_batch_size = 64
-
-        valid_trg_files = self.data['valid_trg']
-        if isinstance(valid_trg_files, str):
-            valid_trg_files = list([valid_trg_files])
-
-        # First load target texts
-        valid_trg_iterator = get_iterator(self.valid_trg_iter)(
-                                    valid_trg_files[0], self.trg_dict,
-                                    batch_size=valid_batch_size,
-                                    n_words=self.n_words_trg,
-                                    data_name='y',
-                                    do_mask=True)
-        valid_trg_iterator.prepare_batches()
-
-        # This is image features
-        valid_src_iterator = get_iterator(self.valid_src_iter)(
-                                    self.data['valid_src'],
-                                    batch_size=valid_batch_size,
-                                    idxs=None,
-                                    do_mask=False,
-                                    n_timesteps=self.n_timesteps)
-
-        # Create multi iterator
-        self.valid_iterator = get_iterator("multi")([valid_src_iterator, valid_trg_iterator])
+            if isinstance(self.valid_ref_files, str):
+                self.valid_ref_files = list([self.valid_ref_files])
 
     def init_params(self):
         params = OrderedDict()
@@ -130,8 +88,7 @@ class Model(BaseModel):
         self.initial_params = params
 
     def build(self):
-        # Image features and all-1 mask
-        # shape will be n_timesteps, n_samples, n_convfeats (196, bs, 512)
+        # 196 x n_samples x 512
         x_img = tensor.tensor3('x_img', dtype=FLOAT)
 
         # Target sentences: n_timesteps, n_samples
@@ -156,7 +113,6 @@ class Model(BaseModel):
         ctx_mean = tensor.mean(x_img, axis=0, dtype=FLOAT)
 
         # initial decoder state: -> rnn_dim, e.g. 1000
-        # NOTE: Try with linear activation as well
         # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='linear')
 
@@ -217,30 +173,24 @@ class Model(BaseModel):
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-
         return cost.mean()
 
     def build_sampler(self):
         # shape will be n_timesteps, n_samples, n_convfeats
         # context is the convolutional vectors themselves
-        ctx = tensor.tensor3('x_img', dtype=FLOAT)
-        n_timesteps = ctx.shape[0]
-        n_samples = ctx.shape[1]
+        x_img = tensor.tensor3('x_img', dtype=FLOAT)
+        n_samples = x_img.shape[1]
+        n_timesteps = x_img.shape[0]
 
         # Take mean across the first axis which are the timesteps, e.g. conv patches
         # No need to multiply by all-one masks
         # ctx_mean: 1 x n_convfeat (512) x n_samples
-        ctx_mean = ctx.mean(0)
+        ctx_mean = tensor.mean(x_img, axis=0, keepdims=True, dtype=FLOAT)
 
         # initial decoder state: -> rnn_dim, e.g. 1000
-        # NOTE: Try with linear activation as well
-        # NOTE: we may need to normalize the features
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='linear')
 
-        # NOTE: No need to compute ctx as input is ctx as well.
-        # But this will require changes in other parts of the code
-        outs = [init_state, ctx]
-        self.f_init = theano.function([ctx], outs, name='f_init', profile=self.profile)
+        self.f_init = theano.function([x_img], [init_state], name='f_init', profile=self.profile)
 
         # x: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
@@ -254,7 +204,7 @@ class Model(BaseModel):
         # apply one step of conditional gru with attention
         r = get_new_layer(self.dec_type)[1](self.tparams, emb,
                                             prefix='decoder',
-                                            mask=None, context=ctx,
+                                            mask=None, context=x_img,
                                             one_step=True,
                                             init_state=init_state)
         # get the next hidden state
@@ -278,7 +228,7 @@ class Model(BaseModel):
 
         # compile a function to do the whole thing above
         # sampled word for the next target, next hidden state to be used
-        inputs = [y, ctx, init_state]
+        inputs = [y, x_img, init_state]
         outs = [next_log_probs, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
@@ -300,12 +250,11 @@ class Model(BaseModel):
         # with a shape of (n_words x 1 x ctx_dim)
         # next_state: mean context vector (ctx0.mean()) passed through FF with a final
         # shape of (1 x 1 x ctx_dim)
-        ctx0, next_state = self.f_init(*inputs)
+        x_img = inputs[0]
+        next_state = self.f_init(x_img)[0][0]
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,)).astype(INT)
-
-        maxlen = min(maxlen, inputs[0].shape[0] * 3)
 
         for ii in xrange(maxlen):
             # Always starts with the initial tstep's context vectors
@@ -313,7 +262,7 @@ class Model(BaseModel):
             # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
             # thus we create sth like a batch of live_beam size with every word duplicated
             # for further state expansion.
-            tiled_ctx = np.tile(ctx0, [live_beam, 1])
+            tiled_ctx = np.tile(x_img, [live_beam, 1])
 
             # Get next states
             # In the first iteration, we provide -1 and obtain the log_p's for the
