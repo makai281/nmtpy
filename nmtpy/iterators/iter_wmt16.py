@@ -88,6 +88,9 @@ class WMT16Iterator(object):
     def __iter__(self):
         return self
 
+    def prepare_batches(self):
+        pass
+
     def __sent_to_idx(self, vocab, tokens, limit):
         idxs = []
         for w in tokens:
@@ -155,7 +158,7 @@ class WMT16Iterator(object):
             # Source image features
             if self.src_img:
                 img_idxs = [self.__seqs[i]['x_img'] for i in idxs]
-                x_img = self.feats[img_idxs]
+                x_img = self.feats[img_idxs].swapaxes(0, 1)
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
