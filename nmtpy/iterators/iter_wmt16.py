@@ -117,6 +117,10 @@ class WMT16Iterator(object):
         # Reshape features when requested
         if self.reshape_img:
             self.feats = self.feats.reshape(self.reshape_img)
+            if self.reshape_img[1] == 512:
+                self.__axes = (2, 0, 1)
+            else:
+                self.__axes = (1, 0, 2)
 
         # Read first split
         for src, trg, imgid, imgfilename in sents:
@@ -158,7 +162,7 @@ class WMT16Iterator(object):
             # Source image features
             if self.src_img:
                 img_idxs = [self.__seqs[i]['x_img'] for i in idxs]
-                x_img = self.feats[img_idxs].swapaxes(0, 1)
+                x_img = self.feats[img_idxs].transpose(self.__axes)
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
