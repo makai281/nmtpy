@@ -7,14 +7,15 @@ from collections import OrderedDict
 
 import numpy as np
 
-from nmtpy.nmtutils import mask_data, idx_to_sent, load_dictionary
-from nmtpy.typedef  import INT, FLOAT
+from ..nmtutils import mask_data
+from ..typedef  import INT, FLOAT
 
 class WMT16Iterator(object):
-    def __init__(self, npz_file, splits, batch_size,
+    def __init__(self, npz_file, split, batch_size,
                  trg_dict, src_dict=None, src_img=True,
                  n_words_trg=0, n_words_src=0,
-                 shuffle=False):
+                 shuffle=False,
+                 reshape_img=None):
 
         self.n_samples = 0
         self.__seqs = []
@@ -29,8 +30,7 @@ class WMT16Iterator(object):
         # npz file
         self.npz_file = npz_file
 
-        # split can be "train" or "train,valid", etc.
-        self.splits = splits.split(",")
+        self.split = split
 
         # Target word dictionary and short-list limit
         self.trg_dict = trg_dict
@@ -46,6 +46,12 @@ class WMT16Iterator(object):
 
         # Whether to shuffle after each epoch
         self.shuffle = shuffle
+
+        # A tuple for correctly reshaping conv features
+        if reshape_img:
+            self.reshape_img = [-1] + list(reshape_img)
+        else:
+            self.reshape_img = None
 
         # src_name can be multiple like 'x_img', 'x',  trg_name is 'y'
         if self.src_dict:
@@ -71,9 +77,11 @@ class WMT16Iterator(object):
         # Create batch idxs
         self.__batches = [xrange(i, min(i+self.batch_size, self.n_samples)) \
                             for i in range(0, self.n_samples, self.batch_size)]
+        self.__batch_iter = iter(self.__batches)
 
     def rewind(self):
         """Reshuffle if requested."""
+        self.__batch_iter = iter(self.__batches)
         if self.shuffle:
             random.shuffle(self.__seqs)
 
@@ -97,20 +105,18 @@ class WMT16Iterator(object):
 
         # These are the image features
         self.feats = f['feats']
-        d = {}
-
-        # Load splits
-        for sp in ("train", "valid", "test"):
-            if sp in f:
-                d[sp] = f[sp].tolist()
-
+        sents = f[self.split].tolist()['sents']
         f.close()
 
-        # Let the reshaping work to the model's load_data() file
+        # Flattened feature dim, not so informational
         self.img_dim = self.feats.shape[1]
 
-        # Read training samples
-        for src, trg, imgid, imgfilename in d['train']:
+        # Reshape features when requested
+        if self.reshape_img:
+            self.feats = self.feats.reshape(self.reshape_img)
+
+        # Read first split
+        for src, trg, imgid, imgfilename in sents:
             # We keep imgid's if requested
             seq = {'x_img' : imgid if self.src_img else None}
             # We always have target sentences
@@ -134,22 +140,41 @@ class WMT16Iterator(object):
     def next(self):
         try:
             # Get batch idxs
-            idxs = next(self.__batches)
-            if self.src_dict:
-                x, x_mask = mask_data([self.__seqs[i]['x'] for i in idxs])
-                self.__minibatches.extend([x, x_mask])
-
-            # Source image features
-            if self.src_img:
-                self.__minibatches.append(np.vstack(self.feats[self.__seqs[i]['x_img']] for i in idxs))
+            idxs    = next(self.__batch_iter)
+            x       = None
+            x_img   = None
+            x_mask  = None
 
             # Target sentence (always available)
             y, y_mask = mask_data([self.__seqs[i]['y'] for i in idxs])
-            self.__minibatches.extend([y, y_mask])
 
+            # Optional source sentences
+            if self.src_dict:
+                x, x_mask = mask_data([self.__seqs[i]['x'] for i in idxs])
 
+            # Source image features
+            if self.src_img:
+                img_idxs = [self.__seqs[i]['x_img'] for i in idxs]
+                x_img = self.feats[img_idxs]
+
+            return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
             self.rewind()
             raise
-        else:
-            return OrderedDict([(k, data[k]) for k in self.__keys])
+
+if __name__ == '__main__':
+    from nmtpy.nmtutils import load_dictionary
+    trg_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.de.pkl")
+    src_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.en.pkl")
+
+    ite = WMT16Iterator("/tmp/wmt16-task1-en-de-vgg-conv.npz", "train", 32, trg_dict, src_dict=src_dict, reshape_img=[196, 512])
+
+    for i in range(2):
+        print "Iterating..."
+        for batch in ite:
+            v = batch.keys()
+            assert v[0] == "x"
+            assert v[1] == "x_mask"
+            assert v[2] == "x_img"
+            assert v[3] == "y"
+            assert v[4] == "y_mask"
