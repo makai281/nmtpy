@@ -2,6 +2,7 @@
 import argparse
 import numpy as np
 import h5py
+import os
 import random
 
 from itertools import izip
@@ -28,6 +29,19 @@ def get_sentence_tokens(fname):
 
     return sents
 
+def get_split_list(srcfile, trgfile, start_idx, image_list):
+    split_list = []
+    src_sents = get_sentence_tokens(srcfile)
+    trg_sents = get_sentence_tokens(trgfile)
+    assert len(src_sents) == len(trg_sents)
+
+    # NOTE: Order matters!
+    for idx, (s, t) in enumerate(izip(src_sents, trg_sents)):
+        img_id = start_idx + idx
+        split_list.append((s, t, img_id, image_list[img_id]))
+
+    return split_list
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='prepare-pkl')
 
@@ -35,10 +49,13 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--image-idx'     , type=str, required=True, help="Image idxs for each sentence pair.")
     parser.add_argument('-f', '--image-list'    , type=str, required=True, help="Ordered list of images for the image-feats file.")
     parser.add_argument('-o', '--output'        , type=str, required=True, help="Output file.")
-    parser.add_argument('-s', '--srcfile'       , type=str, required=True, help="Source training sentences.")
-    parser.add_argument('-t', '--trgfile'       , type=str, required=True, help="Target training sentences.")
-    parser.add_argument('-S', '--validsrcfile'  , type=str, required=False,help="Source dev sentences.")
-    parser.add_argument('-T', '--validtrgfile'  , type=str, required=False,help="Target dev sentences.")
+    parser.add_argument('-t', '--srcfile'       , type=str, required=True, help="Source training sentences.")
+    parser.add_argument('-T', '--trgfile'       , type=str, required=True, help="Target training sentences.")
+
+    parser.add_argument('-v', '--validsrcfile'  , type=str, required=False,help="Source dev sentences.")
+    parser.add_argument('-V', '--validtrgfile'  , type=str, required=False,help="Target dev sentences.")
+    parser.add_argument('-e', '--testsrcfile'   , type=str, required=False,help="Source test sentences.")
+    parser.add_argument('-E', '--testtrgfile'   , type=str, required=False,help="Target test sentences.")
 
     args = parser.parse_args()
 
@@ -74,37 +91,34 @@ if __name__ == '__main__':
     # Create the dictionary
     #######################
     data = {}
-    data['feats'] = img_feats
+
+    data['feats_file'] = os.path.basename(args.image_feats)
 
     # Actual data split boundaries
-    trains = [0, 28999]
-    valids = [29000, 30013]
-    tests  = [30014, 31014]
+    trains = slice(0, 29000)
+    valids = slice(29000, 30014)
+    tests  = slice(30014, img_feats.shape[0])
+
+    data['feats'] = img_feats
+    data['train'] = {}
 
     # Let's do this a list of tuples (srcsent, trgsent, imgid, imgfilename)
-    train_list = []
-    for idx, (s, t) in enumerate(izip(src_sents, trg_sents)):
-        img_id = image_idxs[idx]
-        assert trains[1] >= img_id >= trains[0]
-        train_list.append((s, t, img_id, image_list[img_id]))
 
-    data['train'] = train_list
+    print "Reading training sentences"
+    data['train']['sents'] = get_split_list(args.srcfile, args.trgfile, trains.start, image_list)
+    print "%d training sentences" % len(data['train']['sents'])
 
     if args.validsrcfile and args.validtrgfile:
-        valid_list = []
-        print "Reading source and target validation sentences..."
-        src_dev_sents = get_sentence_tokens(args.validsrcfile)
-        trg_dev_sents = get_sentence_tokens(args.validtrgfile)
-        assert len(src_dev_sents) == len(trg_dev_sents)
+        data['valid'] = {}
+        print "Reading validation sentences"
+        data['valid']['sents'] = get_split_list(args.validsrcfile, args.validtrgfile, valids.start, image_list)
+        print "%d validation sentences" % len(data['valid']['sents'])
 
-        # NOTE: Let's assume the validation sentences are ordered for now
-        # otherwise we also need a lines retained file for validation
-        for idx, (s, t) in enumerate(izip(src_dev_sents, trg_dev_sents)):
-            # Add validation offset
-            img_id = valids[0] + idx
-            valid_list.append((s, t, img_id, image_list[img_id]))
-
-        data['valid'] = valid_list
+    if args.testsrcfile and args.testtrgfile:
+        data['test']  = {}
+        print "Reading test sentences"
+        data['test']['sents'] = get_split_list(args.testsrcfile, args.testtrgfile, tests.start, image_list)
+        print "%d test sentences" % len(data['test']['sents'])
 
     # Save the data
     np.savez(args.output, **data)
