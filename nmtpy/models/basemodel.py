@@ -173,7 +173,7 @@ class BaseModel(object):
             next_log_p, next_word, next_state = self.f_next(*[next_word, ctx0, next_state])
 
             if target is not None:
-                nw = target[ii]
+                nw = int(target[ii])
 
             elif argmax:
                 # argmax() works the same for both probas and log_probas
