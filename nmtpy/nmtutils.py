@@ -70,9 +70,7 @@ def ortho_weight(ndim):
     return u.astype(FLOAT)
 
 # weight initializer, normal by default
-def norm_weight(nin, nout=None, scale=0.01, ortho=True):
-    if nout is None:
-        nout = nin
+def norm_weight(nin, nout, scale=0.01, ortho=True):
     if nout == nin and ortho:
         W = ortho_weight(nin)
     else:
