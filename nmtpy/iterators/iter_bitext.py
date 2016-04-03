@@ -36,14 +36,19 @@ class BiTextIterator(object):
         self.src_name = src_name
         self.trg_name = trg_name
 
+        self.do_mask = (self.batch_size > 1)
+
         self.n_samples = 0
         self.__seqs = []
         self.__idxs = []
         self.__minibatches = []
-        self.__return_keys = [self.src_name,
-                              "%s_mask" % self.src_name,
-                              self.trg_name,
-                              "%s_mask" % self.trg_name]
+        self.__keys = [self.src_name]
+        if self.do_mask:
+            self.__keys.append("%s_mask" % self.src_name)
+        self.__keys.append(self.trg_name)
+        if self.do_mask:
+            self.__keys.append("%s_mask" % self.trg_name)
+
         self.__iter = None
 
         self.read()
@@ -109,9 +114,13 @@ class BiTextIterator(object):
 
         for i in range(0, self.n_samples, self.batch_size):
             batch_idxs = sample_idxs[i:i + self.batch_size]
-            x, x_mask = mask_data([self.__seqs[i][0] for i in batch_idxs])
-            y, y_mask = mask_data([self.__seqs[i][1] for i in batch_idxs])
-            self.__minibatches.append((batch_idxs, x, x_mask, y, y_mask))
+            locals()[self.src_name], locals()["%s_mask" % self.src_name] = \
+                    mask_data([self.__seqs[i][0] for i in batch_idxs])
+            locals()[self.trg_name], locals()["%s_mask" % self.trg_name] = \
+                    mask_data([self.__seqs[i][1] for i in batch_idxs])
+            d = [batch_idxs]
+            d.extend([locals()[k] for k in self.__keys])
+            self.__minibatches.append(d)
 
         self.__iter = iter(self.__minibatches)
         self.__idxs = sample_idxs
@@ -125,7 +134,7 @@ class BiTextIterator(object):
         except AttributeError as ae:
             raise Exception("You need to call prepare_batches() first.")
         else:
-            return OrderedDict([(k,data[i+1]) for i,k in enumerate(self.__return_keys)])
+            return OrderedDict([(k,data[i+1]) for i,k in enumerate(self.__keys)])
 
 ### Test
 if __name__ == '__main__':
