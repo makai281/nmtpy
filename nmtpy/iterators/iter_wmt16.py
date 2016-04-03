@@ -49,7 +49,8 @@ class WMT16Iterator(object):
 
         # A tuple for correctly reshaping conv features
         if reshape_img:
-            self.reshape_img = [-1] + list(reshape_img)
+            self.reshape_img = reshape_img
+            self.reshape_img.insert(0, -1)
         else:
             self.reshape_img = None
 
@@ -117,10 +118,6 @@ class WMT16Iterator(object):
         # Reshape features when requested
         if self.reshape_img:
             self.feats = self.feats.reshape(self.reshape_img)
-            if self.reshape_img[1] == 512:
-                self.__axes = (2, 0, 1)
-            else:
-                self.__axes = (1, 0, 2)
 
         # Read first split
         for src, trg, imgid, imgfilename in sents:
@@ -162,7 +159,8 @@ class WMT16Iterator(object):
             # Source image features
             if self.src_img:
                 img_idxs = [self.__seqs[i]['x_img'] for i in idxs]
-                x_img = self.feats[img_idxs].transpose(self.__axes)
+                x_img = self.feats[img_idxs].reshape((len(idxs), 512, -1)) # n_samples x 512 x 196
+                x_img = np.transpose(x_img, (2, 0, 1))
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
@@ -174,7 +172,7 @@ if __name__ == '__main__':
     trg_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.de.pkl")
     src_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.en.pkl")
 
-    ite = WMT16Iterator("/tmp/wmt16-task1-en-de-vgg-conv.npz", "train", 32, trg_dict, src_dict=src_dict, reshape_img=[196, 512])
+    ite = WMT16Iterator("/tmp/wmt16-task1-en-de-vgg-conv.npz", "train", 32, trg_dict, src_dict=src_dict, reshape_img=[512, 14, 14])
 
     for i in range(2):
         print "Iterating..."

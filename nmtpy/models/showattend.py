@@ -50,7 +50,7 @@ class Model(BaseModel):
         self.train_iterator = get_iterator("wmt16")(
                 self.data['npz_file'], "train", self.batch_size,
                 self.trg_dict, n_words_trg=self.n_words_trg,
-                shuffle=True, reshape_img=[512, 196])
+                shuffle=False, reshape_img=[512, 14, 14])
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False):
@@ -58,7 +58,7 @@ class Model(BaseModel):
         self.valid_iterator = get_iterator("wmt16")(
                 self.data['npz_file'], "valid", batch_size,
                 self.trg_dict, n_words_trg=self.n_words_trg,
-                shuffle=False, reshape_img=[512, 196])
+                shuffle=False, reshape_img=[512, 14, 14])
 
         if from_translate:
             self.valid_ref_files = self.data['valid_trg']
@@ -70,10 +70,9 @@ class Model(BaseModel):
         params = OrderedDict()
 
         # embedding weights for decoder
-        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim)
+        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim)
 
-        # init_state, init_cell
-        # n_convfeats (512) -> rnn_dim (1000)
+        # initial state initializer
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim)
 
         # decoder
@@ -81,51 +80,35 @@ class Model(BaseModel):
 
         # readout
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.trg_emb_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_prev'  , nin=self.trg_emb_dim, nout=self.trg_emb_dim, ortho=False)
+        #params = get_new_layer('ff')[0](params, prefix='ff_logit_prev'  , nin=self.trg_emb_dim, nout=self.trg_emb_dim, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.trg_emb_dim, nout=self.n_words_trg)
 
         self.initial_params = params
 
     def build(self):
-        # 196 x n_samples x 512
         x_img = tensor.tensor3('x_img', dtype=FLOAT)
 
         # Target sentences: n_timesteps, n_samples
         y = tensor.matrix('y', dtype=INT)
         y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
-        # Fixed # of timesteps for convolutional patches, e.g. 196
-        n_timesteps = x_img.shape[0]
-
-        # Volatile # of timesteps for target sentences
-        n_timesteps_trg, n_samples = y.shape
-
         # Store tensors
         self.inputs['x_img'] = x_img
         self.inputs['y'] = y
         self.inputs['y_mask'] = y_mask
 
-        # context is the convolutional vectors themselves
-        # Take mean across the first axis which are the timesteps, e.g. conv patches
-        # No need to multiply by all-one masks
-        # ctx_mean: 1 x n_convfeat (512) x n_samples
-        ctx_mean = tensor.mean(x_img, axis=0, dtype=FLOAT)
-
-        # initial decoder state: -> rnn_dim, e.g. 1000
-        # NOTE: we may need to normalize the features
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='linear')
-
-        # NOTE: Don't change afterwards here, the rest should be OK
-        # word embedding (target), we will shift the target sequence one time step
-        # to the right. This is done because of the bi-gram connections in the
-        # readout and decoder rnn. The first target will be all zeros and we will
-        # not condition on the last output.
-        emb = self.tparams['Wemb_dec'][y.flatten()]
-        emb = emb.reshape([n_timesteps_trg, n_samples, self.trg_emb_dim])
+        # index into the word embedding matrix, shift it forward in time
+        emb = self.tparams['Wemb'][y.flatten()].reshape([y.shape[0], y.shape[1], self.trg_emb_dim])
         emb_shifted = tensor.zeros_like(emb)
         emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
         emb = emb_shifted
+
+        # Mean ctx vector
+        ctx_mean = x_img.mean(0)
+
+        # initial decoder state from mean contexts
+        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
         # decoder - pass through the decoder conditional gru with attention
         proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
@@ -142,13 +125,10 @@ class Model(BaseModel):
 
         # rnn_dim -> trg_emb_dim
         logit_gru = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
-        # trg_emb_dim -> trg_emb_dim
-        logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
-        # ctx_dim -> trg_emb_dim
         logit_ctx = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
 
         # trg_emb_dim
-        logit = tanh(logit_gru + logit_prev + logit_ctx)
+        logit = tanh(logit_gru + emb + logit_ctx)
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -176,19 +156,13 @@ class Model(BaseModel):
         return cost.mean()
 
     def build_sampler(self):
-        # shape will be n_timesteps, n_samples, n_convfeats
         # context is the convolutional vectors themselves
         x_img = tensor.tensor3('x_img', dtype=FLOAT)
-        n_samples = x_img.shape[1]
-        n_timesteps = x_img.shape[0]
 
-        # Take mean across the first axis which are the timesteps, e.g. conv patches
-        # No need to multiply by all-one masks
-        # ctx_mean: 1 x n_convfeat (512) x n_samples
-        ctx_mean = tensor.mean(x_img, axis=0, keepdims=True, dtype=FLOAT)
+        ctx_mean = x_img.mean(0)
 
         # initial decoder state: -> rnn_dim, e.g. 1000
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='linear')
+        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
         self.f_init = theano.function([x_img], [init_state], name='f_init', profile=self.profile)
 
@@ -198,8 +172,8 @@ class Model(BaseModel):
 
         # if it's the first word, emb should be all zero and it is indicated by -1
         emb = tensor.switch(y[:, None] < 0,
-                            tensor.alloc(0., 1, self.tparams['Wemb_dec'].shape[1]),
-                            self.tparams['Wemb_dec'][y])
+                            tensor.alloc(0., 1, self.tparams['Wemb'].shape[1]),
+                            self.tparams['Wemb'][y])
 
         # apply one step of conditional gru with attention
         r = get_new_layer(self.dec_type)[1](self.tparams, emb,
@@ -213,10 +187,9 @@ class Model(BaseModel):
         ctxs = r[1]
 
         logit_gru = get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
-        logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
         logit_ctx = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
 
-        logit = tanh(logit_gru + logit_prev + logit_ctx)
+        logit = tanh(logit_gru + emb + logit_ctx)
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -251,7 +224,7 @@ class Model(BaseModel):
         # next_state: mean context vector (ctx0.mean()) passed through FF with a final
         # shape of (1 x 1 x ctx_dim)
         x_img = inputs[0]
-        next_state = self.f_init(x_img)[0][0]
+        next_state = self.f_init(x_img)[0]
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,)).astype(INT)
