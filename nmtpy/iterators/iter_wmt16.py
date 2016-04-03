@@ -12,7 +12,7 @@ from ..typedef  import INT, FLOAT
 
 class WMT16Iterator(object):
     def __init__(self, npz_file, split, batch_size,
-                 trg_dict, src_dict=None, src_img=True,
+                 trg_dict=None, src_dict=None, src_img=True,
                  n_words_trg=0, n_words_src=0,
                  shuffle=False,
                  reshape_img=None):
@@ -33,6 +33,7 @@ class WMT16Iterator(object):
         self.split = split
 
         # Target word dictionary and short-list limit
+        # This may not be available during validation
         self.trg_dict = trg_dict
         self.n_words_trg = n_words_trg
 
@@ -63,7 +64,8 @@ class WMT16Iterator(object):
             self.__keys.append("x_img")
 
         # target sentences should always be available    
-        self.__keys.extend(["y", "y_mask"])
+        if self.trg_dict:
+            self.__keys.extend(["y", "y_mask"])
 
         # Read the data
         self.read()
@@ -124,7 +126,7 @@ class WMT16Iterator(object):
             # We keep imgid's if requested
             seq = {'x_img' : imgid if self.src_img else None}
             # We always have target sentences
-            seq['y'] = self.__sent_to_idx(self.trg_dict, trg, self.n_words_trg)
+            seq['y'] = self.__sent_to_idx(self.trg_dict, trg, self.n_words_trg) if self.trg_dict else None
             # We put None's if the caller didn't request source sentences
             seq['x'] = self.__sent_to_idx(self.src_dict, src, self.n_words_src) if self.src_dict else None
             # Append it to the sequences
@@ -148,9 +150,12 @@ class WMT16Iterator(object):
             x       = None
             x_img   = None
             x_mask  = None
+            y       = None
+            y_mask  = None
 
-            # Target sentence (always available)
-            y, y_mask = mask_data([self.__seqs[i]['y'] for i in idxs])
+            # Target sentence
+            if self.trg_dict:
+                y, y_mask = mask_data([self.__seqs[i]['y'] for i in idxs])
 
             # Optional source sentences
             if self.src_dict:
