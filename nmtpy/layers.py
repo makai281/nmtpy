@@ -8,9 +8,10 @@ from .nmtutils import _p
 from .typedef import *
 
 # Shorthands for activations
+linear = lambda x: x
+sigmoid = tensor.nnet.sigmoid
 tanh = tensor.tanh
 relu = tensor.nnet.relu
-linear = lambda x: x
 
 def _tensor_slice(_x, n, dim):
     if _x.ndim == 3:
@@ -124,8 +125,8 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
         preact += x_
 
         # reset and update gates
-        r = tensor.nnet.sigmoid(_tensor_slice(preact, 0, dim))
-        u = tensor.nnet.sigmoid(_tensor_slice(preact, 1, dim))
+        r = sigmoid(_tensor_slice(preact, 0, dim))
+        u = sigmoid(_tensor_slice(preact, 1, dim))
 
         # compute the hidden state proposal
         preactx = tensor.dot(h_, Ux)
@@ -275,7 +276,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
 
         # init_state X U + state_below_
         preact1 = tensor.dot(h_, U) + x_
-        preact1 = tensor.nnet.sigmoid(preact1)
+        preact1 = sigmoid(preact1)
 
         # Slice activations
         r1 = _tensor_slice(preact1, 0, dim)
@@ -327,7 +328,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         # Add (context X Wc) over it
         preact2 += tensor.dot(ctx_, Wc)
         # Apply sigmoid nonlinearity
-        preact2 = tensor.nnet.sigmoid(preact2)
+        preact2 = sigmoid(preact2)
 
         # Slice activations
         r2 = _tensor_slice(preact2, 0, dim)
@@ -455,18 +456,18 @@ def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step
         preact += x_
 
         # input(t) = sigm(W_ix * x_t + W_im * m_tm1)
-        i = tensor.nnet.sigmoid(_tensor_slice(preact, 0, dim))
-        f = tensor.nnet.sigmoid(_tensor_slice(preact, 1, dim))
-        o = tensor.nnet.sigmoid(_tensor_slice(preact, 2, dim))
+        i = sigmoid(_tensor_slice(preact, 0, dim))
+        f = sigmoid(_tensor_slice(preact, 1, dim))
+        o = sigmoid(_tensor_slice(preact, 2, dim))
 
         # cellstate(t)?
-        c = tensor.tanh(_tensor_slice(preact, 3, dim))
+        c = tanh(_tensor_slice(preact, 3, dim))
 
         # cellstate(t) = forget(t) * cellstate(t-1) + input(t) * cellstate(t)
         c = f * c_ + i * c
 
         # m_t, e.g. memory in tstep T in NIC paper
-        m = o * tensor.tanh(c)
+        m = o * tanh(c)
 
         return m, c
 
@@ -597,7 +598,7 @@ def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
         alpha_sample = alpha # you can return something else reasonable here to debug
 
         if options['selector']:
-            sel_ = tensor.nnet.sigmoid(tensor.dot(h_, tparams[_p(prefix, 'W_sel')])+tparams[_p(prefix,'b_sel')])
+            sel_ = sigmoid(tensor.dot(h_, tparams[_p(prefix, 'W_sel')])+tparams[_p(prefix,'b_sel')])
             sel_ = sel_.reshape([sel_.shape[0]])
             ctx_ = sel_[:,None] * ctx_
 
@@ -610,17 +611,17 @@ def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
         i = _tensor_slice(preact, 0, dim)
         f = _tensor_slice(preact, 1, dim)
         o = _tensor_slice(preact, 2, dim)
-        i = tensor.nnet.sigmoid(i)
-        f = tensor.nnet.sigmoid(f)
-        o = tensor.nnet.sigmoid(o)
-        c = tensor.tanh(_tensor_slice(preact, 3, dim))
+        i = sigmoid(i)
+        f = sigmoid(f)
+        o = sigmoid(o)
+        c = tanh(_tensor_slice(preact, 3, dim))
 
         # compute the new memory/hidden state
         # if the mask is 0, just copy the previous state
         c = f * c_ + i * c
         c = m_[:,None] * c + (1. - m_)[:,None] * c_
 
-        h = o * tensor.tanh(c)
+        h = o * tanh(c)
         h = m_[:,None] * h + (1. - m_)[:,None] * h_
 
         rval = [h, c, alpha, alpha_sample, ctx_]
