@@ -81,28 +81,28 @@ class Model(BaseModel):
         params = OrderedDict()
 
         # embedding weights for encoder and decoder
-        params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim)
-        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim)
+        params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim, scale=self.weight_init)
+        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim, scale=self.weight_init)
 
         # encoder: bidirectional RNN
         #########
         # Forward encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
         # Backwards encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
 
         # Context is the concatenation of forward and backwards encoder
 
         # init_state, init_cell
-        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim)
+        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
         # decoder
-        params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim)
+        params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.embedding_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_prev'  , nin=self.embedding_dim, nout=self.embedding_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.ctx_dim, nout=self.embedding_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.embedding_dim, nout=self.n_words_trg)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_prev' , nin=self.embedding_dim , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit'      , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
 
         self.initial_params = params
 

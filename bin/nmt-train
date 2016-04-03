@@ -24,7 +24,8 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 DEFAULTS = {
-        'weight_scale':       0.01,           # Scale of the uniform distribution for weight init
+        'weight_init':        0.01,           # Scale of the uniform distribution for weight initialization.
+                                              # Can be a float, "xavier" or "he".
         'batch_size':         32,             # Training batch size
         'lrate':              0.0001,         # lrate for SGD
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
@@ -81,8 +82,12 @@ def setup(args):
         name += "-decay_%.5f" % args.decay_c
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
-    if args.weight_scale != 0.01:
-        name += "-weights_%.3f" % args.weight_scale
+    if args.weight_init != 0.01:
+        if isinstance(args.weight_init, str):
+            p = args.weight_init
+        else:
+            p = "%.3f" % p
+        name += "-weights_%s" % p
     if args.dropout > 0:
         name += "-dropout_%.1f" % args.dropout
     if args.seed != 1234:

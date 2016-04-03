@@ -70,14 +70,14 @@ class Model(BaseModel):
         params = OrderedDict()
 
         # Target language embedding matrix
-        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_scale)
+        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
 
         # Main LSTM block
         params = get_new_layer('lstm')[0](params, nin=self.trg_emb_dim, dim=self.rnn_dim, forget_bias=0, prefix='lstm_decoder')
 
         # FF layer adapting image feature space to word embedding dimension
-        params = get_new_layer('ff')[0](params, nin=self.img_dim, nout=self.trg_emb_dim, scale=self.weight_scale, prefix='ff_img2emb')
-        params = get_new_layer('ff')[0](params, nin=self.rnn_dim, nout=self.n_words_trg, scale=self.weight_scale, prefix='ff_lstm2softmax')
+        params = get_new_layer('ff')[0](params, nin=self.img_dim, nout=self.trg_emb_dim, scale=self.weight_init, prefix='ff_img2emb')
+        params = get_new_layer('ff')[0](params, nin=self.rnn_dim, nout=self.n_words_trg, scale=self.weight_init, prefix='ff_lstm2softmax')
 
         self.initial_params = params
 
