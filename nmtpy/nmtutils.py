@@ -63,7 +63,9 @@ def load_params(path, params):
     return params
 
 # orthogonal initialization for weights
-# see Saxe et al. ICLR'14
+# Saxe, Andrew M., James L. McClelland, and Surya Ganguli.
+# "Exact solutions to the nonlinear dynamics of learning in deep
+# linear neural networks." arXiv preprint arXiv:1312.6120 (2013).
 def ortho_weight(ndim):
     W = np.random.randn(ndim, ndim)
     u, s, v = np.linalg.svd(W)
@@ -71,6 +73,18 @@ def ortho_weight(ndim):
 
 # weight initializer, normal by default
 def norm_weight(nin, nout, scale=0.01, ortho=True):
+    if scale == "xavier":
+        # Glorot, Xavier, and Yoshua Bengio. "Understanding the difficulty of training deep feedforward neural networks."
+        # International conference on artificial intelligence and statistics. 2010.
+        # http://machinelearning.wustl.edu/mlpapers/paper_files/AISTATS2010_GlorotB10.pdf
+        scale = 1. / np.sqrt(nin)
+    elif scale == "he":
+        # Claimed necessary for ReLU
+        # Kaiming He et al. (2015)
+        # Delving deep into rectifiers: Surpassing human-level performance on
+        # imagenet classification. arXiv preprint arXiv:1502.01852.
+        scale = 1. / np.sqrt(nin/2.)
+
     if nout == nin and ortho:
         W = ortho_weight(nin)
     else:
