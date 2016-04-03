@@ -55,38 +55,41 @@ class Model(BaseModel):
 
     def load_valid_data(self, from_translate=False):
         batch_size = 1 if from_translate else 64
-        self.valid_iterator = get_iterator("wmt16")(
-                self.data['npz_file'], "valid", batch_size,
-                self.trg_dict, n_words_trg=self.n_words_trg,
-                shuffle=False, reshape_img=[512, 14, 14])
-
         if from_translate:
             self.valid_ref_files = self.data['valid_trg']
-
             if isinstance(self.valid_ref_files, str):
                 self.valid_ref_files = list([self.valid_ref_files])
+
+            self.valid_iterator = get_iterator("wmt16")(
+                    self.data['npz_file'], "valid", batch_size,
+                    shuffle=False, reshape_img=[512, 14, 14])
+        else:
+            self.valid_iterator = get_iterator("wmt16")(
+                    self.data['npz_file'], "valid", batch_size,
+                    self.trg_dict, n_words_trg=self.n_words_trg,
+                    shuffle=False, reshape_img=[512, 14, 14])
 
     def init_params(self):
         params = OrderedDict()
 
         # embedding weights for decoder
-        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim)
+        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
 
         # initial state initializer
-        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim)
+        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim, scale=self.weight_init)
 
         # decoder
-        params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.n_convfeats)
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.n_convfeats, scale=self.weight_init)
 
         # readout
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.trg_emb_dim, ortho=False)
-        #params = get_new_layer('ff')[0](params, prefix='ff_logit_prev'  , nin=self.trg_emb_dim, nout=self.trg_emb_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.trg_emb_dim, nout=self.n_words_trg)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.trg_emb_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.trg_emb_dim, nout=self.n_words_trg, scale=self.weight_init)
 
         self.initial_params = params
 
     def build(self):
+        # Image: 196 (n_annotations) x n_samples x 512 (ctxdim)
         x_img = tensor.tensor3('x_img', dtype=FLOAT)
 
         # Target sentences: n_timesteps, n_samples
@@ -105,20 +108,21 @@ class Model(BaseModel):
         emb = emb_shifted
 
         # Mean ctx vector
+        # 1 x n_samples x 512
         ctx_mean = x_img.mean(0)
 
-        # initial decoder state from mean contexts
+        # initial decoder state from mean context
+        # 1 x n_samples x rnn_dim
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
         # decoder - pass through the decoder conditional gru with attention
-        proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                               prefix='decoder',
-                                               mask=y_mask, context=x_img,
-                                               context_mask=None,
-                                               one_step=False,
-                                               init_state=init_state)
-        # gru_cond returns hidden state, weighted sum of context vectors
-        # and attentional weights.
+        proj = get_new_layer('gru_cond')[1](self.tparams, emb,
+                                            prefix='decoder',
+                                            mask=y_mask, context=x_img,
+                                            context_mask=None,
+                                            one_step=False,
+                                            init_state=init_state)
+        # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
         proj_h = proj[0]
         ctxs = proj[1]
         alphas = proj[2]
@@ -157,16 +161,19 @@ class Model(BaseModel):
 
     def build_sampler(self):
         # context is the convolutional vectors themselves
+        # 196 x 1 x 512
         x_img = tensor.tensor3('x_img', dtype=FLOAT)
 
+        # 1 x 1 x 512
         ctx_mean = x_img.mean(0)
 
-        # initial decoder state: -> rnn_dim, e.g. 1000
+        # initial decoder state
+        # 1 x 1 x rnn_dim
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
-        self.f_init = theano.function([x_img], [init_state], name='f_init', profile=self.profile)
+        self.f_init = theano.function([x_img], [init_state, x_img], name='f_init', profile=self.profile)
 
-        # x: 1 x 1
+        # y: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
         init_state = tensor.matrix('init_state', dtype=FLOAT)
 
@@ -176,7 +183,7 @@ class Model(BaseModel):
                             self.tparams['Wemb'][y])
 
         # apply one step of conditional gru with attention
-        r = get_new_layer(self.dec_type)[1](self.tparams, emb,
+        r = get_new_layer('gru_cond')[1](self.tparams, emb,
                                             prefix='decoder',
                                             mask=None, context=x_img,
                                             one_step=True,
@@ -199,10 +206,14 @@ class Model(BaseModel):
         # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
 
+        # Sample from the softmax distribution
+        next_probs = tensor.exp(next_log_probs)
+        next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
+
         # compile a function to do the whole thing above
         # sampled word for the next target, next hidden state to be used
         inputs = [y, x_img, init_state]
-        outs = [next_log_probs, next_state]
+        outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50):
@@ -223,8 +234,7 @@ class Model(BaseModel):
         # with a shape of (n_words x 1 x ctx_dim)
         # next_state: mean context vector (ctx0.mean()) passed through FF with a final
         # shape of (1 x 1 x ctx_dim)
-        x_img = inputs[0]
-        next_state = self.f_init(x_img)[0]
+        next_state, x_img = self.f_init(inputs[0])
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,)).astype(INT)
@@ -243,7 +253,7 @@ class Model(BaseModel):
             # of duplicated left hypotheses. tiled_ctx is always the same except
             # the 2nd dimension as the context vectors of the source sequence
             # is always the same regardless of the decoding step.
-            next_log_p, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
+            next_log_p, _, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
