@@ -21,6 +21,20 @@ def ensure_dirs(dirs):
 def real_path(p):
     return os.path.abspath(os.path.expanduser(p))
 
+def fix_model_options(d):
+    """Removes old stuff to make old models work with latest code."""
+    # Remove fault theano trng object from dict
+    if "trng" in d:
+        del d["trng"]
+
+    data = d['data']
+    # Remove iterator types from data dict
+    for k, v in data.iteritems():
+        if isinstance(v, list) and v[0] in ["img_feats", "text", "bitext"]:
+            d['data'] = dict([[k, v[1]] for k,v in data.iteritems()])
+
+    return d
+
 def get_temp_file(suffix="", name=None, delete=False):
     """Creates a temporary file under /tmp. If name is not None
     it will be used as the temporary file's name."""

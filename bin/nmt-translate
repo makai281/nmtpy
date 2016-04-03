@@ -109,31 +109,42 @@ class Translator(object):
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.__obj.trg_dict.iteritems()])
 
-        # If not available, translate on validation set
+        # If nothing is given translate on validation set
         if not self.src_file and not self.ref_files:
             log.info("No test data given, assuming validation dataset.")
 
             # Load validation data from the model
             self.__obj.load_valid_data(from_translate=True)
             self.iterator = self.__obj.valid_iterator
+            self.src_file = str(self.iterator)
             self.iterator.prepare_batches()
             self.ref_files = self.__obj.valid_ref_files
 
-            log.info("Source")
-            log.info("  %s" % self.iterator)
-
-            log.info("Reference file(s)")
-            for f in self.ref_files:
-                log.info("  %s" % f)
-
         elif self.mode == "forced":
-            # We need to have an iterator for the references as well
-            assert len(self.ref_files) == 1
-            self.ref_iterator = get_iterator('text')(
-                                        self.ref_files[0], self.__obj.trg_dict, batch_size=1,
-                                        n_words=self.__obj.n_words_trg,
-                                        data_name='y_true', do_mask=False)
-            self.ref_iterator.prepare_batches()
+            # Since we sanity-check the src and ref params, this means
+            # that we have src and ref files given for sure
+            self.ref_files = [self.ref_files[0]]
+            log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
+            self.iterator = get_iterator('bitext')(
+                                        self.src_file, self.__obj.src_dict,
+                                        self.ref_files[0], self.__obj.trg_dict,
+                                        batch_size=1,
+                                        n_words_src=self.__obj.n_words_src,
+                                        n_words_trg=self.__obj.n_words_trg,
+                                        trg_name='y_true')
+            self.iterator.prepare_batches()
+
+        # Src and refs are manually given
+        else:
+            raise Exception("Not Implemented.")
+
+        # Print information
+        log.info("Source")
+        log.info("  %s" % self.src_file)
+
+        log.info("Reference file(s)")
+        for f in self.ref_files:
+            log.info("  %s" % f)
 
     def start(self):
         # create input and output queues for processes
@@ -152,9 +163,6 @@ class Translator(object):
 
         # Send data to worker processes
         for idx, data in enumerate(self.iterator):
-            # Is it forced decoding?
-            if self.mode == "forced" and self.ref_iterator:
-                data['y_true'] = (next(self.ref_iterator))['y_true'].flatten()
             write_queue.put((idx, data))
 
         self.n_sentences = idx + 1
@@ -216,7 +224,7 @@ if __name__ == "__main__":
     parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
-    parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (blue or bleu,meteor)", default="bleu")
+    parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (bleu or bleu,meteor)", default="bleu")
     parser.add_argument('-p', '--pkl-file'      , type=str, help="pkl file (default: <model_file>.pkl)", default=None)
     parser.add_argument('-o', '--saveto'        , type=str, help="Output translations file (if not given, only metrics will be printed)",
                                                   default=None)
@@ -227,6 +235,11 @@ if __name__ == "__main__":
                                                   default=None)
 
     args = parser.parse_args()
+
+    if args.decoder == "forced" and (args.src_file is None or args.ref_files is None):
+        print "Error: Forced decoding requires that you give src and ref files explicitly."
+        sys.exit(1)
+
     if args.device.startswith("gpu"):
         args.n_jobs = 1
     elif args.device.startswith("cpu"):
@@ -252,7 +265,7 @@ if __name__ == "__main__":
         args.pkl_file = args.model + ".pkl"
 
     with open(args.pkl_file, 'rb') as f:
-        model_options = cPickle.load(f)
+        model_options = fix_model_options(cPickle.load(f))
 
     translator.set_model_options(model_options, args.model)
     translator.set_model_params()
