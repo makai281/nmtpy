@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import h5py
 import os
+import glob
 import random
 
 from itertools import izip
@@ -26,59 +27,69 @@ def get_sentence_tokens(fname):
         for sent in f:
             # Strip and split from whitespace
             sents.append(sent.strip().split(" "))
-
     return sents
 
-def get_split_list(srcfile, trgfile, start_idx, image_list):
-    split_list = []
-    src_sents = get_sentence_tokens(srcfile)
-    trg_sents = get_sentence_tokens(trgfile)
-    assert len(src_sents) == len(trg_sents)
+def get_split_list(srcs, trgs, start_idx, image_list, maxlen=50, ratio=3.):
+    assert len(srcs) == len(trgs)
 
-    # NOTE: Order matters!
-    for idx, (s, t) in enumerate(izip(src_sents, trg_sents)):
+    split_list = []
+    for idx, (s, t) in enumerate(izip(srcs, trgs)):
+        sc = len(s)
+        tc = len(t)
+        r = float(sc) / tc
+        # Cleanup sentences > maxlen and src-trg-src ratio > 3
+        if sc > maxlen or tc > maxlen or r > ratio or (1/r) > ratio:
+            continue
+
         img_id = start_idx + idx
         split_list.append((s, t, img_id, image_list[img_id]))
 
+    print "%d/%d sentence pairs kept (maxlen=%d, ratio=%d)" % (len(split_list), len(srcs), maxlen, ratio)
     return split_list
+
+def get_multi_splits(srcfile, trgfile, start_idx, image_list, maxlen=50, ratio=3.):
+    src_files = glob.glob(srcfile)
+    trg_files = glob.glob(trgfile)
+    assert len(src_files) == len(trg_files)
+    n_splits = len(src_files)
+    print "Found %d parallel corpora" % n_splits
+
+    src_splits = []
+    trg_splits = []
+    for i in range(n_splits):
+        src_splits.append(get_sentence_tokens(src_files[i]))
+        trg_splits.append(get_sentence_tokens(trg_files[i]))
+ 
+    pairs = []
+    for i, ss in enumerate(src_splits, 1):
+        for j, tt in enumerate(trg_splits, 1):
+            print i, j, 
+            pairs.extend(get_split_list(ss, tt, start_idx, image_list, maxlen, ratio))
+    return pairs
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='prepare-pkl')
 
     parser.add_argument('-i', '--image-feats'   , type=str, required=True, help="Path to image feats file.")
-    parser.add_argument('-n', '--image-idx'     , type=str, required=True, help="Image idxs for each sentence pair.")
     parser.add_argument('-f', '--image-list'    , type=str, required=True, help="Ordered list of images for the image-feats file.")
     parser.add_argument('-o', '--output'        , type=str, required=True, help="Output file.")
-    parser.add_argument('-t', '--srcfile'       , type=str, required=True, help="Source training sentences.")
-    parser.add_argument('-T', '--trgfile'       , type=str, required=True, help="Target training sentences.")
+    parser.add_argument('-t', '--srcfile'       , type=str, required=True, help="Source training sentences. (can be a wildcard pattern)")
+    parser.add_argument('-T', '--trgfile'       , type=str, required=True, help="Target training sentences. (can be a wildcard pattern)")
 
-    parser.add_argument('-v', '--validsrcfile'  , type=str, required=False,help="Source dev sentences.")
-    parser.add_argument('-V', '--validtrgfile'  , type=str, required=False,help="Target dev sentences.")
-    parser.add_argument('-e', '--testsrcfile'   , type=str, required=False,help="Source test sentences.")
-    parser.add_argument('-E', '--testtrgfile'   , type=str, required=False,help="Target test sentences.")
+    parser.add_argument('-v', '--validsrcfile'  , type=str, required=False,help="Source dev sentences. (can be a wildcard pattern)")
+    parser.add_argument('-V', '--validtrgfile'  , type=str, required=False,help="Target dev sentences. (can be a wildcard pattern)")
+    parser.add_argument('-e', '--testsrcfile'   , type=str, required=False,help="Source test sentences. (can be a wildcard pattern)")
+    parser.add_argument('-E', '--testtrgfile'   , type=str, required=False,help="Target test sentences. (can be a wildcard pattern)")
 
     args = parser.parse_args()
 
+    for k,v in args.__dict__.iteritems():
+        if k.endswith("file") and v:
+            args.__dict__[k] = os.path.expanduser(v)
+
+    # This is the image features file for all splits
     img_feats = get_imgfeats_array(args.image_feats)
     print "Image features: %s" % str(img_feats.shape)
-
-    # Read source and target sentences
-    print "Reading source and target training sentences..."
-    src_sents = get_sentence_tokens(args.srcfile)
-    trg_sents = get_sentence_tokens(args.trgfile)
-
-    assert len(src_sents) == len(trg_sents)
-    print "Number of sentence pairs: %d" % len(src_sents)
-
-    # This is for keeping track of which sentence pair belongs to which
-    # image. This is important after filtering out some sentences
-    # and the order is messed up.
-    # In Flickr30k en->de task, 2 sentences are buggy. When we remove
-    # them we're left with 28998 sentences with a broken order.
-    with open(args.image_idx, 'r') as f:
-        # NOTE: Lines retained files of clean-corpus starts from 1!
-        image_idxs = [int(i)-1 for i in f.read().strip().split("\n")]
-    print "Found %d image idxs in %s" % (len(image_idxs), args.image_idx)
 
     # Let's also keep image file names
     with open(args.image_list, 'r') as f:
@@ -100,25 +111,20 @@ if __name__ == '__main__':
     tests  = slice(30014, img_feats.shape[0])
 
     data['feats'] = img_feats
-    data['train'] = {}
-
-    # Let's do this a list of tuples (srcsent, trgsent, imgid, imgfilename)
 
     print "Reading training sentences"
-    data['train']['sents'] = get_split_list(args.srcfile, args.trgfile, trains.start, image_list)
-    print "%d training sentences" % len(data['train']['sents'])
+    data['train'] = get_multi_splits(args.srcfile, args.trgfile, trains.start, image_list)
+    print "%d training sentences" % len(data['train'])
 
     if args.validsrcfile and args.validtrgfile:
-        data['valid'] = {}
         print "Reading validation sentences"
-        data['valid']['sents'] = get_split_list(args.validsrcfile, args.validtrgfile, valids.start, image_list)
-        print "%d validation sentences" % len(data['valid']['sents'])
+        data['valid'] = get_multi_splits(args.validsrcfile, args.validtrgfile, valids.start, image_list)
+        print "%d validation sentences" % len(data['valid'])
 
     if args.testsrcfile and args.testtrgfile:
-        data['test']  = {}
         print "Reading test sentences"
-        data['test']['sents'] = get_split_list(args.testsrcfile, args.testtrgfile, tests.start, image_list)
-        print "%d test sentences" % len(data['test']['sents'])
+        data['test'] = get_multi_splits(args.testsrcfile, args.testtrgfile, tests.start, image_list)
+        print "%d test sentences" % len(data['test'])
 
     # Save the data
     np.savez(args.output, **data)
