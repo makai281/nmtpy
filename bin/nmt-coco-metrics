@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(
     description="""This takes two text files and a path the references (source, references),
      computes bleu, meteor, rouge and cider metrics""", formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument("-p", "--pretty", action='store_true', help='Dump results in a pretty way.')
+parser.add_argument("-l", "--language", default='de', help='Sentence language (default: de)')
 parser.add_argument("hypothesis", type=argparse.FileType('r'),
                 help="The hypothesis files")
 parser.add_argument("references", type=argparse.FileType('r'), nargs="+",
@@ -35,7 +36,7 @@ def load_textfiles(references, hypothesis):
         raise ValueError("There is a sentence number mismatch between the inputs")
     return refs, hypo
 
-def score(ref, hypo):
+def score(ref, hypo, language):
     """
     ref, dictionary of reference sentences (id, sentence)
     hypo, dictionary of hypothesis sentences (id, sentence)
@@ -43,7 +44,7 @@ def score(ref, hypo):
     """
     scorers = [
         (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
-        (Meteor(),"METEOR"),
+        (Meteor(language), "METEOR"),
         (Rouge(), "ROUGE_L"),
         (Cider(), "CIDEr")
     ]
@@ -59,8 +60,9 @@ def score(ref, hypo):
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    print "Language: %s" % args.language
     ref, hypo = load_textfiles(args.references, args.hypothesis)
-    scores = score(ref, hypo)
+    scores = score(ref, hypo, args.language)
     if args.pretty:
         for metric in sorted(scores.keys()):
             print "%s: %3.5f" % (metric, scores[metric]),
