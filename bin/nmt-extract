@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+
+"""Extract several features from a trained model."""
+
+import os
+import sys
+import glob
+import atexit
+import cPickle
+import argparse
+import importlib
+
+import numpy as np
+
+from nmtpy.logger import Logger
+from nmtpy.config import Config
+from nmtpy.metrics import get_scorer
+from nmtpy.nmtutils import idx_to_sent
+from nmtpy.sysutils import *
+
+log = Logger._logger
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='nmt-extract')
+    parser.add_argument('-o', '--output'        , help="Output file (without extension).")
+    parser.add_argument('-m', '--model'         , help="Model .npz file.")
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-t', '--target'        , action='store_true',
+                                                  help="Extract target word embeddings")
+    group.add_argument('-s', '--source'        , action='store_true',
+                                                  help="Extract source word embeddings")
+
+    args = parser.parse_args()
+
+    params = np.load(args.model)
+    if args.target:
+        embs = params['Wemb_dec']
+    elif args.source:
+        embs = params['Wemb_enc']
+
+    print "Embedding size: %d, Vocabulary size: %d" % (embs.shape[1], embs.shape[0])
+
+    np.save(args.output, embs)
+
+    sys.exit(0)
