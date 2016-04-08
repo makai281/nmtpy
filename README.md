@@ -30,7 +30,7 @@ A lot has been changed in this version. Notably:
  - New utilities: `nmt-coco-metrics` and `nmt-extract` which are detailed below in the Utilities section.
  - You can now give multiple reference files as a list in your configuration files or even as a wildcard. Look at `confs/attention-wmt16-task2-max50-ratio3-en-de.conf`
  - `valid_start: n` can be used in the configuration to start validation for early stopping in the n'th epoch. This may be useful to let the system train for at least n-1 epochs before doing validation.
- - **Important**: `nmt-translate` now used your model's `load_valid_data()` method for being able to load the validation data exactly the same way as it's done during training. This dropped the necessity to implement model-aware iterator creation in nmt-translate which was cluttering the code. So take a look at the `attention` model for how it's done.
+ - **Important**: `nmt-translate` now uses your model's `load_valid_data()` method for being able to load the validation data exactly the same way as it's done during training. This dropped the necessity to implement model-aware iterator creation in nmt-translate which was cluttering the code. So take a look at the `attention` model for how it's done.
 
 ## Installation
 
