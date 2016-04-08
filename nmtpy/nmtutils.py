@@ -28,12 +28,21 @@ def idx_to_sent(ivocab, idxs):
         sent.append(ivocab.get(widx, "<unk>"))
     return " ".join(sent)
 
+# Function to convert sentence to idxs
+def sent_to_idx(vocab, tokens, limit=0):
+    idxs = []
+    for word in tokens:
+        # Get token, 1 if not available
+        idx = vocab.get(word, 1)
+        if limit > 0:
+            idx = idx if idx < limit else 1
+        idxs.append(idx)
+    return idxs
 
 # push parameters to Theano shared variables
 def zipp(params, tparams):
     for kk, vv in params.iteritems():
         tparams[kk].set_value(vv)
-
 
 # pull parameters from Theano shared variables
 def unzip(zipped):
@@ -42,11 +51,9 @@ def unzip(zipped):
         new_params[kk] = vv.get_value()
     return new_params
 
-
 # get the list of parameters: Note that tparams must be OrderedDict
 def itemlist(tparams):
     return [vv for kk, vv in tparams.iteritems()]
-
 
 # make prefix-appended name
 def _p(pp, name):
