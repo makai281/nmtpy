@@ -82,8 +82,9 @@ class Model(BaseModel):
         params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.n_convfeats, scale=self.weight_init)
 
         # readout
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.trg_emb_dim, scale=self.weight_init, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, scale=self.weight_init, ortho=False)
+        # NOTE: First two are orthogonally initialized in arctic-captions
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.trg_emb_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, scale=self.weight_init)
         params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.trg_emb_dim, nout=self.n_words_trg, scale=self.weight_init)
 
         self.initial_params = params
@@ -102,6 +103,8 @@ class Model(BaseModel):
         self.inputs['y_mask'] = y_mask
 
         # index into the word embedding matrix, shift it forward in time
+        # to leave all-zeros in the first timestep and to ignore the last word
+        # <eos> upon which we'll never condition
         emb = self.tparams['Wemb'][y.flatten()].reshape([y.shape[0], y.shape[1], self.trg_emb_dim])
         emb_shifted = tensor.zeros_like(emb)
         emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
@@ -111,7 +114,7 @@ class Model(BaseModel):
         # 1 x n_samples x 512
         ctx_mean = x_img.mean(0)
 
-        # initial decoder state from mean context
+        # initial decoder state learned from mean context
         # 1 x n_samples x rnn_dim
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
@@ -128,11 +131,16 @@ class Model(BaseModel):
         alphas = proj[2]
 
         # rnn_dim -> trg_emb_dim
-        logit_gru = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
-        logit_ctx = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
+        logit = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
 
-        # trg_emb_dim
-        logit = tanh(logit_gru + emb + logit_ctx)
+        # prev2out == True in arctic-captions
+        logit += emb
+
+        # ctx2out == True in arctic-captions
+        logit += get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
+
+        # tanh over logit
+        logit = tanh(logit)
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -162,41 +170,48 @@ class Model(BaseModel):
     def build_sampler(self):
         # context is the convolutional vectors themselves
         # 196 x 1 x 512
-        x_img = tensor.tensor3('x_img', dtype=FLOAT)
+        ctx = tensor.tensor3('x_img', dtype=FLOAT)
 
         # 1 x 1 x 512
-        ctx_mean = x_img.mean(0)
+        ctx_mean = ctx.mean(0)
 
         # initial decoder state
-        # 1 x 1 x rnn_dim
+        # (probably) 1 x rnn_dim
+        # Can be encapsulated with list to support multiple RNN layers in future
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
-        self.f_init = theano.function([x_img], [init_state, x_img], name='f_init', profile=self.profile)
+        # Takes image annotation vectors and returns
+        # it with the initial state of GRU
+        self.f_init = theano.function([ctx], [init_state, ctx], name='f_init', profile=self.profile)
 
-        # y: 1 x 1
+        # Why do we redefine ctx here (arctic-captions)
+        ctx = tensor.tensor3('x_img', dtype=FLOAT)
         y = tensor.vector('y_sampler', dtype=INT)
         init_state = tensor.matrix('init_state', dtype=FLOAT)
 
-        # if it's the first word, emb should be all zero and it is indicated by -1
+        # if it's the first word, emb should be all zero and it is indicated by
+        # beam search who sends -1 for the initial word
         emb = tensor.switch(y[:, None] < 0,
-                            tensor.alloc(0., 1, self.tparams['Wemb'].shape[1]),
+                            tensor.alloc(0., 1, self.trg_emb_dim),
                             self.tparams['Wemb'][y])
 
         # apply one step of conditional gru with attention
         r = get_new_layer('gru_cond')[1](self.tparams, emb,
                                             prefix='decoder',
-                                            mask=None, context=x_img,
+                                            mask=None, context=ctx,
                                             one_step=True,
                                             init_state=init_state)
         # get the next hidden state
-        # get the weighted averages of context for this target word y
+        # get the weighted average of context for this target word y
         next_state = r[0]
+
+        # 1 x 512
         ctxs = r[1]
 
-        logit_gru = get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
-        logit_ctx = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
-
-        logit = tanh(logit_gru + emb + logit_ctx)
+        logit = get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
+        logit += emb
+        logit += get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
+        logit = tanh(logit)
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -212,7 +227,7 @@ class Model(BaseModel):
 
         # compile a function to do the whole thing above
         # sampled word for the next target, next hidden state to be used
-        inputs = [y, x_img, init_state]
+        inputs = [y, ctx, init_state]
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
@@ -229,31 +244,23 @@ class Model(BaseModel):
         hyp_samples = [[]]
         hyp_scores  = np.zeros(1).astype(FLOAT)
 
-        # get initial state of decoder rnn and encoder context vectors
-        # ctx0: the set of context vectors leading to the next_state
-        # with a shape of (n_words x 1 x ctx_dim)
-        # next_state: mean context vector (ctx0.mean()) passed through FF with a final
-        # shape of (1 x 1 x ctx_dim)
-        next_state, x_img = self.f_init(inputs[0])
+        # We only have single input which is ctx/x_img
+        # We obtain the same ctx as ctx0 as well as the next_state
+        # computed by the MLP ff_state
+        next_state, ctx0 = self.f_init(inputs[0])
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,)).astype(INT)
 
         for ii in xrange(maxlen):
-            # Always starts with the initial tstep's context vectors
-            # e.g. we have a ctx0 of shape (n_words x 1 x ctx_dim)
-            # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
-            # thus we create sth like a batch of live_beam size with every word duplicated
-            # for further state expansion.
-            tiled_ctx = np.tile(x_img, [live_beam, 1])
-
             # Get next states
             # In the first iteration, we provide -1 and obtain the log_p's for the
             # first word. In the following iterations tiled_ctx becomes a batch
             # of duplicated left hypotheses. tiled_ctx is always the same except
             # the 2nd dimension as the context vectors of the source sequence
             # is always the same regardless of the decoding step.
-            next_log_p, _, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
+            inps = [next_w, ctx0, next_state]
+            next_log_p, _, next_state = self.f_next(*inps)
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
