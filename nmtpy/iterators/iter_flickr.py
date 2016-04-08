@@ -11,7 +11,7 @@ import numpy as np
 from ..nmtutils import mask_data, idx_to_sent, load_dictionary
 from ..typedef  import INT, FLOAT
 
-class IterFlickr(object):
+class FlickrIterator(object):
     def __init__(self, pkl_file, pkl_split, batch_size, trg_dict, n_words_trg=0, src_name='x_img', trg_name='y'):
         # For minibatch shuffling
         random.seed(1234)
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     vocab, ivocab = load_dictionary(os.path.expanduser("~/data/flickr30k/tok/dictionary.pkl"))
 
     feats_pkl = os.path.expanduser("~/data/flickr30k/features-karpathy.pkl")
-    it = IterFlickr(feats_pkl, "train", 32, vocab)
+    it = FlickrIterator(feats_pkl, "train", 32, vocab)
     it.prepare_batches(shuffle=True)
 
     bs = []
@@ -141,5 +141,5 @@ if __name__ == '__main__':
     assert bsizes[0] == it.batch_size
     assert bsizes[1] == it.n_samples % it.batch_size
 
-    tit = IterFlickr(feats_pkl, "test", 1, vocab)
+    tit = FlickrIterator(feats_pkl, "test", 1, vocab)
     tit.prepare_batches(shuffle=False)

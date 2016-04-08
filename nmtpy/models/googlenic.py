@@ -20,7 +20,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators.iter_flickr import IterFlickr
+from ..iterators.iter_flickr import FlickrIterator
 
 from ..models.basemodel import BaseModel
 
@@ -51,7 +51,7 @@ class Model(BaseModel):
 
     def load_valid_data(self, from_translate=False):
         batch_size = 1 if from_translate else 64
-        self.valid_iterator = IterFlickr(self.data['pkl_file'], "test", batch_size, self.trg_dict, self.n_words_trg)
+        self.valid_iterator = FlickrIterator(self.data['pkl_file'], "test", batch_size, self.trg_dict, self.n_words_trg)
         self.valid_iterator.prepare_batches()
         self.img_dim = self.valid_iterator.img_dim
 
@@ -62,7 +62,7 @@ class Model(BaseModel):
                 self.valid_ref_files = list([self.valid_ref_files])
 
     def load_data(self):
-        self.train_iterator = IterFlickr(self.data['pkl_file'], "train", self.batch_size, self.trg_dict, self.n_words_trg)
+        self.train_iterator = FlickrIterator(self.data['pkl_file'], "train", self.batch_size, self.trg_dict, self.n_words_trg)
         self.train_iterator.prepare_batches(shuffle=True)
         self.load_valid_data()
 
