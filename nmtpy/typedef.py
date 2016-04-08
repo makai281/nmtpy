@@ -10,3 +10,4 @@ from collections import namedtuple
 # imgid: Index into the image feature matrix or None if not applicable
 # imgname: Filename of the image or None if not applicable
 Sample = namedtuple('Sample', ['src', 'trg', 'split', 'imgid', 'imgname'])
+Caption= namedtuple('Caption',['cap', 'split', 'imgid', 'imgname'])
