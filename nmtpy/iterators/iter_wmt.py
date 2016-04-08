@@ -2,13 +2,15 @@
 from six.moves import range
 from six.moves import zip
 
+import cPickle
+
 import random
 from collections import OrderedDict
 
 import numpy as np
 
 from ..nmtutils import mask_data, sent_to_idx
-from ..typedef  import INT, FLOAT, Sample
+from ..typedef  import INT, FLOAT
 
 class WMTIterator(object):
     def __init__(self, batch_size,
@@ -90,15 +92,18 @@ class WMTIterator(object):
         pass
 
     def read(self):
-        self.img_feats = np.load(self.img_feats_file)
+        if self.img_feats_file:
+            self.img_feats = np.load(self.img_feats_file)
 
-        # Transpose and fix dimensionality of convolutional patches
-        self.img_feats.shape = (self.img_feats.shape[0], 512, 14, 14)
-        self.img_feats.shape = (self.img_feats.shape[0], 512, 196)
-        self.img_feats = self.img_feats.transpose(0, 2, 1)
+            # Transpose and fix dimensionality of convolutional patches
+            self.img_feats.shape = (self.img_feats.shape[0], 512, 14, 14)
+            self.img_feats.shape = (self.img_feats.shape[0], 512, 196)
+            self.img_feats = self.img_feats.transpose(0, 2, 1)
 
         # Load the samples
         with open(self.pkl_file, 'rb') as f:
+            # This import needs to be here so that unpickling works correctly
+            from ..typedef import Caption, Sample
             self.samples = cPickle.load(f)
 
         # Check for what is available
@@ -137,6 +142,7 @@ class WMTIterator(object):
             # Source image features
             if self.img_avail:
                 img_idxs = [self.samples[i].imgid for i in idxs]
+                x_img = self.img_feats[img_idxs]
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
