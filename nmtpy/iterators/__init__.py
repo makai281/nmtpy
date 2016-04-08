@@ -1,12 +1,15 @@
-import iter_text, iter_bitext, iter_imgfeats, iter_multi, iter_flickr, iter_wmt16
+from iter_wmt import WMTIterator
+from iter_text import TextIterator
+from iter_bitext import BiTextIterator
+from iter_flickr import IterFlickr
+from iter_imgfeats import ImageFeatsIterator
 
 def get_iterator(name):
     iters = {
-                "text"      : iter_text.TextIterator,
-                "bitext"    : iter_bitext.BiTextIterator,
-                "img_feats" : iter_imgfeats.ImageFeatsIterator,
-                "multi"     : iter_multi.MultiIterator,
-                "flickr"    : iter_flickr.IterFlickr,
-                "wmt16"     : iter_wmt16.WMT16Iterator,
+                "text"      : TextIterator,
+                "bitext"    : BiTextIterator,
+                "img_feats" : ImageFeatsIterator,
+                "flickr"    : IterFlickr,
+                "wmt"       : WMTIterator,
             }
     return iters[name]
