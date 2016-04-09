@@ -148,7 +148,17 @@ class Translator(object):
             self.__obj.load_valid_data(from_translate=True)
             self.iterator  = self.__obj.valid_iterator
             self.src_file  = self.__obj.data['valid_src']
-            self.ref_files = self.__obj.valid_ref_files
+
+            # User may provide another reference set in 'valid_trg_orig' for example
+            # with compound splitting reverted so that we can compute
+            # the metrics correctly.
+            if "valid_trg_orig" in self.__obj.data:
+                self.ref_files = self.__obj.data['valid_trg_orig']
+            else:
+                self.ref_files = self.__obj.valid_ref_files
+
+            if not isinstance(self.ref_files, list):
+                self.ref_files = [self.ref_files]
 
         # Common to each mode
         self.iterator.prepare_batches()
