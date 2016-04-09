@@ -18,6 +18,7 @@ from nmtpy.config import Config
 from nmtpy.metrics import get_scorer
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
+from nmtpy.filters import get_filter
 from nmtpy.iterators import get_iterator
 import nmtpy.cleanup as cleanup
 
@@ -87,6 +88,7 @@ class Translator(object):
         self.unnorm = unnorm
         self.seed = seed
         self.mode = mode
+        self.filters = []
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
@@ -105,6 +107,11 @@ class Translator(object):
 
         # Create the model
         self.__obj = self.__class(seed=self.seed, **self.model_options)
+
+        # Check for post-processing filter
+        if "filter" in self.model_options:
+            log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
+            self.filters.append(get_filter(model_options['filter']))
 
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.__obj.trg_dict.iteritems()])
@@ -198,19 +205,27 @@ class Translator(object):
             self.processes[idx].terminate()
             cleanup.unregister_proc(self.processes[idx].pid)
 
+        # Convert idxs to words
+        for idx in xrange(self.n_sentences):
+            # tr can be a list or a list of lists if nbest > r
+            if not isinstance(self.trans[idx][0], list):
+                self.trans[idx] = [self.trans[idx]]
+
+            n_hyps = len(self.trans[0])
+            for hidx in xrange(n_hyps):
+                hyp = idx_to_sent(self.ref_idict, self.trans[idx][hidx])
+                for filt in self.filters:
+                    hyp = filt(hyp)
+                self.trans[idx][hidx] = hyp
+
     def write_hyps(self, filename):
         with open(filename, 'w') as f:
             if self.mode == "forced" or self.nbest > 1:
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
-                    if not isinstance(tr, list):
-                        tr = [tr]
-                        sc = [sc]
-                    for t,s in zip(tr, sc):
-                        # Convert to actual words
-                        f.write("%d ||| %s ||| %.6f\n" % (idx, idx_to_sent(self.ref_idict, t), s))
+                    for t, s in zip(tr, sc):
+                        f.write("%d ||| %s ||| %.6f\n" % (idx, t, s))
             else:
-                f.write("\n".join([idx_to_sent(self.ref_idict, s) for s in self.trans]))
-                f.write("\n")
+                f.write(("\n".join([s[0] for s in self.trans])) + "\n")
 
     def compute_score(self, hyp_file, scorers):
         results = {}
