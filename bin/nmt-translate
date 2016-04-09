@@ -109,21 +109,9 @@ class Translator(object):
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.__obj.trg_dict.iteritems()])
 
-        # If nothing is given translate on validation set
-        if not self.src_file and not self.ref_files:
-            log.info("No test data given, assuming validation dataset.")
-
-            # Load validation data from the model
-            self.__obj.load_valid_data(from_translate=True)
-            self.iterator = self.__obj.valid_iterator
-            self.src_file = str(self.iterator)
-            self.iterator.prepare_batches()
-            self.ref_files = self.__obj.valid_ref_files
-
-        elif self.mode == "forced":
-            # Since we sanity-check the src and ref params, this means
-            # that we have src and ref files given for sure
-            self.ref_files = [self.ref_files[0]]
+        # If forced and we got a src file and also ref file(s)
+        # do the forced decoding
+        if self.mode == "forced" and self.src_file and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
             self.iterator = get_iterator('bitext')(
                                         self.src_file, self.__obj.src_dict,
@@ -134,17 +122,39 @@ class Translator(object):
                                         trg_name='y_true')
             self.iterator.prepare_batches()
 
-        # Src and refs are manually given
+        # else if we have at least a source file, translate it
+        elif self.src_file:
+            # Let's do a hack here and pretend that the given
+            # file is validation data provided to the model :)
+            self.__obj.data['valid_src'] = self.src_file
+            if self.ref_files:
+                self.__obj.data['valid_trg'] = self.ref_files
+
+            self.__obj.load_valid_data(from_translate=True)
+            self.iterator  = self.__obj.valid_iterator
+
+        # If nothing is given translate on validation set
         else:
-            raise Exception("Not Implemented.")
+            log.info("No test data given, assuming validation dataset.")
+
+            # Load validation data from the model
+            self.__obj.load_valid_data(from_translate=True)
+            self.iterator  = self.__obj.valid_iterator
+            self.src_file  = self.__obj.data['valid_src']
+            self.ref_files = self.__obj.valid_ref_files
+
+        # Common to each mode
+        self.iterator.prepare_batches()
 
         # Print information
         log.info("Source")
         log.info("  %s" % self.src_file)
 
-        log.info("Reference file(s)")
-        for f in self.ref_files:
-            log.info("  %s" % f)
+        # It's possible that we don't have any reference files, e.g. for test sets.
+        if self.ref_files:
+            log.info("Reference file(s)")
+            for f in self.ref_files:
+                log.info("  %s" % f)
 
     def start(self):
         # create input and output queues for processes
