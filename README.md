@@ -56,6 +56,9 @@ are too big to put inside a GIT repository. If you'd like to use the new `nmt-co
 script to evaluate your translations/captions, you need to run the `download.sh` script
 inside `pycocoevalcap/meteor/data` to fetch the paraphrase files.
 
+Finally for correctly using METEOR, you have to export `METEOR_JAR` environment variable
+to point to the `meteor-1.5.jar` file on your filesystem.
+
 ## Utilities
 
 Once you do the installation correctly, you'll have access to 3 scripts in your Python environment:
