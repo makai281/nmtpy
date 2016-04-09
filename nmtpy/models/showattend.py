@@ -20,7 +20,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import get_iterator
+from ..iterators import WMTIterator
 
 from ..models.basemodel import BaseModel
 
@@ -45,12 +45,15 @@ class Model(BaseModel):
 
         self.set_nanguard()
         self.set_trng(seed)
+        self.set_dropout(False)
 
     def load_data(self):
-        self.train_iterator = get_iterator("wmt16")(
-                self.data['npz_file'], "train", self.batch_size,
-                self.trg_dict, n_words_trg=self.n_words_trg,
-                shuffle=False, reshape_img=[512, 14, 14])
+        self.train_iterator = WMTIterator(
+                self.batch_size,
+                self.data['train_pkl'],
+                img_feats_file=self.data['train_img'],
+                trg_dict=self.trg_dict,
+                n_words_trg=self.n_words_trg)
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False):
@@ -60,14 +63,15 @@ class Model(BaseModel):
             if isinstance(self.valid_ref_files, str):
                 self.valid_ref_files = list([self.valid_ref_files])
 
-            self.valid_iterator = get_iterator("wmt16")(
-                    self.data['npz_file'], "valid", batch_size,
-                    shuffle=False, reshape_img=[512, 14, 14])
+            self.valid_iterator = WMTIterator(
+                    batch_size, self.data['valid_pkl'],
+                    img_feats_file=self.data['valid_img'])
         else:
-            self.valid_iterator = get_iterator("wmt16")(
-                    self.data['npz_file'], "valid", batch_size,
-                    self.trg_dict, n_words_trg=self.n_words_trg,
-                    shuffle=False, reshape_img=[512, 14, 14])
+            self.valid_iterator = WMTIterator(
+                    batch_size, self.data['valid_pkl'],
+                    img_feats_file=self.data['valid_img'],
+                    trg_dict=self.trg_dict,
+                    n_words_trg=self.n_words_trg)
 
     def init_params(self):
         params = OrderedDict()

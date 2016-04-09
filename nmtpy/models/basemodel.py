@@ -26,8 +26,8 @@ class BaseModel(object):
 
         self.name = os.path.splitext(os.path.basename(self.model_path))[0]
 
-        self.do_dropout = True if self.dropout > 0 else False
-        self.use_dropout = theano.shared(np.float32(0.))
+        # Will be set when set_dropout is first called
+        self.use_dropout = None
 
         # Input tensor lists
         self.inputs = OrderedDict()
@@ -63,7 +63,10 @@ class BaseModel(object):
     def set_dropout(self, val):
         """Sets dropout indicator for activation scaling
         if dropout is available through configuration."""
-        self.use_dropout.set_value(float(val))
+        if self.use_dropout is None:
+            self.use_dropout = theano.shared(np.float32(0.))
+        else:
+            self.use_dropout.set_value(float(val))
 
     def load_params(self, params):
         self.tparams = OrderedDict()

@@ -46,6 +46,9 @@ class Model(BaseModel):
         self.set_nanguard()
         self.set_trng(seed)
 
+        # We call this once to setup dropout mechanism correctly
+        self.set_dropout(False)
+
     def load_valid_data(self, from_translate=False):
         self.valid_ref_files = self.data['valid_trg']
         if isinstance(self.valid_ref_files, str):

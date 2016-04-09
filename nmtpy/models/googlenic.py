@@ -42,6 +42,7 @@ class Model(BaseModel):
 
         self.set_nanguard()
         self.set_trng(seed)
+        self.set_dropout(False)
 
         # Image feature dimension will be set after loading data
         self.img_dim = None
