@@ -48,7 +48,7 @@ class Model(BaseModel):
     def load_data(self):
         self.train_iterator = WMTIterator(
                 self.batch_size,
-                self.data['train_pkl'],
+                self.data['train_src'],
                 img_feats_file=self.data['train_img'],
                 trg_dict=self.trg_dict,
                 n_words_trg=self.n_words_trg)
@@ -62,14 +62,16 @@ class Model(BaseModel):
                 self.valid_ref_files = list([self.valid_ref_files])
 
             self.valid_iterator = WMTIterator(
-                    batch_size, self.data['valid_pkl'],
+                    batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
                     single=True)
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
-                    batch_size, self.data['valid_pkl'],
+                    batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
+                    trg_dict=self.trg_dict,
+                    n_words_trg=self.n_words_trg,
                     single=True)
 
     def init_params(self):
