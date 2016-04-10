@@ -96,7 +96,11 @@ class BaseModel(object):
 
         # dict of x, x_mask, y, y_mask
         for data in self.valid_iterator:
-            probs.extend(self.f_log_probs(*data.values()))
+            # Don't fail if data doesn't contain y_mask. The loss won't
+            # be normalized but the training will continue
+            norm = data['y_mask'].sum(0) if 'y_mask' in data else 1
+            log_probs = self.f_log_probs(*data.values()) / norm
+            probs.extend(log_probs)
 
         return np.array(probs).mean()
 
