@@ -72,6 +72,7 @@ if __name__ == '__main__':
     print "Max sentence length: %d" % args.maxlen
     print "Min word freq for vocab: %d" % args.minvocab
     print "Found %d training files." % len(args.traintrg)
+
     args.traintrg = sorted(args.traintrg)
     train_files = [args.traintrg]
     if args.trainsrc:
