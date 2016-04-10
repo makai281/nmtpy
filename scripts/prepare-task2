@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-import cPickle as pickle
+import cPickle
 
 from collections import OrderedDict, Counter
-from itertools import izip_longest
+from itertools import izip_longest, izip
 
 # NOTE: Not ready for usage
 
@@ -22,7 +22,35 @@ Sample.__module__ = '__main__'
 
 _ = os.path.expanduser
 
-def process_sentences(fname, lowercase, strip_punc):
+def create_dictionaries(sents, outpath, minvocab):
+    words = [[], []]
+    names = ["train_src.pkl", "train_trg.pkl"]
+
+    for s in sents:
+        words[0].extend(s.swords)
+        words[1].extend(s.twords)
+
+    for i in [0, 1]:
+        freqs = Counter(words[i]).most_common()
+        vocab = OrderedDict()
+        with open(os.path.join(outpath, names[i]), 'wb') as df:
+            vocab['<eos>'] = 0
+            vocab['<unk>'] = 1
+
+            tokens  = [w for w,f in freqs]
+            freqs  = [f for w,f in freqs]
+
+            sorted_idx = np.argsort(freqs)
+            sorted_words = [tokens[ii] for ii in sorted_idx[::-1] if freqs[ii] >= minvocab]
+
+            for ii, ww in enumerate(sorted_words):
+                vocab[ww] = ii + 2
+
+            print "%s: %d words" % (names[i], len(vocab))
+
+            cPickle.dump(vocab, df, -1)
+
+def process_file(fname, lowercase, strippunc):
     caps = open(fname)
     result = []
     for line in caps:
@@ -36,192 +64,157 @@ def process_sentences(fname, lowercase, strip_punc):
         if strippunc:
             words = [w for w in words if w not in puncs]
 
-        result.append([split_idx, words])
-    caps.close()
+        result.append(words)
 
+    caps.close()
+    return result
+
+def process_sentence_pairs(imgs, src_sents, trg_sents, sidx, tidx, clean=True,
+                           minlen=3, maxlen=50, ratio=3, img_offset=0):
+    pairs = []
+
+    for idx, (swords, twords) in enumerate(izip(src_sents, trg_sents)):
+        slen = len(swords)
+        tlen = len(twords)
+
+        if clean:
+            len_ratio = float(slen) / float(tlen)
+
+            # This is like clean-corpus-frac-n.perl script
+            if slen < minlen or tlen < minlen or \
+               slen > maxlen or tlen > maxlen or \
+               len_ratio > ratio or (1./len_ratio) > ratio:
+                continue
+
+        pairs.append(Sample(sidx, tidx, idx, imgs[img_offset+idx], swords, twords))
+
+    return pairs
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='prepare')
     parser.add_argument('-l', '--lowercase' , help='Do lowercasing', action='store_true')
     parser.add_argument('-s', '--strippunc' , help='Strip punctuation', action='store_true')
-    parser.add_argument('-m', '--minlen'    , help='Minimum sentence length', default=2, type=int)
-    parser.add_argument('-M', '--maxlen'    , help='Maximum sentence length', default=40, type=int)
-    parser.add_argument('-d', '--minvocab'  , help='Consider words occuring at least this number', default=3, type=int)
+    parser.add_argument('-m', '--minlen'    , help='Minimum sentence length', default=3, type=int)
+    parser.add_argument('-M', '--maxlen'    , help='Maximum sentence length', default=50, type=int)
+    parser.add_argument('-r', '--ratio'     , help='src length to trg length min ratio', default=3, type=int)
+    parser.add_argument('-d', '--minvocab'  , help='Consider words occuring at least this number', default=5, type=int)
     parser.add_argument('-o', '--output'    , help='Output directory.', default="./data")
 
-    parser.add_argument('-i', '--imagelist'  , help='Image list file.', default=None)
-    parser.add_argument('-t', '--trainsrc'   , nargs='+', help="Training source sentence file(s).", required=False)
+    parser.add_argument('-i', '--imagelist'  , help='Image list file.', required=True)
+
+    parser.add_argument('-t', '--trainsrc'   , nargs='+', help="Training source sentence file(s).", required=True)
     parser.add_argument('-T', '--traintrg'   , nargs='+', help="Training target sentence file(s).", required=True)
-    parser.add_argument('-v', '--validsrc'   , nargs='+', help="Validation source sentence file(s).", required=False)
+    parser.add_argument('-v', '--validsrc'   , nargs='+', help="Validation source sentence file(s).", required=True)
     parser.add_argument('-V', '--validtrg'   , nargs='+', help="Validation target sentence file(s).", required=True)
 
     args = parser.parse_args()
+
+    # Load image list. This contains the order of the images
+    # in the features file.
+    imgs = open(args.imagelist).read().strip().split("\n")
+    print "# of images in the image list: %d" % len(imgs)
 
     # Create output directory if not available
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    if not args.trainsrc and not args.validsrc:
-        captioning = True
-    else:
-        captioning = False
+    # Sort files so that they're in order
+    train_src_files = sorted(args.trainsrc)
+    train_trg_files = sorted(args.traintrg)
+    valid_src_files = sorted(args.validsrc)
+    valid_trg_files = sorted(args.validtrg)
 
+    srclang = train_src_files[0].split(".")[-1]
+    trglang = train_trg_files[0].split(".")[-1]
+
+    # Print some informations
     print "Lowercase: ", args.lowercase
     print "Strip punctuations: ", args.strippunc
     print "Min sentence length: %d" % args.minlen
     print "Max sentence length: %d" % args.maxlen
     print "Min word freq for vocab: %d" % args.minvocab
-    print "Found %d training files." % len(args.traintrg)
+    print "Found %d training files." % len(train_src_files)
+    print "Found %d validation files." % len(valid_src_files)
+    print "Source language: %s" % srclang
+    print "Source language: %s" % trglang
 
-    args.traintrg = sorted(args.traintrg)
-    train_files = [args.traintrg]
-    if args.trainsrc:
-        args.trainsrc = sorted(args.trainsrc)
-        print "Training sources:"
-        print "\n".join(args.trainsrc)
+    assert len(train_src_files) == len(train_trg_files)
+    assert len(valid_src_files) == len(valid_trg_files)
 
-        train_files.insert(0, args.trainsrc)
+    # Number of input sentence files
+    n_splits = len(train_src_files)
 
-    print "Training targets:"
-    print "\n".join(args.traintrg)
-    print "Found %d validation files." % len(args.validtrg)
-    valid_files = [args.validtrg]
-    if args.validsrc:
-        args.validsrc = sorted(args.validsrc)
-        print "Validation sources:"
-        print "\n".join(args.validsrc)
-        valid_files.insert(0, args.validsrc)
-
-    args.validtrg = sorted(args.validtrg)
-    print "Validation targets:"
-    print "\n".join(args.validtrg)
-    print "Captioning:", captioning
-
-    n_splits = len(args.traintrg)
-
-    # Load image list
-    imgs = None
-    if args.imagelist:
-        imgs = open(args.imagelist).read().strip().split("\n")
-        print "# of images: %d" % len(imgs)
-    else:
-        imgs = None
-        print "No image list provided."
-
-    # Specific to dataset
+    # Specific to Flickr30k
     n_train = 29000
     n_valid = 1014
     n_test  = 1000
 
-    splits = OrderedDict()
-    # First element is a list of n_splits elements, second is a list or None
-    splits['train'] = [train_files, imgs[:n_train] if imgs else None]
-    splits['val']   = [valid_files, imgs[n_train:n_train + n_valid] if imgs else None]
-    # No test for now
-    #splits['test']  = imgs[n_train + n_valid:]
+    train_src_sents = []
+    train_trg_sents = []
+    valid_src_sents = []
+    valid_trg_sents = []
 
-    ####################
-    # Sample processing
-    ####################
-    ordered_ranges = {'train'   : n_train,
-                      'val'     : n_valid,
-                      'test'    : n_test,
-                     }
+    # Read all sentences once, do lowercasing and strip punctuations if requested
+    for f in train_src_files:
+        print f
+        train_src_sents.append(process_file(f, args.lowercase, args.strippunc))
 
-    captions = {'train' : [], 'val' : []}
+    for f in train_trg_files:
+        print f
+        train_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
 
-    for split, (files, images) in splits.iteritems():
-        # We can have multiple sentence files
-        for split_idx, fname in enumerate(files):
-            print "Processing %s" % fname
-            sents = process_sentences(
+    for f in valid_src_files:
+        print f
+        valid_src_sents.append(process_file(f, args.lowercase, args.strippunc))
 
-        if images:
-            # Repeat image idxs for multiple splits
-            img_idxs = np.tile(np.arange(ordered_ranges[split]), n_splits)
-            print "%s order: %d .. %d" % (split, img_idxs[0], img_idxs[-1])
-            assert len(img_idxs)  == len(captions[split])
-        else:
-            img_idxs = []
+    for f in valid_trg_files:
+        print f
+        valid_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
 
-        # Create list of samples
-        caps = []
-        for (split_idx, sent), img_idx in izip_longest(captions[split], img_idxs):
-            # Filter out only training sentences as we need same number of
-            # sentences in test and validation references
-            if split == 'train' and (len(sent) < args.minlen or len(sent) > args.maxlen):
-                continue
-
-            # Append
-            caps.append(Sample(src, trg, split_idx, img_idx, images[img_idx]))
-
-        # Overwrite captions dict
-        captions[split] = caps
-
-        print "# %s sentences (min:%d, max:%d words): %d" % (split, args.minlen, args.maxlen, len(captions[split]))
-
-        print "Dumping pkl file"
-        with open(os.path.join(args.output, 'flickr_30k_align.%s.pkl' % split), 'wb') as f:
-            pickle.dump(captions[split], f, -1)
-
-        ####################
-        # Create dictionary
-        ####################
-        if split == 'train':
-            print "Creating dictionary"
-            wfreqs = OrderedDict()
-
-            for cc in captions['train']:
-                for w in cc.cap:
-                    wfreqs[w] = 0 if w not in wfreqs else (wfreqs[w] + 1)
-
-            words = wfreqs.keys()
-            freqs = np.array(wfreqs.values())
-
-            # Sort in descending order of frequency
-            sorted_idx = np.argsort(freqs)
-            sorted_words = [words[ii] for ii in sorted_idx[::-1]]
-            filt_words   = [words[ii] for ii in sorted_idx[::-1] if freqs[ii] >= args.minvocab]
-
-            vocab = OrderedDict()
-            fvocab = OrderedDict()
-            with open(os.path.join(args.output, 'dictionary.pkl'), 'wb') as f:
-                vocab['<eos>'] = 0
-                vocab['UNK'] = 1
-                for ii, ww in enumerate(sorted_words, 2):
-                    vocab[ww] = ii
-                print "Original dictionary size: %d" % len(vocab)
-                pickle.dump(vocab, f, -1)
-            with open(os.path.join(args.output, 'dictionary_min%d.pkl' % args.minvocab), 'wb') as f:
-                fvocab['<eos>'] = 0
-                fvocab['UNK'] = 1
-                for ii, ww in enumerate(filt_words, 2):
-                    fvocab[ww] = ii
-                print "min %d occurrence dictionary size: %d" % (args.minvocab, len(fvocab))
-                pickle.dump(fvocab, f, -1)
-
-
-    # Rewrite processed validation files
     if args.lowercase or args.strippunc:
-        files = [[] for i in range(n_splits)]
+        print "Rewriting processed validation sentences"
+        # Rewrite validation files as they are now processed
         suffix = ""
         if args.lowercase:
             suffix += ".lc"
         if args.strippunc:
             suffix += ".nopunct"
-        for split_idx, valfile in enumerate(valid_file):
-            fname = os.path.basename(valfile)
-            prefix, _, lang = fname.rsplit(".", 2)
-            new_file = "%s%s.tok.%s" % (prefix, suffix, lang)
-            new_file = os.path.join(args.output, new_file)
-            print "Rewriting processed validation file as: \n  %s" % new_file
+        for idx, split in enumerate(valid_src_sents, 1):
+            with open(os.path.join(args.output, 'valid.%d.tok%s.%s' % (idx, suffix, srclang)), 'wb') as f:
+                for sent in split:
+                    f.write(" ".join(sent).encode('utf-8') + '\n')
+        for idx, split in enumerate(valid_trg_sents, 1):
+            with open(os.path.join(args.output, 'valid.%d.tok%s.%s' % (idx, suffix, trglang)), 'wb') as f:
+                for sent in split:
+                    f.write(" ".join(sent).encode('utf-8') + '\n')
 
-            # Open the files first
-            files[split_idx] = open(new_file, "wb")
+    tr_sum = sum([len(spl) for spl in train_src_sents])
+    vl_sum = sum([len(spl) for spl in valid_src_sents])
+    print "Total number of training sentences: %d" % (tr_sum)
+    print "Total number of validation sentences: %d" % (vl_sum)
 
-        for (sent, split_idx, img_idx, img_name) in captions['val']:
-            line = "%s\n" % (" ".join(sent))
-            files[split_idx].write(line.encode('utf-8'))
+    sentences = {'train' : [], 'valid' : []}
+    splits = {'train' : [train_src_sents, train_trg_sents, 0],
+              'valid' : [valid_src_sents, valid_trg_sents, n_train],
+             }
 
-        for f in files:
-            f.close()
+    for split in ['train', 'valid']:
+        do_clean = (split == 'train')
+        print "Processing %s splits" % split
+        # This is the cross product of all splits
+        src_sents, trg_sents, img_offset = splits[split]
+        for sidx, ssentsplit in enumerate(src_sents):
+            print "%d => " % len(ssentsplit), 
+            for tidx, tsentsplit in enumerate(trg_sents):
+                print len(tsentsplit), 
+                sentences[split].extend(process_sentence_pairs(imgs, ssentsplit, tsentsplit, sidx, tidx,
+                                        clean=do_clean, minlen=args.minlen, maxlen=args.maxlen, ratio=args.ratio, img_offset=img_offset))
+            print
+
+        print "Final %s pair count: %d" % (split, len(sentences[split]))
+        print "Dumping pkl file"
+        with open(os.path.join(args.output, 'flickr_30k_align.%s.pkl' % split), 'wb') as f:
+            cPickle.dump(sentences[split], f, -1)
+
+    # Create the dictionary with nmt-build-dict afterwards
+    create_dictionaries(sentences['train'], args.output, args.minvocab)
