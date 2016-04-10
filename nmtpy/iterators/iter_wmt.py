@@ -31,11 +31,11 @@ class WMTIterator(object):
         random.seed(1234)
 
         # pkl file which contains a list of Sample objects
-        # Format of Sample: [src, trg, split, imgid, imgname]
         self.pkl_file = pkl_file
 
         # This is expected to be a .npy file
         self.img_feats_file = img_feats_file
+        self.img_feats = None
 
         # Target word dictionary and short-list limit
         # This may not be available during validation
@@ -103,27 +103,34 @@ class WMTIterator(object):
         # Load the samples
         with open(self.pkl_file, 'rb') as f:
             # This import needs to be here so that unpickling works correctly
-            from ..typedef import Caption, Sample
+            from ..typedef import Sample
             self.samples = cPickle.load(f)
 
         # Check for what is available
-        s = self.samples[0]
-        if s.src and self.src_dict:
+        ss = self.samples[0]
+        if ss.swords is not None and self.src_dict:
             self.src_avail = True
-        if s.trg and self.trg_dict:
+        if ss.twords is not None and self.trg_dict:
             self.trg_avail = True
-        if s.imgid and self.img_feats:
+        if ss.imgid is not None and self.img_feats is not None:
             self.img_avail = True
-
-        # Let's map the sentences once to idx's
-        for sample in self.samples:
-            if self.src_avail:
-                sample.src = sent_to_idx(self.src_dict, sample.src, self.n_words_src)
-            if self.trg_avail:
-                sample.trg = sent_to_idx(self.trg_dict, sample.trg, self.n_words_trg)
 
         # We now have a list of Sample()'s
         self.n_samples = len(self.samples)
+
+        seqs = []
+
+        # Let's map the sentences once to idx's
+        for sample in self.samples:
+            sample = list(sample)
+            if self.src_avail:
+                sample[4] = sent_to_idx(self.src_dict, sample[4], self.n_words_src)
+            if self.trg_avail:
+                sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
+            seqs.append(sample)
+        self.samples = seqs
+
+        self.set_batch_size(self.batch_size)
 
     def next(self):
         try:
@@ -133,15 +140,15 @@ class WMTIterator(object):
 
             # Target sentence
             if self.trg_avail:
-                y, y_mask = mask_data([self.samples[i].trg for i in idxs])
+                y, y_mask = mask_data([self.samples[i][5] for i in idxs])
 
             # Optional source sentences
             if self.src_avail:
-                x, x_mask = mask_data([self.samples[i].src for i in idxs])
+                x, x_mask = mask_data([self.samples[i][4] for i in idxs])
 
             # Source image features
             if self.img_avail:
-                img_idxs = [self.samples[i].imgid for i in idxs]
+                img_idxs = [self.samples[i][2] for i in idxs]
                 x_img = self.img_feats[img_idxs]
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
@@ -153,9 +160,12 @@ if __name__ == '__main__':
     from nmtpy.nmtutils import load_dictionary
     trg_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.de.pkl")
     src_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.en.pkl")
+    from ..typedef import Sample
 
-    ite = WMT16Iterator("/tmp/wmt16-task1-en-de-vgg-conv.npz", "train", 32, trg_dict, src_dict=src_dict, reshape_img=[512, 14, 14])
-
+    ite = WMTIterator(32,
+                    "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
+                    "/tmp/conv54_vgg_feats_hdf5-flickr30k.train.npy",
+                    trg_dict, src_dict)
     for i in range(2):
         print "Iterating..."
         for batch in ite:
@@ -165,3 +175,16 @@ if __name__ == '__main__':
             assert v[2] == "x_img"
             assert v[3] == "y"
             assert v[4] == "y_mask"
+
+    ite = WMTIterator(32,
+                    "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
+                    None,
+                    trg_dict, src_dict)
+    for i in range(2):
+        print "Iterating..."
+        for batch in ite:
+            v = batch.keys()
+            assert v[0] == "x"
+            assert v[1] == "x_mask"
+            assert v[2] == "y"
+            assert v[3] == "y_mask"
