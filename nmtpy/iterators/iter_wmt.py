@@ -165,6 +165,18 @@ if __name__ == '__main__':
     ite = WMTIterator(32,
                     "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
                     "/tmp/conv54_vgg_feats_hdf5-flickr30k.train.npy",
+                    trg_dict, None)
+    for i in range(2):
+        print "Iterating..."
+        for batch in ite:
+            v = batch.keys()
+            assert v[0] == "x_img"
+            assert v[1] == "y"
+            assert v[2] == "y_mask"
+
+    ite = WMTIterator(32,
+                    "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
+                    "/tmp/conv54_vgg_feats_hdf5-flickr30k.train.npy",
                     trg_dict, src_dict)
     for i in range(2):
         print "Iterating..."
