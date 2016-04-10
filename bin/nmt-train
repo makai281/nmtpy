@@ -257,6 +257,7 @@ if __name__ == '__main__':
     early_stop      = False
     uidx            = 0
     bad_counter     = 0
+    valid_halved    = False
     valid_losses    = []
     metric_history  = []
     metric_results  = []
@@ -378,6 +379,10 @@ if __name__ == '__main__':
                             is_bad = True
 
                     if is_bad:
+                        if not valid_halved and bad_counter == 0:
+                            args.valid_freq = int(args.valid_freq / 2)
+                            valid_halved = True
+                            log.info("Validation frequency halved: %d" % args.valid_freq)
                         bad_counter += 1
                         log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
 
