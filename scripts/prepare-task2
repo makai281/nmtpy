@@ -15,10 +15,10 @@ import random
 import string
 import argparse
 
-puncs = list(string.punctuation)
+# Each element of the list that is pickled is in the following format:
+# [ssplit, tsplit, imgid, imgname, swords, twords]
 
-from nmtpy.typedef import Sample
-Sample.__module__ = '__main__'
+puncs = list(string.punctuation)
 
 _ = os.path.expanduser
 
@@ -27,8 +27,8 @@ def create_dictionaries(sents, outpath, minvocab):
     names = ["train_src.pkl", "train_trg.pkl"]
 
     for s in sents:
-        words[0].extend(s.swords)
-        words[1].extend(s.twords)
+        words[0].extend(s[4])
+        words[1].extend(s[5])
 
     for i in [0, 1]:
         freqs = Counter(words[i]).most_common()
@@ -86,7 +86,7 @@ def process_sentence_pairs(imgs, src_sents, trg_sents, sidx, tidx, clean=True,
                len_ratio > ratio or (1./len_ratio) > ratio:
                 continue
 
-        pairs.append(Sample(sidx, tidx, idx, imgs[img_offset+idx], swords, twords))
+        pairs.append([sidx, tidx, idx, imgs[img_offset+idx], swords, twords])
 
     return pairs
 

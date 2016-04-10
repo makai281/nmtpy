@@ -3,6 +3,7 @@ from six.moves import range
 from six.moves import zip
 
 import cPickle
+import sys
 
 import random
 from collections import OrderedDict
@@ -12,13 +13,17 @@ import numpy as np
 from ..nmtutils import mask_data, sent_to_idx
 from ..typedef  import INT, FLOAT
 
+# Each element of the list that is pickled is in the following format:
+# [ssplit, tsplit, imgid, imgname, swords, twords]
+
 class WMTIterator(object):
     def __init__(self, batch_size,
                  pkl_file,
                  img_feats_file=None,
                  trg_dict=None, src_dict=None,
                  n_words_trg=0, n_words_src=0,
-                 shuffle=False):
+                 shuffle=False,
+                 single=False):
 
         self.n_samples = 0
 
@@ -52,6 +57,10 @@ class WMTIterator(object):
 
         # Whether to shuffle after each epoch
         self.shuffle = shuffle
+
+        # During validation we may just need a set
+        # of pairs instead of every cross product
+        self.single = single
 
         # keys define what to return during iteration
         self.__keys = []
@@ -103,32 +112,31 @@ class WMTIterator(object):
         # Load the samples
         with open(self.pkl_file, 'rb') as f:
             # This import needs to be here so that unpickling works correctly
-            from ..typedef import Sample
             self.samples = cPickle.load(f)
 
         # Check for what is available
         ss = self.samples[0]
-        if ss.swords is not None and self.src_dict:
+        if ss[4] is not None and self.src_dict:
             self.src_avail = True
-        if ss.twords is not None and self.trg_dict:
+        if ss[5] is not None and self.trg_dict:
             self.trg_avail = True
-        if ss.imgid is not None and self.img_feats is not None:
+        if ss[2] is not None and self.img_feats is not None:
             self.img_avail = True
 
-        # We now have a list of Sample()'s
+        # Just take the first src-trg pair
+        if self.single:
+            self.samples = [s for s in self.samples if (s[0] == s[1] == 0)]
+
+        # We now have a list of samples
         self.n_samples = len(self.samples)
 
-        seqs = []
-
         # Let's map the sentences once to idx's
-        for sample in self.samples:
-            sample = list(sample)
-            if self.src_avail:
-                sample[4] = sent_to_idx(self.src_dict, sample[4], self.n_words_src)
-            if self.trg_avail:
-                sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
-            seqs.append(sample)
-        self.samples = seqs
+        if self.src_avail or self.trg_avail:
+            for sample in self.samples:
+                if self.src_avail:
+                    sample[4] = sent_to_idx(self.src_dict, sample[4], self.n_words_src)
+                if self.trg_avail:
+                    sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
 
         self.set_batch_size(self.batch_size)
 
@@ -149,7 +157,8 @@ class WMTIterator(object):
             # Source image features
             if self.img_avail:
                 img_idxs = [self.samples[i][2] for i in idxs]
-                x_img = self.img_feats[img_idxs]
+                # Do this 196 x bsize x 512
+                x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
@@ -160,7 +169,6 @@ if __name__ == '__main__':
     from nmtpy.nmtutils import load_dictionary
     trg_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.de.pkl")
     src_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.en.pkl")
-    from ..typedef import Sample
 
     ite = WMTIterator(32,
                     "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",

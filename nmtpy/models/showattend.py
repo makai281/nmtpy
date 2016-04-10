@@ -29,12 +29,10 @@ class Model(BaseModel):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
-        # Load vocabularies if any
-        if 'dicts' in kwargs:
-            dicts = kwargs['dicts']
-            assert 'trg' in dicts
-            self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
-            self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
+        dicts = kwargs['dicts']
+        assert 'trg' in dicts
+        self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
+        self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
 
         # Convolutional feature dim
         self.n_convfeats = 512
@@ -65,13 +63,14 @@ class Model(BaseModel):
 
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_pkl'],
-                    img_feats_file=self.data['valid_img'])
+                    img_feats_file=self.data['valid_img'],
+                    single=True)
         else:
+            # Just for loss computation
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_pkl'],
                     img_feats_file=self.data['valid_img'],
-                    trg_dict=self.trg_dict,
-                    n_words_trg=self.n_words_trg)
+                    single=True)
 
     def init_params(self):
         params = OrderedDict()
