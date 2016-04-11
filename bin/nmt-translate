@@ -95,8 +95,8 @@ class Translator(object):
 
     def set_model_params(self):
         # load model parameters and set theano shared variables
-        self.tparams = self.__obj.load_params(np.load(self.model_file))
-        self.__obj.set_dropout(False)
+        self.tparams = self.model.load_params(np.load(self.model_file))
+        self.model.set_dropout(False)
 
     def set_model_options(self, model_options, model_file):
         self.model_options = model_options
@@ -106,7 +106,7 @@ class Translator(object):
         self.__class = importlib.import_module("nmtpy.models.%s" % self.model_options['model_type']).Model
 
         # Create the model
-        self.__obj = self.__class(seed=self.seed, **self.model_options)
+        self.model = self.__class(seed=self.seed, **self.model_options)
 
         # Check for post-processing filter
         if "filter" in self.model_options:
@@ -114,18 +114,18 @@ class Translator(object):
             self.filters.append(get_filter(model_options['filter']))
 
         # invert dictionary
-        self.ref_idict = dict([[v,k] for k,v in self.__obj.trg_dict.iteritems()])
+        self.ref_idict = dict([[v,k] for k,v in self.model.trg_dict.iteritems()])
 
         # If forced and we got a src file and also ref file(s)
         # do the forced decoding
         if self.mode == "forced" and self.src_file and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
             self.iterator = get_iterator('bitext')(
-                                        self.src_file, self.__obj.src_dict,
-                                        self.ref_files[0], self.__obj.trg_dict,
+                                        self.src_file, self.model.src_dict,
+                                        self.ref_files[0], self.model.trg_dict,
                                         batch_size=1,
-                                        n_words_src=self.__obj.n_words_src,
-                                        n_words_trg=self.__obj.n_words_trg,
+                                        n_words_src=self.model.n_words_src,
+                                        n_words_trg=self.model.n_words_trg,
                                         trg_name='y_true')
             self.iterator.prepare_batches()
 
@@ -133,29 +133,29 @@ class Translator(object):
         elif self.src_file:
             # Let's do a hack here and pretend that the given
             # file is validation data provided to the model :)
-            self.__obj.data['valid_src'] = self.src_file
+            self.model.data['valid_src'] = self.src_file
             if self.ref_files:
-                self.__obj.data['valid_trg'] = self.ref_files
+                self.model.data['valid_trg'] = self.ref_files
 
-            self.__obj.load_valid_data(from_translate=True)
-            self.iterator  = self.__obj.valid_iterator
+            self.model.load_valid_data(from_translate=True)
+            self.iterator  = self.model.valid_iterator
 
         # If nothing is given translate on validation set
         else:
             log.info("No test data given, assuming validation dataset.")
 
             # Load validation data from the model
-            self.__obj.load_valid_data(from_translate=True)
-            self.iterator  = self.__obj.valid_iterator
-            self.src_file  = self.__obj.data['valid_src']
+            self.model.load_valid_data(from_translate=True)
+            self.iterator  = self.model.valid_iterator
+            self.src_file  = self.model.data['valid_src']
 
             # User may provide another reference set in 'valid_trg_orig' for example
             # with compound splitting reverted so that we can compute
             # the metrics correctly.
-            if "valid_trg_orig" in self.__obj.data:
-                self.ref_files = self.__obj.data['valid_trg_orig']
+            if "valid_trg_orig" in self.model.data:
+                self.ref_files = self.model.data['valid_trg_orig']
             else:
-                self.ref_files = self.__obj.valid_ref_files
+                self.ref_files = self.model.valid_ref_files
 
             if not isinstance(self.ref_files, list):
                 self.ref_files = [self.ref_files]
@@ -181,7 +181,7 @@ class Translator(object):
         for idx in xrange(self.n_jobs):
             self.processes[idx] = \
                     Process(target=translate_model,
-                            args=(write_queue, read_queue, idx, self.__obj, self.beam_size, self.unnorm,
+                            args=(write_queue, read_queue, idx, self.model, self.beam_size, self.unnorm,
                                   self.nbest, self.seed, self.mode))
             self.processes[idx].start()
             cleanup.register_proc(self.processes[idx].pid)
