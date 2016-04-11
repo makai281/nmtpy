@@ -174,10 +174,10 @@ class Model(BaseModel):
 
     def build_sampler(self):
         # context is the convolutional vectors themselves
-        # 196 x 1 x 512
-        ctx = tensor.tensor3('x_img', dtype=FLOAT)
+        # 196 x 512
+        ctx = tensor.matrix('x_img', dtype=FLOAT)
 
-        # 1 x 1 x 512
+        # 1 x 512
         ctx_mean = ctx.mean(0)
 
         # initial decoder state
@@ -187,15 +187,14 @@ class Model(BaseModel):
 
         # Takes image annotation vectors and returns
         # it with the initial state of GRU
-        self.f_init = theano.function([ctx], [init_state, ctx], name='f_init', profile=self.profile)
+        self.f_init = theano.function([ctx], [init_state[None, :], ctx], name='f_init', profile=self.profile)
 
-        # Why do we redefine ctx here (arctic-captions)
-        ctx = tensor.tensor3('x_img', dtype=FLOAT)
         y = tensor.vector('y_sampler', dtype=INT)
         init_state = tensor.matrix('init_state', dtype=FLOAT)
 
         # if it's the first word, emb should be all zero and it is indicated by
         # beam search who sends -1 for the initial word
+        # n_words x emb_dim when y != -1
         emb = tensor.switch(y[:, None] < 0,
                             tensor.alloc(0., 1, self.trg_emb_dim),
                             self.tparams['Wemb'][y])
@@ -203,7 +202,7 @@ class Model(BaseModel):
         # apply one step of conditional gru with attention
         r = get_new_layer('gru_cond')[1](self.tparams, emb,
                                             prefix='decoder',
-                                            mask=None, context=ctx,
+                                            mask=None, context=ctx[:, None, :],
                                             one_step=True,
                                             init_state=init_state)
         # get the next hidden state
@@ -213,10 +212,10 @@ class Model(BaseModel):
         # 1 x 512
         ctxs = r[1]
 
-        logit = get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
-        logit += emb
-        logit += get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
-        logit = tanh(logit)
+        logit  = emb
+        logit += get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
+        logit += get_new_layer('ff')[1](self.tparams, ctxs      , prefix='ff_logit_ctx', activ='linear')
+        logit  = tanh(logit)
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
@@ -252,10 +251,12 @@ class Model(BaseModel):
         # We only have single input which is ctx/x_img
         # We obtain the same ctx as ctx0 as well as the next_state
         # computed by the MLP ff_state
-        next_state, ctx0 = self.f_init(inputs[0])
+        # next_state: 1 x 1000
+        # ctx0: 196 x 512
+        next_state, ctx0 = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
-        next_w = -1 * np.ones((1,)).astype(INT)
+        next_w = np.array([-1], dtype=INT)
 
         for ii in xrange(maxlen):
             # Get next states
