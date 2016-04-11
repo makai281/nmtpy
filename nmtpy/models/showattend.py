@@ -51,7 +51,7 @@ class Model(BaseModel):
                 self.data['train_src'],
                 img_feats_file=self.data['train_img'],
                 trg_dict=self.trg_dict,
-                n_words_trg=self.n_words_trg)
+                n_words_trg=self.n_words_trg, shuffle=True)
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False):
