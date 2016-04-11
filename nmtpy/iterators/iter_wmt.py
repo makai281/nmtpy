@@ -159,6 +159,9 @@ class WMTIterator(object):
                 img_idxs = [self.samples[i][2] for i in idxs]
                 # Do this 196 x bsize x 512
                 x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
+                if self.batch_size == 1:
+                    # Drop middle axis
+                    x_img = x_img.squeeze()
 
             return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
         except StopIteration as si:
