@@ -65,7 +65,9 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, s
         else:
             sidx = np.argmin(score)
 
-        rqueue.put((idx, np.array(sample)[sidx], score[sidx]))
+        sample = np.array(sample)[sidx]
+
+        rqueue.put((idx, sample, score[sidx]))
 
 
 """Translator starts worker processes, delegates source iterator
@@ -217,13 +219,12 @@ class Translator(object):
 
         # Convert idxs to words
         for idx in xrange(self.n_sentences):
-            # tr can be a list or a list of lists if nbest > r
+            # Can be a list or a list of lists if nbest > r
             if not isinstance(self.trans[idx][0], list):
                 self.trans[idx] = [self.trans[idx]]
 
-            n_hyps = len(self.trans[0])
-            for hidx in xrange(n_hyps):
-                hyp = idx_to_sent(self.ref_idict, self.trans[idx][hidx])
+            for hidx, hyp in enumerate(self.trans[idx]):
+                hyp = idx_to_sent(self.ref_idict, hyp)
                 for filt in self.filters:
                     hyp = filt(hyp)
                 self.trans[idx][hidx] = hyp
@@ -235,7 +236,8 @@ class Translator(object):
                     for t, s in zip(tr, sc):
                         f.write("%d ||| %s ||| %.6f\n" % (idx, t, s))
             else:
-                f.write(("\n".join([s[0] for s in self.trans])) + "\n")
+                hyps = "\n".join([s[0] for s in self.trans]) + "\n"
+                f.write(hyps.encode('utf-8'))
 
     def compute_score(self, hyp_file, scorers):
         results = {}
