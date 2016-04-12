@@ -274,6 +274,7 @@ class Model(BaseModel):
 
         next_state = r[0]
         ctxs = r[1]
+        alphas = r[2]
 
         logit_prev = get_new_layer('ff')[1](self.tparams, emb,          prefix='ff_logit_prev',activ='linear')
         logit_ctx  = get_new_layer('ff')[1](self.tparams, ctxs,         prefix='ff_logit_ctx', activ='linear')
