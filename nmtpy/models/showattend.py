@@ -64,7 +64,7 @@ class Model(BaseModel):
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
-                    single=True)
+                    mode='single')
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
@@ -72,7 +72,7 @@ class Model(BaseModel):
                     img_feats_file=self.data['valid_img'],
                     trg_dict=self.trg_dict,
                     n_words_trg=self.n_words_trg,
-                    single=True)
+                    mode='single')
 
     def init_params(self):
         params = OrderedDict()
