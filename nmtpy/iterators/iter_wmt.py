@@ -22,8 +22,8 @@ class WMTIterator(object):
                  img_feats_file=None,
                  trg_dict=None, src_dict=None,
                  n_words_trg=0, n_words_src=0,
-                 shuffle=False,
-                 single=False):
+                 mode='all',
+                 shuffle=False):
 
         self.n_samples = 0
 
@@ -58,9 +58,10 @@ class WMTIterator(object):
         # Whether to shuffle after each epoch
         self.shuffle = shuffle
 
-        # During validation we may just need a set
-        # of pairs instead of every cross product
-        self.single = single
+        # 'all'     : Use everything available in the pkl file (default)
+        # 'single'  : Take only the first pair e.g., train0.en->train0.de
+        # 'pairs'   : Take only one-to-one apirs e.g., train_i.en->train_i.de
+        self.mode = mode
 
         # keys define what to return during iteration
         self.__keys = []
@@ -78,6 +79,9 @@ class WMTIterator(object):
 
         # Read the data
         self.read()
+
+    def __len__(self):
+        return self.n_samples
 
     def set_batch_size(self, bs):
         """Sets the batch size and recreates batch idxs."""
@@ -123,9 +127,12 @@ class WMTIterator(object):
         if ss[2] is not None and self.img_feats is not None:
             self.img_avail = True
 
-        # Just take the first src-trg pair
-        if self.single:
+        if self.mode == 'single':
+            # Just take the first src-trg pair. Useful for validation
             self.samples = [s for s in self.samples if (s[0] == s[1] == 0)]
+        elif self.mode == 'pairs':
+            # Take the pairs with split idx's equal
+            self.samples = [s for s in self.samples if s[0] == s[1]]
 
         # We now have a list of samples
         self.n_samples = len(self.samples)
@@ -139,6 +146,16 @@ class WMTIterator(object):
                     sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
 
         self.set_batch_size(self.batch_size)
+
+    def set_dropwords(self, state, p_src=0.2, p_trg=0.2):
+        # Replace words stochastically with <unk> to allow
+        # learning <unk>'s representation even with full vocabulary
+        # May be meaningful after fine tuning and maybe disabling
+        # backprop for every word vector other than <unk>
+        self.do_dropwords = state
+        if self.do_dropwords:
+            self.p_src = p_src
+            self.p_trg = p_trg
 
     def next(self):
         try:
