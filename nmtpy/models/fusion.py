@@ -88,8 +88,11 @@ class Model(BaseModel):
     def init_params(self):
         params = OrderedDict()
 
-        # embedding weights for decoder
-        params['Wemb'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
+        # embedding weights for decoder (target language)
+        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
+
+        # embedding weights for encoder (source language)
+        params['Wemb_src'] = norm_weight(self.n_words_src, self.src_emb_dim, scale=self.weight_init)
 
         # initial state initializer
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim, scale=self.weight_init)
