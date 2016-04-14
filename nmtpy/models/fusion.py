@@ -29,10 +29,11 @@ class Model(BaseModel):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
-        dicts = kwargs['dicts']
         # We need both dictionaries
+        dicts = kwargs['dicts']
         assert 'trg' in dicts and 'src' in dicts
 
+        # We'll use both dictionaries
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
         self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
@@ -43,6 +44,8 @@ class Model(BaseModel):
 
         # Collect options
         self.options = dict(self.__dict__)
+
+        # Set these here to not clutter options
         self.trg_idict = trg_idict
         self.src_idict = src_idict
 
@@ -51,15 +54,17 @@ class Model(BaseModel):
         self.set_dropout(False)
 
     def load_data(self):
+        # Load training data
         self.train_iterator = WMTIterator(
                 self.batch_size,
                 self.data['train_src'],
                 img_feats_file=self.data['train_img'],
-                trg_dict=self.trg_dict,
-                n_words_trg=self.n_words_trg, shuffle=True)
+                trg_dict=self.trg_dict, src_dict=self.src_dict,
+                n_words_trg=self.n_words_trg, n_words_src=self.n_words_src, shuffle=True)
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False):
+        # Load validation data
         batch_size = 1 if from_translate else 64
         if from_translate:
             self.valid_ref_files = self.data['valid_trg']
@@ -69,14 +74,15 @@ class Model(BaseModel):
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
+                    src_dict=self.src_dict, n_words_src=self.n_words_src,
                     mode='single')
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
-                    trg_dict=self.trg_dict,
-                    n_words_trg=self.n_words_trg,
+                    trg_dict=self.trg_dict, src_dict=self.src_dict,
+                    n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
                     mode='single')
 
     def init_params(self):
