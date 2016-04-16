@@ -49,7 +49,7 @@ TRAIN_DEFAULTS = {
         'valid_start':        1,              # Epoch which validation will start
         'valid_freq':         0,              # 0: End of epochs
         'valid_metric':       'bleu',         # bleu, px, meteor
-        'valid_freq_decay':   5,              # Halve validation frequency after epoch 5 for once if the perf doesn't improve
+        #'valid_freq_decay':   10,             # Halve validation frequency after epoch 10 for once if the perf doesn't improve
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
         'njobs':              8,              # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
@@ -380,10 +380,10 @@ if __name__ == '__main__':
                             is_bad = True
 
                     if is_bad:
-                        if eidx >= args.valid_freq_decay and not valid_halved and bad_counter == 0:
-                            args.valid_freq = int(args.valid_freq / 2)
-                            valid_halved = True
-                            log.info("Validation frequency halved: %d" % args.valid_freq)
+                        #if eidx >= args.valid_freq_decay and not valid_halved and bad_counter == 0:
+                        #    args.valid_freq = int(args.valid_freq / 2)
+                        #    valid_halved = True
+                        #    log.info("Validation frequency halved: %d" % args.valid_freq)
                         bad_counter += 1
                         log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
 
