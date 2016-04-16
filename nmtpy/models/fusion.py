@@ -49,6 +49,7 @@ class Model(BaseModel):
         self.trg_idict = trg_idict
         self.src_idict = src_idict
 
+        self.ctx_dim = 2 * self.rnn_dim
         self.set_nanguard()
         self.set_trng(seed)
         self.set_dropout(False)
@@ -88,27 +89,55 @@ class Model(BaseModel):
     def init_params(self):
         params = OrderedDict()
 
+        # embedding weights for encoder (source language)
+        params['Wemb_enc'] = norm_weight(self.n_words_src, self.src_emb_dim, scale=self.weight_init)
+
         # embedding weights for decoder (target language)
         params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
 
-        # embedding weights for encoder (source language)
-        params['Wemb_src'] = norm_weight(self.n_words_src, self.src_emb_dim, scale=self.weight_init)
+        # convfeats (512) to RNN dim (1000) for image modality
+        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.n_convfeats, nout=self.rnn_dim, scale=self.weight_init)
 
-        # initial state initializer
-        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.n_convfeats, nout=self.rnn_dim, scale=self.weight_init)
+        #############################################
+        # Source sentence encoder: bidirectional GRU
+        #############################################
+        # Forward and backward encoder parameters
+        params = get_new_layer('gru')[0](params, prefix='text_encoder'  , nin=self.src_emb_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru')[0](params, prefix='text_encoder_r', nin=self.src_emb_dim, dim=self.rnn_dim, scale=self.weight_init)
 
-        # decoder
-        params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.n_convfeats, scale=self.weight_init)
+        ##########
+        # Decoder
+        ##########
+        # init_state computation from mean context: 2000 -> 1000 if rnn_dim == 1000
+        params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
+
+        # GRU Decoder for text path
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder_text', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
+
+        ###############
+        # Image Decoder
+        ###############
+        # init_state computation from mean image context: 1000 -> 1000
+        params = get_new_layer('ff')[0](params, prefix='ff_img_state_init', nin=self.rnn_dim, nout=self.rnn_dim, scale=self.weight_init)
+
+        # GRU decoder for image path (receives target embeddings as state_below)
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder_img', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.rnn_dim, scale=self.weight_init)
 
         # readout
-        # NOTE: First two are orthogonally initialized in arctic-captions
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.trg_emb_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.n_convfeats, nout=self.trg_emb_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.trg_emb_dim, nout=self.n_words_trg, scale=self.weight_init)
+        # NOTE: In the text NMT, we also have logit_prev that is applied onto emb_trg
+        # NOTE: ortho= changes from text NMT to SAT. Need to experiment
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru', nin=self.rnn_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.rnn_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit'    , nin=self.trg_emb_dim , nout=self.n_words_trg, scale=self.weight_init)
 
+        # Save initial parameters for debugging purposes
         self.initial_params = params
 
     def build(self):
+        # Source sentences: n_timesteps, n_samples
+        x = tensor.matrix('x', dtype=INT)
+        x_mask = tensor.matrix('x_mask', dtype=FLOAT)
+
         # Image: 196 (n_annotations) x n_samples x 512 (ctxdim)
         x_img = tensor.tensor3('x_img', dtype=FLOAT)
 
@@ -116,44 +145,122 @@ class Model(BaseModel):
         y = tensor.matrix('y', dtype=INT)
         y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
+        # Some shorthands for dimensions
+        n_samples       = x.shape[1]
+        n_timesteps     = x.shape[0]
+        n_timesteps_trg = y.shape[0]
+
         # Store tensors
-        self.inputs['x_img'] = x_img
-        self.inputs['y'] = y
-        self.inputs['y_mask'] = y_mask
+        self.inputs['x']        = x         # Source words
+        self.inputs['x_mask']   = x_mask    # Source mask
+        self.inputs['x_img']    = x_img     # Image features
+        self.inputs['y']        = y         # Target labels
+        self.inputs['y_mask']   = y_mask    # Target mask
 
-        # index into the word embedding matrix, shift it forward in time
-        # to leave all-zeros in the first timestep and to ignore the last word
-        # <eos> upon which we'll never condition
-        emb = self.tparams['Wemb'][y.flatten()].reshape([y.shape[0], y.shape[1], self.trg_emb_dim])
-        emb_shifted = tensor.zeros_like(emb)
-        emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
-        emb = emb_shifted
+        # Project image features to rnn_dim
+        img_ctx = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
+        # -> 196 x n_samples x rnn_dim
 
-        # Mean ctx vector
-        # 1 x n_samples x 512
-        ctx_mean = x_img.mean(0)
+        ###################
+        # Source embeddings
+        ###################
+        # Fetch source embeddings. Result is: (n_timesteps x n_samples x src_emb_dim)
+        emb_enc = self.tparams['Wemb_enc'][x.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
+        # -> n_timesteps x n_samples x src_emb_dim
 
-        # initial decoder state learned from mean context
-        # 1 x n_samples x rnn_dim
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        # Pass the source word vectors through the GRU RNN
+        emb_enc_rnns = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', mask=x_mask,
+                                               profile=self.profile, mode=self.func_mode)
+        # -> n_timesteps x n_samples x rnn_dim
 
+        # word embedding for backward rnn (source)
+        # for the backward rnn, we just need to invert x and x_mask
+        xr      = x[::-1]
+        xr_mask = x_mask[::-1]
+        emb_enc_r = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
+        # -> n_timesteps x n_samples x src_emb_dim
+        # Pass the source word vectors in reverse through the GRU RNN
+        emb_enc_rnns_r = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', mask=xr_mask,
+                                                 profile=self.profile, mode=self.func_mode)
+        # -> n_timesteps x n_samples x rnn_dim
+
+        # Source context will be the concatenation of forward and backward rnns
+        # leading to a vector of 2*rnn_dim for each timestep
+        text_ctx = tensor.concatenate([emb_enc_rnns[0], emb_enc_rnns_r[0][::-1]], axis=emb_enc_rnns[0].ndim-1)
+        # -> n_timesteps x n_samples x 2*rnn_dim
+
+        # mean of the context (across time) will be used to initialize decoder rnn
+        text_ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+        # -> n_samples x ctx_dim (2*rnn_dim)
+
+        # initial decoder state computed from source context mean
+        # NOTE: Can the two initializer be merged into one?
+        text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
+        # -> n_samples x rnn_dim (last dim shrinked down by this FF to rnn_dim)
+
+        #######################
+        # Source image features
+        #######################
+
+        # initial decoder state learned from mean image context
+        # NOTE: Can the two initializer be merged into one?
+        img_init_state = get_new_layer('ff')[1](self.tparams, img_ctx.mean(0), prefix='ff_img_state_init', activ='tanh')
+        # -> n_samples x rnn_dim
+
+        ####################
+        # Target embeddings
+        ####################
+
+        # Fetch target embeddings. Result is: (n_trg_timesteps x n_samples x trg_emb_dim)
+        emb_trg = self.tparams['Wemb_dec'][y.flatten()].reshape([y.shape[0], y.shape[1], self.trg_emb_dim])
+
+        # Shift it to right to leave place for the <bos> placeholder
+        # We ignore the last word <eos> as we don't condition on it at the end
+        # to produce another word
+        emb_trg_shifted = tensor.zeros_like(emb_trg)
+        emb_trg_shifted = tensor.set_subtensor(emb_trg_shifted[1:], emb_trg[:-1])
+        emb_trg = emb_trg_shifted
+
+        ###########
+        # Image GRU
+        ###########
         # decoder - pass through the decoder conditional gru with attention
-        proj = get_new_layer('gru_cond')[1](self.tparams, emb,
-                                            prefix='decoder',
-                                            mask=y_mask, context=x_img,
-                                            context_mask=None,
-                                            one_step=False,
-                                            init_state=init_state)
-        # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
-        proj_h = proj[0]
-        ctxs = proj[1]
-        alphas = proj[2]
+        img_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg,
+                                               prefix='decoder_img',
+                                               mask=y_mask, context=x_img,
+                                               context_mask=None,
+                                               one_step=False,
+                                               init_state=img_init_state,
+                                               profile=self.profile,
+                                               model=self.func_mode)
 
+        # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
+        img_h       = img_rnn[0]
+        img_sumctx  = img_rnn[1]
+        img_alphas  = img_rnn[2]
+
+        ##########
+        # Text GRU
+        ##########
+        text_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg,
+                                                prefix='decoder_text',
+                                                mask=y_mask, context=text_ctx, # word contexts, e.g. n_timesteps x n_samples x 2*rnn_dim
+                                                context_mask=x_mask,
+                                                one_step=False,
+                                                init_state=init_state,
+                                                profile=self.profile,
+                                                mode=self.func_mode)
+        text_h      = text_rnn[0]
+        text_sumctx = text_rnn[1]
+        text_alphas = text_rnn[2]
+
+
+        # Sum hidden states of modalities
         # rnn_dim -> trg_emb_dim
-        logit = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
+        logit = get_new_layer('ff')[1](self.tparams, (img_h + text_h), prefix='ff_logit_gru', activ='linear')
 
         # prev2out == True in arctic-captions
-        logit += emb
+        logit += emb_trg
 
         # ctx2out == True in arctic-captions
         logit += get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
@@ -165,7 +272,7 @@ class Model(BaseModel):
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         # trg_emb_dim -> n_words_trg
-        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_img_logit', activ='linear')
         logit_shp = logit.shape
 
         # Apply logsoftmax (stable version)
