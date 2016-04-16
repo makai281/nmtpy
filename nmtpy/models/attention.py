@@ -147,10 +147,6 @@ class Model(BaseModel):
         # mean of the context (across time) will be used to initialize decoder rnn
         ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
 
-        # NOTE: Tried this, no improvement
-        # or you can use the last state of forward + backward encoder rnns
-        # ctx_mean = tensor.concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
-
         # initial decoder state
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
