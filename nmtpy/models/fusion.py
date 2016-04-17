@@ -190,7 +190,7 @@ class Model(BaseModel):
         # -> n_timesteps x n_samples x 2*rnn_dim
 
         # mean of the context (across time) will be used to initialize decoder rnn
-        text_ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+        text_ctx_mean = (text_ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
         # -> n_samples x ctx_dim (2*rnn_dim)
 
         # initial decoder state computed from source context mean
@@ -232,7 +232,7 @@ class Model(BaseModel):
                                                one_step=False,
                                                init_state=img_init_state,
                                                profile=self.profile,
-                                               model=self.func_mode)
+                                               mode=self.func_mode)
 
         # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
         img_h       = img_rnn[0]
@@ -247,7 +247,7 @@ class Model(BaseModel):
                                                 mask=y_mask, context=text_ctx, # word contexts, e.g. n_timesteps x n_samples x 2*rnn_dim
                                                 context_mask=x_mask,
                                                 one_step=False,
-                                                init_state=init_state,
+                                                init_state=text_init_state,
                                                 profile=self.profile,
                                                 mode=self.func_mode)
         text_h      = text_rnn[0]
@@ -263,7 +263,7 @@ class Model(BaseModel):
         logit += emb_trg
 
         # ctx2out == True in arctic-captions
-        logit += get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
+        logit += get_new_layer('ff')[1](self.tparams, img_sumctx + text_sumctx, prefix='ff_logit_ctx', activ='linear')
 
         # tanh over logit
         logit = tanh(logit)
@@ -272,7 +272,7 @@ class Model(BaseModel):
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         # trg_emb_dim -> n_words_trg
-        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_img_logit', activ='linear')
+        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
         logit_shp = logit.shape
 
         # Apply logsoftmax (stable version)
