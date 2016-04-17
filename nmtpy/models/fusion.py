@@ -96,7 +96,7 @@ class Model(BaseModel):
         params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
 
         # convfeats (512) to RNN dim (1000) for image modality
-        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.n_convfeats, nout=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.n_convfeats, nout=self.ctx_dim, scale=self.weight_init)
 
         #############################################
         # Source sentence encoder: bidirectional GRU
@@ -117,17 +117,17 @@ class Model(BaseModel):
         ###############
         # Image Decoder
         ###############
-        # init_state computation from mean image context: 1000 -> 1000
-        params = get_new_layer('ff')[0](params, prefix='ff_img_state_init', nin=self.rnn_dim, nout=self.rnn_dim, scale=self.weight_init)
+        # init_state computation from mean image context: 2000 -> 1000
+        params = get_new_layer('ff')[0](params, prefix='ff_img_state_init', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
 
         # GRU decoder for image path (receives target embeddings as state_below)
-        params = get_new_layer('gru_cond')[0](params, prefix='decoder_img', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder_img', nin=self.trg_emb_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
         # NOTE: In the text NMT, we also have logit_prev that is applied onto emb_trg
         # NOTE: ortho= changes from text NMT to SAT. Need to experiment
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru', nin=self.rnn_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.rnn_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.ctx_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
         params = get_new_layer('ff')[0](params, prefix='ff_logit'    , nin=self.trg_emb_dim , nout=self.n_words_trg, scale=self.weight_init)
 
         # Save initial parameters for debugging purposes
@@ -227,7 +227,7 @@ class Model(BaseModel):
         # decoder - pass through the decoder conditional gru with attention
         img_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg,
                                                prefix='decoder_img',
-                                               mask=y_mask, context=x_img,
+                                               mask=y_mask, context=img_ctx,
                                                context_mask=None,
                                                one_step=False,
                                                init_state=img_init_state,
@@ -235,9 +235,9 @@ class Model(BaseModel):
                                                mode=self.func_mode)
 
         # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
-        img_h       = img_rnn[0]
-        img_sumctx  = img_rnn[1]
-        img_alphas  = img_rnn[2]
+        img_h       = img_rnn[0]    # (n_timesteps_trg, batch_size, rnn_dim)
+        img_sumctx  = img_rnn[1]    # (n_timesteps_trg, batch_size, img_ctx.shape[-1] (2000, 2*rnn_dim))
+        img_alphas  = img_rnn[2]    # (n_timesteps_trg, batch_size, img_ctx.shape[0] (196))
 
         ##########
         # Text GRU
@@ -250,10 +250,9 @@ class Model(BaseModel):
                                                 init_state=text_init_state,
                                                 profile=self.profile,
                                                 mode=self.func_mode)
-        text_h      = text_rnn[0]
-        text_sumctx = text_rnn[1]
-        text_alphas = text_rnn[2]
-
+        text_h      = text_rnn[0]   # (n_timesteps_trg, batch_size, rnn_dim)
+        text_sumctx = text_rnn[1]   # (n_timesteps_trg, batch_size, text_ctx.shape[-1] (2000, 2*rnn_dim))
+        text_alphas = text_rnn[2]   # (n_timesteps_trg, batch_size, text_ctx.shape[0] (maxlen for the batch))
 
         # Sum hidden states of modalities
         # rnn_dim -> trg_emb_dim
@@ -294,6 +293,9 @@ class Model(BaseModel):
         return cost.mean()
 
     def build_sampler(self):
+        pass
+
+    def build_sampler2(self):
         # context is the convolutional vectors themselves
         # 196 x 512
         ctx = tensor.matrix('x_img', dtype=FLOAT)
