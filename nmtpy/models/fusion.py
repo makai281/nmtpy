@@ -293,69 +293,72 @@ class Model(BaseModel):
         return cost.mean()
 
     def build_sampler(self):
-        pass
+        x_img   = tensor.matrix('x_img', dtype=FLOAT)
+        x       = tensor.matrix('x', dtype=INT)
+        y       = tensor.vector('y_sampler', dtype=INT)
 
-    def build_sampler2(self):
-        # context is the convolutional vectors themselves
-        # 196 x 512
-        ctx = tensor.matrix('x_img', dtype=FLOAT)
+        n_timesteps     = x.shape[0]
+        n_samples       = x.shape[1]
 
-        # 1 x 512
-        ctx_mean = ctx.mean(0)
 
-        # initial decoder state
-        # (probably) 1 x rnn_dim
-        # Can be encapsulated with list to support multiple RNN layers in future
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        img_ctx         = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
+        img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx.mean(0), prefix='ff_state', activ='tanh')
 
-        # Takes image annotation vectors and returns
-        # it with the initial state of GRU
-        self.f_init = theano.function([ctx], [init_state[None, :], ctx], name='f_init', profile=self.profile)
+        emb_enc         = self.tparams['Wemb_enc'][x.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
+        emb_enc_rnns    = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', profile=self.profile, mode=self.func_mode)
 
-        y = tensor.vector('y_sampler', dtype=INT)
-        init_state = tensor.matrix('init_state', dtype=FLOAT)
+        xr              = x[::-1]
+        emb_enc_r       = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
+        emb_enc_rnns_r  = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', profile=self.profile, mode=self.func_mode)
 
-        # if it's the first word, emb should be all zero and it is indicated by
-        # beam search who sends -1 for the initial word
-        # n_words x emb_dim when y != -1
-        emb = tensor.switch(y[:, None] < 0,
-                            tensor.alloc(0., 1, self.trg_emb_dim),
-                            self.tparams['Wemb'][y])
+        text_ctx        = tensor.concatenate([emb_enc_rnns[0], emb_enc_rnns_r[0][::-1]], axis=emb_enc_rnns[0].ndim-1)
+        text_ctx_mean   = text_ctx.mean(0)
+
+        text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
+
+        self.f_init     = theano.function([x, x_img],
+                                          [text_init_state, img_init_state[None, :], text_ctx, img_ctx],
+                                          name='f_init', profile=self.profile)
+
+        emb_trg         = tensor.switch(y[:, None] < 0,
+                                        tensor.alloc(0., 1, self.trg_emb_dim),
+                                        self.tparams['Wemb_dec'][y])
+
+        text_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg,
+                                                prefix='decoder_text',
+                                                context=text_ctx,
+                                                init_state=text_init_state,
+                                                profile=self.profile,
+                                                mode=self.func_mode)
+        text_h      = text_rnn[0]   # (n_timesteps_trg, batch_size, rnn_dim)
+        text_sumctx = text_rnn[1]   # (n_timesteps_trg, batch_size, text_ctx.shape[-1] (2000, 2*rnn_dim))
 
         # apply one step of conditional gru with attention
-        r = get_new_layer('gru_cond')[1](self.tparams, emb,
-                                            prefix='decoder',
-                                            mask=None, context=ctx[:, None, :],
-                                            one_step=True,
-                                            init_state=init_state)
-        # get the next hidden state
-        # get the weighted average of context for this target word y
-        next_state = r[0]
+        img_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg, prefix='decoder_img',
+                                               context=img_ctx[:, None, :],
+                                               one_step=True,
+                                               init_state=img_init_state)
+        img_h       = img_rnn[0]    # (n_timesteps_trg, batch_size, rnn_dim)
+        img_sumctx  = img_rnn[1]    # (n_timesteps_trg, batch_size, img_ctx.shape[-1] (2000, 2*rnn_dim))
 
-        # 1 x 512
-        ctxs = r[1]
-
-        logit  = emb
-        logit += get_new_layer('ff')[1](self.tparams, next_state, prefix='ff_logit_gru', activ='linear')
-        logit += get_new_layer('ff')[1](self.tparams, ctxs      , prefix='ff_logit_ctx', activ='linear')
-        logit  = tanh(logit)
+        logit = emb_trg
+        logit += get_new_layer('ff')[1](self.tparams, (img_h + text_h), prefix='ff_logit_gru', activ='linear')
+        logit += get_new_layer('ff')[1](self.tparams, img_sumctx + text_sumctx, prefix='ff_logit_ctx', activ='linear')
+        logit = tanh(logit)
 
         if self.dropout > 0:
             logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
 
-        # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
-
-        # Sample from the softmax distribution
         next_probs = tensor.exp(next_log_probs)
         next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
 
         # compile a function to do the whole thing above
         # sampled word for the next target, next hidden state to be used
-        inputs = [y, ctx, init_state]
-        outs = [next_log_probs, next_word, next_state]
+        inputs = [y, text_ctx, img_ctx, text_init_state, img_init_state]
+        outs = [next_log_probs, next_word, text_h, img_h]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50):
@@ -371,12 +374,7 @@ class Model(BaseModel):
         hyp_samples = [[]]
         hyp_scores  = np.zeros(1).astype(FLOAT)
 
-        # We only have single input which is ctx/x_img
-        # We obtain the same ctx as ctx0 as well as the next_state
-        # computed by the MLP ff_state
-        # next_state: 1 x 1000
-        # ctx0: 196 x 512
-        next_state, ctx0 = self.f_init(*inputs)
+        text_next_state, img_next_state, text_ctx, img_ctx = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_w = np.array([-1], dtype=INT)
@@ -388,8 +386,9 @@ class Model(BaseModel):
             # of duplicated left hypotheses. tiled_ctx is always the same except
             # the 2nd dimension as the context vectors of the source sequence
             # is always the same regardless of the decoding step.
-            inps = [next_w, ctx0, next_state]
-            next_log_p, _, next_state = self.f_next(*inps)
+            inps = [next_w, text_ctx, img_ctx, text_next_state, img_next_state]
+            next_log_p, _, text_next_state, img_next_state = self.f_next(*inps)
+            next_state = [text_next_state, img_next_state]
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
