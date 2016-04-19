@@ -67,15 +67,21 @@ def fflayer(tparams, state_below, prefix='ff', activ='tanh'):
 ###########
 def param_init_gru(params, nin, dim, scale=0.01, prefix='gru'):
     # embedding to gates transformation weights, biases
+
+    # See the paper for variable names
+    # W is stacked W_r and W_z
     params[_p(prefix, 'W')]  = np.concatenate([norm_weight(nin, dim, scale=scale),
                                                norm_weight(nin, dim, scale=scale)], axis=1)
+    # b_r and b_z
     params[_p(prefix, 'b')]  = np.zeros((2 * dim,)).astype(FLOAT)
 
     # recurrent transformation weights for gates
+    # U is stacked U_r and U_z
     params[_p(prefix, 'U')]  = np.concatenate([ortho_weight(dim),
                                                ortho_weight(dim)], axis=1)
 
     # embedding to hidden state proposal weights, biases
+    # The followings appears in eq 8 where we compute the candidate h (tilde)
     params[_p(prefix, 'Wx')] = norm_weight(nin, dim, scale=scale)
     params[_p(prefix, 'bx')] = np.zeros((dim,)).astype(FLOAT)
 
@@ -89,12 +95,9 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
-    if state_below.ndim == 3:
-        n_samples = state_below.shape[1]
-    # during sampling
-    else:
-        n_samples = 1
+    n_samples = state_below.shape[1] if state_below.ndim == 3 else 1
 
+    # Infer RNN dimensionality
     dim = tparams[_p(prefix, 'Ux')].shape[1]
 
     # if we have no mask, we assume all the inputs are valid
@@ -105,9 +108,11 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
 
     # state_below is the input word embeddings
     # input to the gates, concatenated
+    # [W_r * X + b_r, W_z * X + b_z]
     state_below_ = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
 
     # input to compute the hidden state proposal
+    # This is the [W*x]_j in the eq. 8 of the paper
     state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) + tparams[_p(prefix, 'bx')]
 
     # step function to be used by scan
@@ -121,23 +126,21 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     #   U     : shared U matrix
     #   Ux    : shared Ux matrix
     def _step(m_, x_, xx_, h_, U, Ux):
-        preact = tensor.dot(h_, U)
-        preact += x_
+        # [U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)]
+        preact = tensor.dot(h_, U) + x_
 
         # reset and update gates
         r = sigmoid(_tensor_slice(preact, 0, dim))
         u = sigmoid(_tensor_slice(preact, 1, dim))
 
-        # compute the hidden state proposal
-        preactx = tensor.dot(h_, Ux)
-        preactx = preactx * r
-        preactx = preactx + xx_
-
-        # hidden state proposal
-        h = tanh(preactx)
+        # NOTE: Is this correct or should be tensor.dot(h_ * r, Ux)
+        # hidden state proposal (h_tilda_j eq. 8)
+        h = tanh((tensor.dot(h_, Ux)) * r + xx_)
 
         # leaky integrate and obtain next hidden state
+        # NOTE: According to paper, this should be [h = u * h + (1 - u) * h_]
         h = u * h_ + (1. - u) * h
+        # What's the logic to invert the mask and add it after multiplying by h_?
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
         return h
@@ -182,10 +185,10 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
 
     params[_p(prefix, 'U')]             = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
+    params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
 
     params[_p(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin, scale=scale)
 
-    params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
     params[_p(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype(FLOAT)
 
     params[_p(prefix, 'U_nl')]          = np.concatenate([ortho_weight(dim_nonlin),
@@ -220,24 +223,18 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
                    mask=None, context=None, one_step=False,
                    init_state=None, context_mask=None,
                    profile=False, mode=None):
-
-    assert context, 'Context must be provided'
-
     if one_step:
         assert init_state, 'previous state must be provided'
 
-    # projected context
+    # Context
     # n_timesteps x n_samples x ctxdim
-    assert context.ndim == 3, \
-        'Context must be 3-d: #annotation x #sample x dim'
+    assert context, 'Context must be provided'
+    assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
 
     nsteps = state_below.shape[0]
-    if state_below.ndim == 3:
-        # We have a batch
-        n_samples = state_below.shape[1]
-    else:
-        # Single sample
-        n_samples = 1
+
+    # Batch or single sample?
+    n_samples = 1 if state_below.ndim != 3 else state_below.shape[1]
 
     # if we have no mask, we assume all the inputs are valid
     # tensor.alloc(value, *shape)
@@ -245,6 +242,7 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
 
+    # Infer RNN dimensionality
     dim = tparams[_p(prefix, 'Wcx')].shape[1]
 
     # initial/previous state
@@ -256,11 +254,11 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
     # results in application of the non-linearity with
     # the last dimension of the context (ctx_dim)
     # Final shape remains the same pctx_.shape == context.shape
+
+    # Wc_att: dimctx -> dimctx
     pctx_ = tensor.dot(context, tparams[_p(prefix, 'Wc_att')]) + tparams[_p(prefix, 'b_att')]
 
-    # projected x
-    # state_below is the target embeddings. Here I think two
-    # non-linearities are applied to the same state_below.
+    # state_below is the target embeddings.
     state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) +\
         tparams[_p(prefix, 'bx')]
     state_below_ = tensor.dot(state_below, tparams[_p(prefix, 'W')]) +\
