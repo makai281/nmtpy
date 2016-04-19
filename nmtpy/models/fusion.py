@@ -157,10 +157,6 @@ class Model(BaseModel):
         self.inputs['y']        = y         # Target labels
         self.inputs['y_mask']   = y_mask    # Target mask
 
-        # Project image features to rnn_dim
-        img_ctx = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
-        # -> 196 x n_samples x rnn_dim
-
         ###################
         # Source embeddings
         ###################
@@ -201,6 +197,10 @@ class Model(BaseModel):
         #######################
         # Source image features
         #######################
+
+        # Project image features to rnn_dim
+        img_ctx = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
+        # -> 196 x n_samples x rnn_dim
 
         # initial decoder state learned from mean image context
         # NOTE: Can the two initializer be merged into one?
