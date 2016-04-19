@@ -180,13 +180,14 @@ class Translator(object):
         write_queue = Queue()
         read_queue = Queue()
         # Create processes
-        for idx in xrange(self.n_jobs):
-            self.processes[idx] = \
-                    Process(target=translate_model,
-                            args=(write_queue, read_queue, idx, self.model, self.beam_size, self.unnorm,
-                                  self.nbest, self.seed, self.mode))
-            self.processes[idx].start()
-            cleanup.register_proc(self.processes[idx].pid)
+        if self.n_jobs > 1:
+            for idx in xrange(self.n_jobs):
+                self.processes[idx] = \
+                        Process(target=translate_model,
+                                args=(write_queue, read_queue, idx, self.model, self.beam_size, self.unnorm,
+                                      self.nbest, self.seed, self.mode))
+                self.processes[idx].start()
+                cleanup.register_proc(self.processes[idx].pid)
 
         cleanup.register_handler()
 
@@ -200,6 +201,12 @@ class Translator(object):
         # Receive the results
         self.trans  = [None] * self.n_sentences
         self.scores = [None] * self.n_sentences
+
+        if self.n_jobs == 1:
+            # Don't fork, use this process. Useful for debugging
+            translate_model(write_queue, read_queue, -1,
+                            self.model, self.beam_size, self.unnorm,
+                            self.nbest, self.seed, self.mode)
 
         t = time.time()
         for i in xrange(self.n_sentences):
