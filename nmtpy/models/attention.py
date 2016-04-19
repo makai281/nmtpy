@@ -260,13 +260,13 @@ class Model(BaseModel):
                             self.tparams['Wemb_dec'][y])
 
         # apply one step of conditional gru with attention
-        # get the next hidden state
-        # get the weighted averages of context for this target word y
+        # get the next hidden states
+        # get the weighted averages of contexts for this target word y
         r = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                                    prefix='decoder',
-                                                    mask=None, context=ctx,
-                                                    one_step=True,
-                                                    init_state=init_state)
+                                            prefix='decoder',
+                                            mask=None, context=ctx,
+                                            one_step=True,
+                                            init_state=init_state)
 
         next_state = r[0]
         ctxs = r[1]
