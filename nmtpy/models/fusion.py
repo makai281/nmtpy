@@ -293,57 +293,94 @@ class Model(BaseModel):
         return cost.mean()
 
     def build_sampler(self):
-        x_img   = tensor.matrix('x_img', dtype=FLOAT)
-        x       = tensor.matrix('x', dtype=INT)
-        y       = tensor.vector('y_sampler', dtype=INT)
-
+        x               = tensor.matrix('x', dtype=INT)
         n_timesteps     = x.shape[0]
         n_samples       = x.shape[1]
 
-
+        ################
+        # Image features
+        ################
+        # 196 x 512
+        x_img           = tensor.matrix('x_img', dtype=FLOAT)
+        # Convert to 196 x 2000 (2*rnn_dim)
         img_ctx         = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
-        img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx.mean(0), prefix='ff_state', activ='tanh')
+        # Broadcast middle dimension to make it 196 x 1 x 2000
+        img_ctx         = img_ctx[:, None, :]
+        # Take the mean over the first dimension: 1 x 2000
+        img_ctx_mean    = img_ctx.mean(0)
+        # Give the mean to compute the initial state: 1 x 1000
+        img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx_mean, prefix='ff_img_state_init', activ='tanh')
 
-        emb_enc         = self.tparams['Wemb_enc'][x.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
-        emb_enc_rnns    = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', profile=self.profile, mode=self.func_mode)
+        #####################
+        # Text Bi-GRU Encoder
+        #####################
+        emb             = self.tparams['Wemb_enc'][x.flatten()]
+        emb             = emb.reshape([n_timesteps, n_samples, self.trg_emb_dim])
+        proj            = get_new_layer('gru')[1](self.tparams, emb, prefix='text_encoder')
 
-        xr              = x[::-1]
-        emb_enc_r       = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
-        emb_enc_rnns_r  = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', profile=self.profile, mode=self.func_mode)
+        embr            = self.tparams['Wemb_enc'][x[::-1].flatten()]
+        embr            = embr.reshape([n_timesteps, n_samples, self.trg_emb_dim])
+        projr           = get_new_layer('gru')[1](self.tparams, embr, prefix='text_encoder_r')
 
-        text_ctx        = tensor.concatenate([emb_enc_rnns[0], emb_enc_rnns_r[0][::-1]], axis=emb_enc_rnns[0].ndim-1)
+        # concatenate forward and backward rnn hidden states
+        text_ctx        = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+
+        # get the input for decoder rnn initializer mlp
         text_ctx_mean   = text_ctx.mean(0)
-
         text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
 
-        self.f_init     = theano.function([x, x_img],
-                                          [text_init_state, img_init_state[None, :], text_ctx, img_ctx],
-                                          name='f_init', profile=self.profile)
+        # Stack them together so that init_states[:, 0] == text_init_state, vs.
+        init_states     = tensor.stack([text_init_state, img_init_state], axis=1)
+        init_states     = tensor.unbroadcast(init_states, 0)
+        ################
+        # Build f_init()
+        ################
+        inps            = [x, x_img]
+        outs            = [text_ctx, img_ctx, init_states]
+        self.f_init     = theano.function(inps, outs, name='f_init', profile=self.profile)
 
-        emb_trg         = tensor.switch(y[:, None] < 0,
-                                        tensor.alloc(0., 1, self.trg_emb_dim),
+        ###################
+        # Target Embeddings
+        ###################
+        y               = tensor.vector('y_sampler', dtype=INT)
+        emb             = tensor.switch(y[:, None] < 0,
+                                        tensor.alloc(0., 1, self.tparams['Wemb_dec'].shape[1]),
                                         self.tparams['Wemb_dec'][y])
 
-        text_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg,
-                                                prefix='decoder_text',
-                                                context=text_ctx,
-                                                init_state=text_init_state,
-                                                profile=self.profile,
-                                                mode=self.func_mode)
-        text_h      = text_rnn[0]   # (n_timesteps_trg, batch_size, rnn_dim)
-        text_sumctx = text_rnn[1]   # (n_timesteps_trg, batch_size, text_ctx.shape[-1] (2000, 2*rnn_dim))
+        ##########
+        # Text GRU
+        ##########
+        t = get_new_layer('gru_cond')[1](self.tparams, emb,
+                                            prefix='decoder_text',
+                                            mask=None, context=text_ctx,
+                                            one_step=True,
+                                            init_state=init_states[:, 0],
+                                            profile=self.profile,
+                                            mode=self.func_mode)
+        text_h      = t[0]
+        text_sumctx = t[1]
 
-        # apply one step of conditional gru with attention
-        img_rnn = get_new_layer('gru_cond')[1](self.tparams, emb_trg, prefix='decoder_img',
-                                               context=img_ctx[:, None, :],
-                                               one_step=True,
-                                               init_state=img_init_state)
-        img_h       = img_rnn[0]    # (n_timesteps_trg, batch_size, rnn_dim)
-        img_sumctx  = img_rnn[1]    # (n_timesteps_trg, batch_size, img_ctx.shape[-1] (2000, 2*rnn_dim))
+        ###########
+        # Image GRU
+        ###########
+        i = get_new_layer('gru_cond')[1](self.tparams, emb, prefix='decoder_img',
+                                           context=img_ctx,
+                                           one_step=True,
+                                           init_state=init_states[:, 1],
+                                           profile=self.profile,
+                                           mode=self.func_mode)
+        img_h       = i[0]
+        img_sumctx  = i[1]
 
-        logit = emb_trg
-        logit += get_new_layer('ff')[1](self.tparams, (img_h + text_h), prefix='ff_logit_gru', activ='linear')
-        logit += get_new_layer('ff')[1](self.tparams, img_sumctx + text_sumctx, prefix='ff_logit_ctx', activ='linear')
+        ########
+        # Fusion
+        ########
+        logit       = emb
+        logit       += get_new_layer('ff')[1](self.tparams, text_sumctx + img_sumctx,
+                                              prefix='ff_logit_ctx', activ='linear')
+        logit       += get_new_layer('ff')[1](self.tparams, text_h + img_h,
+                                              prefix='ff_logit_gru', activ='linear')
+
         logit = tanh(logit)
 
         if self.dropout > 0:
@@ -351,14 +388,15 @@ class Model(BaseModel):
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
 
+        # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
+
+        # Sample from the softmax distribution
         next_probs = tensor.exp(next_log_probs)
         next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
 
-        # compile a function to do the whole thing above
-        # sampled word for the next target, next hidden state to be used
-        inputs = [y, text_ctx, img_ctx, text_init_state, img_init_state]
-        outs = [next_log_probs, next_word, text_h, img_h]
+        inputs = [y, text_ctx, img_ctx, init_states]
+        outs = [next_log_probs, next_word, tensor.stack([text_h, img_h], axis=1)]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50):
@@ -374,21 +412,15 @@ class Model(BaseModel):
         hyp_samples = [[]]
         hyp_scores  = np.zeros(1).astype(FLOAT)
 
-        text_next_state, img_next_state, text_ctx, img_ctx = self.f_init(*inputs)
+        text_ctx, img_ctx, next_states = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
-        next_w = np.array([-1], dtype=INT)
+        next_w = -1 * np.ones((1,)).astype(INT)
 
         for ii in xrange(maxlen):
-            # Get next states
-            # In the first iteration, we provide -1 and obtain the log_p's for the
-            # first word. In the following iterations tiled_ctx becomes a batch
-            # of duplicated left hypotheses. tiled_ctx is always the same except
-            # the 2nd dimension as the context vectors of the source sequence
-            # is always the same regardless of the decoding step.
-            inps = [next_w, text_ctx, img_ctx, text_next_state, img_next_state]
-            next_log_p, _, text_next_state, img_next_state = self.f_next(*inps)
-            next_state = [text_next_state, img_next_state]
+            tiled_text_ctx = np.tile(text_ctx, [live_beam, 1])
+
+            next_log_p, _, next_states = self.f_next(next_w, tiled_text_ctx, img_ctx, next_states)
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
@@ -414,7 +446,7 @@ class Model(BaseModel):
             for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
                 new_hyp_samples.append(hyp_samples[ti]+[wi])
                 new_hyp_scores[idx] = copy.copy(costs[idx])
-                new_hyp_states.append(copy.copy(next_state[ti]))
+                new_hyp_states.append(copy.copy(next_states[ti]))
 
             # check the finished samples
             new_live_beam = 0
@@ -442,7 +474,7 @@ class Model(BaseModel):
 
             # Take the idxs of each hyp's last word
             next_w = np.array([w[-1] for w in hyp_samples])
-            next_state = np.array(hyp_states)
+            next_states = np.array(hyp_states)
 
         # dump every remaining hypotheses
         if live_beam > 0:
