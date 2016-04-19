@@ -87,6 +87,9 @@ class WMTIterator(object):
         """Sets the batch size and recreates batch idxs."""
         self.batch_size = bs
 
+        if self.batch_size == 1:
+            self.__keys = [k for k in self.__keys if not k.endswith("_mask")]
+
         # Create batch idxs
         self.__batches = [xrange(i, min(i+self.batch_size, self.n_samples)) \
                             for i in range(0, self.n_samples, self.batch_size)]
