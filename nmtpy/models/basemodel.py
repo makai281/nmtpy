@@ -68,6 +68,13 @@ class BaseModel(object):
         else:
             self.use_dropout.set_value(float(val))
 
+    def get_nb_params(self):
+        """Returns the number of parameters of the model."""
+        total = 0
+        for p in self.initial_params.values():
+            total += p.size
+        return total
+
     def load_params(self, params):
         self.tparams = OrderedDict()
         for k,v in params.iteritems():
@@ -201,7 +208,6 @@ class BaseModel(object):
         final_score = np.array(final_score)
 
         return final_sample, final_score
-
 
     def generate_samples(self, batch_dict, n_samples):
         # Silently fail if generate_samples is not reimplemented
