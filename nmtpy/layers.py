@@ -126,20 +126,20 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     #   U     : shared U matrix
     #   Ux    : shared Ux matrix
     def _step(m_, x_, xx_, h_, U, Ux):
-        # [U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)]
-        preact = tensor.dot(h_, U) + x_
+        # sigmoid([U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)])
+        preact = sigmoid(tensor.dot(h_, U) + x_)
 
         # reset and update gates
-        r = sigmoid(_tensor_slice(preact, 0, dim))
-        u = sigmoid(_tensor_slice(preact, 1, dim))
+        r = _tensor_slice(preact, 0, dim)
+        u = _tensor_slice(preact, 1, dim)
 
         # NOTE: Is this correct or should be tensor.dot(h_ * r, Ux)
         # hidden state proposal (h_tilda_j eq. 8)
-        h = tanh((tensor.dot(h_, Ux)) * r + xx_)
+        h_cand = tanh(((tensor.dot(h_, Ux)) * r) + xx_)
 
         # leaky integrate and obtain next hidden state
         # NOTE: According to paper, this should be [h = u * h + (1 - u) * h_]
-        h = u * h_ + (1. - u) * h
+        h = u * h_ + (1. - u) * h_cand
         # What's the logic to invert the mask and add it after multiplying by h_?
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
@@ -169,28 +169,28 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
 # Conditional GRU layer with Attention
 def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
                         nin_nonlin=None, dim_nonlin=None):
-
-    # By default dimctx is 2*gru_dim, e.g. 2000
-    # nin: embedding_dim
-    # dim: gru_dim
+    # nin:      input dim (e.g. embedding dim in the case of NMT)
+    # dim:      gru_dim   (e.g. 1000)
+    # dimctx:   2*gru_dim (e.g. 2000)
 
     if nin_nonlin is None:
         nin_nonlin = nin
     if dim_nonlin is None:
         dim_nonlin = dim
 
+    # Below ones area also available in gru_layer
     params[_p(prefix, 'W')]             = np.concatenate([norm_weight(nin, dim, scale=scale),
                                                           norm_weight(nin, dim, scale=scale)], axis=1)
     params[_p(prefix, 'b')]             = np.zeros((2 * dim,)).astype(FLOAT)
 
     params[_p(prefix, 'U')]             = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
+
     params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
-
     params[_p(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin, scale=scale)
-
     params[_p(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype(FLOAT)
 
+    # Below ones are new to this layer
     params[_p(prefix, 'U_nl')]          = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
     params[_p(prefix, 'b_nl')]          = np.zeros((2 * dim_nonlin,)).astype(FLOAT)
@@ -200,16 +200,14 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
 
     # context to GRU
     params[_p(prefix, 'Wc')]            = norm_weight(dimctx, dim*2, scale=scale)
-
     params[_p(prefix, 'Wcx')]           = norm_weight(dimctx, dim, scale=scale)
 
     # attention: combined -> hidden
     params[_p(prefix, 'W_comb_att')]    = norm_weight(dim, dimctx, scale=scale)
 
     # attention: context -> hidden
-    params[_p(prefix, 'Wc_att')]        = norm_weight(dimctx, dimctx, scale=scale)
-
     # attention: hidden bias
+    params[_p(prefix, 'Wc_att')]        = norm_weight(dimctx, dimctx, scale=scale)
     params[_p(prefix, 'b_att')]         = np.zeros((dimctx,)).astype(FLOAT)
 
     # attention: This gives the alpha's
@@ -218,9 +216,8 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
 
     return params
 
-
-def gru_cond_layer(tparams, state_below, prefix='gru',
-                   mask=None, context=None, one_step=False,
+def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
+                   mask=None, one_step=False,
                    init_state=None, context_mask=None,
                    profile=False, mode=None):
     if one_step:
@@ -250,98 +247,124 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
     if init_state is None:
         init_state = tensor.alloc(0., n_samples, dim)
 
-    # A dot operation between 3D context and 2D weights Wc_att
-    # results in application of the non-linearity with
-    # the last dimension of the context (ctx_dim)
-    # Final shape remains the same pctx_.shape == context.shape
+    # These two dot products are same with gru_layer, refer to the equations.
+    # [W_r * X + b_r, W_z * X + b_z]
+    state_below_ = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + tparams[_p(prefix, 'b')]
+
+    # input to compute the hidden state proposal
+    # This is the [W*x]_j in the eq. 8 of the paper
+    state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) + tparams[_p(prefix, 'bx')]
 
     # Wc_att: dimctx -> dimctx
+    # Linearly transform the context to another space with same dimensionality
     pctx_ = tensor.dot(context, tparams[_p(prefix, 'Wc_att')]) + tparams[_p(prefix, 'b_att')]
 
-    # state_below is the target embeddings.
-    state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) +\
-        tparams[_p(prefix, 'bx')]
-    state_below_ = tensor.dot(state_below, tparams[_p(prefix, 'W')]) +\
-        tparams[_p(prefix, 'b')]
-
     # Step function for the recurrence/scan
-    # m_: mask, x_: state_below_, xx_: state_belowx (sequences)
-    # h_: init_state, ctx_: 0 or None, alpha_: 0 or None (outputs_info)
-    # pctx_: pctx_, cc_: context (non_sequences)
-    def _step(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_,
-              # The followings are the shared variables
-              U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
+    # Sequences
+    # ---------
+    # m_    : mask
+    # x_    : state_below_
+    # xx_   : state_belowx
+    # outputs_info
+    # ------------
+    # h_    : init_state,
+    # ctx_  : need to be defined as it's returned by _step
+    # alpha_: need to be defined as it's returned by _step
+    # non sequences
+    # -------------
+    # pctx_ : pctx_
+    # cc_   : context
+    # and all the shared weights and biases..
+    def _step(m_, x_, xx_,
+              h_, ctx_, alpha_,
+              pctx_, cc_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
+        ###########################
+        # Below same as gru_layer()
+        ###########################
+        preact = sigmoid(tensor.dot(h_, U) + x_)
 
-        # init_state X U + state_below_
-        preact1 = tensor.dot(h_, U) + x_
-        preact1 = sigmoid(preact1)
+        r = _tensor_slice(preact, 0, dim)
+        u = _tensor_slice(preact, 1, dim)
 
-        # Slice activations
-        r1 = _tensor_slice(preact1, 0, dim)
-        u1 = _tensor_slice(preact1, 1, dim)
+        h_cand = tanh((tensor.dot(h_, Ux) * r) + xx_)
 
-        # (init_state X Ux) * r1 + state_belowx
-        preactx1 = (tensor.dot(h_, Ux) * r1) + xx_
-        h1 = tanh(preactx1)
-
-        # h1 is update1 * h_ + (1 - update1) * h1
-        # Leaky integration
-        h1 = u1 * h_ + (1. - u1) * h1
-        # Multiply h1 by the mask
+        h1 = u * h_ + (1. - u) * h_cand
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
+        # Here h1 is returned in the classical GRU block, see gru_layer()
 
         ###########
         # Attention
         ###########
         # h1 X W_comb_att
+        # W_comb_att: dim -> dimctx
+        # pstate_ should be 2D as we're working with unrolled timesteps
         pstate_ = tensor.dot(h1, W_comb_att)
-        # Accumulate in pctx__
-        pctx__ = pctx_ + pstate_[None, :, :]
 
-        # Apply tanh over pctx__
-        pctx__ = tanh(pctx__)
+        # Accumulate in pctx__ and apply tanh()
+        # This becomes the projected context + the current hidden state
+        # of the decoder, e.g. this is the information accumulating
+        # into the returned original contexts with the knowledge of target
+        # sentence decoding.
+        pctx__ = tanh(pctx_ + pstate_[None, :, :])
 
         # Affine transformation for alpha = (pctx__ X U_att) + c_att
+        # We're now down to scalar alpha's for each accumulated
+        # context (0th dim) in the pctx__
+        # alpha should be n_timesteps, 1, 1
         alpha = tensor.dot(pctx__, U_att) + c_att
 
+        # Drop the last dimension, e.g. (n_timesteps, 1)
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
 
         # Exponentiate alpha
         alpha = tensor.exp(alpha)
 
-        # If there is a context mask, multiply with it
-        # to cancel unnecessary steps
+        # If there is a context mask, multiply with it to cancel unnecessary steps
         if context_mask:
             alpha = alpha * context_mask
 
         # Normalize so that the sum makes 1
         alpha = alpha / (alpha.sum(0, keepdims=True) + 1e-6)
 
-        # Compute the current context ctx_
-        # which is cc_ weighted by alpha
+        # Compute the current context ctx_ as the alpha-weighted sum of
+        # the initial contexts: context
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)
 
+        ###########################################
+        # ctx_ and alpha computations are completed
+        ###########################################
+
+        ###########################################
+        # The below code looks like a new GRU block
+        ###########################################
         # Affine transformation: h1 X U_nl + b_nl
-        preact2 = tensor.dot(h1, U_nl) + b_nl
-        # Add (context X Wc) over it
-        preact2 += tensor.dot(ctx_, Wc)
+        # U_nl, b_nl: Stacked dim*2
+        preact = tensor.dot(h1, U_nl) + b_nl
+
+        # Transform the weighted context sum with Wc
+        # and add it to preact
+        # Wc: dimctx -> Stacked dim*2
+        preact += tensor.dot(ctx_, Wc)
+
         # Apply sigmoid nonlinearity
-        preact2 = sigmoid(preact2)
+        preact = sigmoid(preact2)
 
-        # Slice activations
-        r2 = _tensor_slice(preact2, 0, dim)
-        u2 = _tensor_slice(preact2, 1, dim)
+        # Slice activations: New gates r2 and u2
+        r2 = _tensor_slice(preact, 0, dim)
+        u2 = _tensor_slice(preact, 1, dim)
 
-        preactx2 = tensor.dot(h1, Ux_nl)+bx_nl
-        preactx2 *= r2
-        preactx2 += tensor.dot(ctx_, Wcx)
-        h2 = tanh(preactx2)
+        preactx = (tensor.dot(h1, Ux_nl) + bx_nl) * r2
+        preactx += tensor.dot(ctx_, Wcx)
 
-        # Same leaky integration as above now for h2
+        # Candidate hidden
+        h2 = tanh(preactx)
+
+        # Leaky integration between the new h2 and the
+        # old h1 computed in line 292
         h2 = u2 * h1 + (1. - u2) * h2
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
 
-        return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
+        return h2, ctx_, alpha.T
 
     seqs = [mask, state_below_, state_belowx]
 
@@ -361,8 +384,8 @@ def gru_cond_layer(tparams, state_below, prefix='gru',
         rval = _step(*(seqs + [init_state, None, None, pctx_, context] + shared_vars))
     else:
         outputs_info=[init_state,
-                      tensor.alloc(0., n_samples, context.shape[2]), # hidden dim
-                      tensor.alloc(0., n_samples, context.shape[0])] # n_timesteps
+                      tensor.alloc(0., n_samples, context.shape[2]), # ctxdim       (ctx_)
+                      tensor.alloc(0., n_samples, context.shape[0])] # n_timesteps  (alpha)
 
         rval, updates = theano.scan(_step,
                                     sequences=seqs,
