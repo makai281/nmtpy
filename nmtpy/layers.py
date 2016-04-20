@@ -13,6 +13,38 @@ sigmoid = tensor.nnet.sigmoid
 tanh = tensor.tanh
 relu = tensor.nnet.relu
 
+##################
+# GRU layer step()
+##################
+# sequences:
+#   m_    : mask
+#   x_    : state_below_
+#   xx_   : state_belowx
+# outputs-info:
+#   h_    : init_states
+# non-seqs:
+#   U     : shared U matrix
+#   Ux    : shared Ux matrix
+def gru_step(m_, x_, xx_, h_, U, Ux):
+    # sigmoid([U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)])
+    preact = sigmoid(tensor.dot(h_, U) + x_)
+
+    # reset and update gates
+    r = _tensor_slice(preact, 0, dim)
+    u = _tensor_slice(preact, 1, dim)
+
+    # NOTE: Is this correct or should be tensor.dot(h_ * r, Ux) ?
+    # hidden state proposal (h_tilda_j eq. 8)
+    h_tilda = tanh(((tensor.dot(h_, Ux)) * r) + xx_)
+
+    # leaky integrate and obtain next hidden state
+    # According to paper, this should be [h = u * h_tilda + (1 - u) * h_]
+    h = u * h_tilda + (1. - u) * h_
+    # What's the logic to invert the mask and add it after multiplying by h_?
+    h = m_[:, None] * h + (1. - m_)[:, None] * h_
+
+    return h
+
 def _tensor_slice(_x, n, dim):
     if _x.ndim == 3:
         return _x[:, :, n*dim:(n+1)*dim]
@@ -115,37 +147,6 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     # This is the [W*x]_j in the eq. 8 of the paper
     state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) + tparams[_p(prefix, 'bx')]
 
-    # step function to be used by scan
-    # sequences:
-    #   m_    : mask
-    #   x_    : state_below_
-    #   xx_   : state_belowx
-    # outputs-info:
-    #   h_    : init_states
-    # non-seqs:
-    #   U     : shared U matrix
-    #   Ux    : shared Ux matrix
-    def _step(m_, x_, xx_, h_, U, Ux):
-        # sigmoid([U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)])
-        preact = sigmoid(tensor.dot(h_, U) + x_)
-
-        # reset and update gates
-        r = _tensor_slice(preact, 0, dim)
-        u = _tensor_slice(preact, 1, dim)
-
-        # NOTE: Is this correct or should be tensor.dot(h_ * r, Ux)
-        # hidden state proposal (h_tilda_j eq. 8)
-        h_cand = tanh(((tensor.dot(h_, Ux)) * r) + xx_)
-
-        # leaky integrate and obtain next hidden state
-        # NOTE: According to paper, this should be [h = u * h + (1 - u) * h_]
-        h = u * h_ + (1. - u) * h_cand
-        # What's the logic to invert the mask and add it after multiplying by h_?
-        h = m_[:, None] * h + (1. - m_)[:, None] * h_
-
-        return h
-    ##############################################################
-
     # prepare scan arguments
     seqs = [mask, state_below_, state_belowx]
     init_states = [tensor.alloc(0., n_samples, dim)]
@@ -153,7 +154,7 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     shared_vars = [tparams[_p(prefix, 'U')],
                    tparams[_p(prefix, 'Ux')]]
 
-    rval, updates = theano.scan(_step,
+    rval, updates = theano.scan(gru_step,
                                 sequences=seqs,
                                 outputs_info=init_states,
                                 non_sequences=shared_vars,
@@ -275,22 +276,13 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
     # pctx_ : pctx_
     # cc_   : context
     # and all the shared weights and biases..
+
     def _step(m_, x_, xx_,
               h_, ctx_, alpha_,
               pctx_, cc_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
-        ###########################
-        # Below same as gru_layer()
-        ###########################
-        preact = sigmoid(tensor.dot(h_, U) + x_)
 
-        r = _tensor_slice(preact, 0, dim)
-        u = _tensor_slice(preact, 1, dim)
-
-        h_cand = tanh((tensor.dot(h_, Ux) * r) + xx_)
-
-        h1 = u * h_ + (1. - u) * h_cand
-        h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
-        # Here h1 is returned in the classical GRU block, see gru_layer()
+        # Do a step of classical GRU
+        h1 = gru_step(m_, x_, xx_, h_, U, Ux)
 
         ###########
         # Attention
@@ -334,9 +326,9 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         # ctx_ and alpha computations are completed
         ###########################################
 
-        ###########################################
-        # The below code looks like a new GRU block
-        ###########################################
+        ####################################
+        # The below code is another GRU cell
+        ####################################
         # Affine transformation: h1 X U_nl + b_nl
         # U_nl, b_nl: Stacked dim*2
         preact = tensor.dot(h1, U_nl) + b_nl
@@ -347,7 +339,7 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         preact += tensor.dot(ctx_, Wc)
 
         # Apply sigmoid nonlinearity
-        preact = sigmoid(preact2)
+        preact = sigmoid(preact)
 
         # Slice activations: New gates r2 and u2
         r2 = _tensor_slice(preact, 0, dim)
@@ -357,11 +349,11 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         preactx += tensor.dot(ctx_, Wcx)
 
         # Candidate hidden
-        h2 = tanh(preactx)
+        h2_tilda = tanh(preactx)
 
         # Leaky integration between the new h2 and the
-        # old h1 computed in line 292
-        h2 = u2 * h1 + (1. - u2) * h2
+        # old h1 computed in line 285
+        h2 = u2 * h2_tilda + (1. - u2) * h1
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
 
         return h2, ctx_, alpha.T
