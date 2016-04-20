@@ -119,7 +119,7 @@ class Translator(object):
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.model.trg_dict.iteritems()])
 
-        if isinstance(self.ref_idict[0], unicode):
+        if isinstance(self.ref_idict[2], unicode):
             self.utf8 = True
 
         # If forced and we got a src file and also ref file(s)
