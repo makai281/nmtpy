@@ -187,8 +187,8 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
     params[_p(prefix, 'U')]             = np.concatenate([ortho_weight(dim_nonlin),
                                                           ortho_weight(dim_nonlin)], axis=1)
 
-    params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
     params[_p(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin, scale=scale)
+    params[_p(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
     params[_p(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype(FLOAT)
 
     # Below ones are new to this layer
