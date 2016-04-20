@@ -8,10 +8,10 @@ from .nmtutils import _p
 from .typedef import *
 
 # Shorthands for activations
-linear = lambda x: x
+linear  = lambda x: x
 sigmoid = tensor.nnet.sigmoid
-tanh = tensor.tanh
-relu = tensor.nnet.relu
+tanh    = tensor.tanh
+relu    = tensor.nnet.relu
 
 ##################
 # GRU layer step()
@@ -166,8 +166,9 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     rval = [rval]
     return rval
 
-
+######################################
 # Conditional GRU layer with Attention
+######################################
 def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
                         nin_nonlin=None, dim_nonlin=None):
     # nin:      input dim (e.g. embedding dim in the case of NMT)
@@ -494,7 +495,9 @@ def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step
                                     n_steps=nsteps, profile=False)
     return rval
 
+#######################################
 # Conditional LSTM layer with Attention
+#######################################
 def param_init_lstm_cond(params, options, nin, dim, dimctx, scale=0.01, prefix='lstm_cond'):
     # input to LSTM, similar to the above, we stack the matrices for compactness, do one
     # dot product, and use the slice function below to get the activations for each "gate"
