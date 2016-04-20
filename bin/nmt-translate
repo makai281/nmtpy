@@ -90,6 +90,7 @@ class Translator(object):
         self.unnorm = unnorm
         self.seed = seed
         self.mode = mode
+        self.utf8 = False
         self.filters = []
 
         # Create worker process pool
@@ -117,6 +118,9 @@ class Translator(object):
 
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.model.trg_dict.iteritems()])
+
+        if isinstance(self.ref_idict[0], unicode):
+            self.utf8 = True
 
         # If forced and we got a src file and also ref file(s)
         # do the forced decoding
@@ -237,14 +241,17 @@ class Translator(object):
                 self.trans[idx][hidx] = hyp
 
     def write_hyps(self, filename):
+        def __encode(s):
+            return s.encode('utf-8') if self.utf8 else s
+
         with open(filename, 'w') as f:
             if self.mode == "forced" or self.nbest > 1:
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
                     for t, s in zip(tr, sc):
-                        f.write("%d ||| %s ||| %.6f\n" % (idx, t, s))
+                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, t, s)))
             else:
                 hyps = "\n".join([s[0] for s in self.trans]) + "\n"
-                f.write(hyps.encode('utf-8'))
+                f.write(__encode(hyps))
 
     def compute_score(self, hyp_file, scorers):
         results = {}
