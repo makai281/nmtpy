@@ -166,11 +166,7 @@ class BaseModel(object):
 
         inputs = input_dict.values()
 
-        # Make it work with multiple inputs as well
-        if len(inputs) == 1:
-            next_state, ctx0 = self.f_init(inputs[0])
-        else:
-            next_state, ctx0 = self.f_init(*inputs)
+        next_state, ctx0 = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_word = np.array([-1], dtype=INT)
