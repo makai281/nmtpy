@@ -90,16 +90,16 @@ class Model(BaseModel):
         # encoder: bidirectional RNN
         #########
         # Forward encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru')[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
         # Backwards encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru')[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
 
         # Context is the concatenation of forward and backwards encoder
 
         # init_state, init_cell
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
         # decoder
-        params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
@@ -132,14 +132,14 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask,
-                                               profile=self.profile, mode=self.func_mode)
+        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask,
+                                       profile=self.profile, mode=self.func_mode)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
-                                                profile=self.profile, mode=self.func_mode)
+        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
+                                        profile=self.profile, mode=self.func_mode)
 
         # context will be the concatenation of forward and backward rnns
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -161,14 +161,14 @@ class Model(BaseModel):
         emb = emb_shifted
 
         # decoder - pass through the decoder conditional gru with attention
-        proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                                    prefix='decoder',
-                                                    mask=y_mask, context=ctx,
-                                                    context_mask=x_mask,
-                                                    one_step=False,
-                                                    init_state=init_state,
-                                                    profile=self.profile,
-                                                    mode=self.func_mode)
+        proj = get_new_layer('gru_cond')[1](self.tparams, emb,
+                                            prefix='decoder',
+                                            mask=y_mask, context=ctx,
+                                            context_mask=x_mask,
+                                            one_step=False,
+                                            init_state=init_state,
+                                            profile=self.profile,
+                                            mode=self.func_mode)
         # hidden states of the decoder gru
         proj_h = proj[0]
 
@@ -236,8 +236,8 @@ class Model(BaseModel):
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
 
         # encoder
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder')
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r')
+        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder')
+        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r')
 
         # concatenate forward and backward rnn hidden states
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -262,11 +262,11 @@ class Model(BaseModel):
         # apply one step of conditional gru with attention
         # get the next hidden states
         # get the weighted averages of contexts for this target word y
-        r = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                            prefix='decoder',
-                                            mask=None, context=ctx,
-                                            one_step=True,
-                                            init_state=init_state)
+        r = get_new_layer('gru_cond')[1](self.tparams, emb,
+                                         prefix='decoder',
+                                         mask=None, context=ctx,
+                                         one_step=True,
+                                         init_state=init_state)
 
         next_state = r[0]
         ctxs = r[1]
