@@ -35,6 +35,19 @@ def fix_model_options(d):
 
     return d
 
+def readable_size(n):
+    sizes = ['K', 'M', 'G']
+    fmt = ''
+    size = n
+    for i,s in enumerate(sizes):
+        nn = n / (1000.**(i+1))
+        if nn >= 1:
+            size = nn
+            fmt = sizes[i]
+        else:
+            break
+    return '%.1f%s' % (size, fmt)
+
 def get_temp_file(suffix="", name=None, delete=False):
     """Creates a temporary file under /tmp. If name is not None
     it will be used as the temporary file's name."""

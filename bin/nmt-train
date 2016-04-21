@@ -229,6 +229,7 @@ if __name__ == '__main__':
     log.info("Initializing parameters")
     model.init_params()
     model.init_shared_variables()
+    log.info("Number of parameters: %s" % model.get_nb_params())
 
     # Build the model
     log.info("Building model")

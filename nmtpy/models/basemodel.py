@@ -15,8 +15,8 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
-from ..sysutils import get_valid_evaluation, get_temp_file
 from ..nmtutils import unzip, itemlist
+from ..sysutils import *
 from ..typedef import *
 
 class BaseModel(object):
@@ -73,7 +73,7 @@ class BaseModel(object):
         total = 0
         for p in self.initial_params.values():
             total += p.size
-        return total
+        return readable_size(total)
 
     def load_params(self, params):
         self.tparams = OrderedDict()
