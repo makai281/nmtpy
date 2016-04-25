@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(
     description="""This takes two text files and a path the references (source, references),
      computes bleu, meteor, rouge and cider metrics""", formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument("-p", "--pretty", action='store_true', help='Dump results in a pretty way.')
+parser.add_argument("-w", "--write", action='store_true', help='Create a score file containing the results.')
 parser.add_argument("-l", "--language", default='de', help='Sentence language (default: de)')
 parser.add_argument("hypothesis", type=argparse.FileType('r'),
                 help="The hypothesis files")
@@ -63,6 +64,10 @@ if __name__ == '__main__':
     print "Language: %s" % args.language
     ref, hypo = load_textfiles(args.references, args.hypothesis)
     scores = score(ref, hypo, args.language)
+    if args.write:
+        with open("%s.score" % args.hypothesis.name, 'w') as f:
+            f.write("%s\n" % scores)
+
     if args.pretty:
         for metric in sorted(scores.keys()):
             print "%s: %3.5f" % (metric, scores[metric]),
