@@ -97,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--minlen'    , help='Minimum sentence length', default=3, type=int)
     parser.add_argument('-M', '--maxlen'    , help='Maximum sentence length', default=50, type=int)
     parser.add_argument('-r', '--ratio'     , help='src length to trg length min ratio', default=3, type=int)
-    parser.add_argument('-d', '--minvocab'  , help='Consider words occuring at least this number', default=5, type=int)
+    parser.add_argument('-d', '--minvocab'  , help='Consider words occuring at least this number', default=1, type=int)
     parser.add_argument('-o', '--output'    , help='Output directory.', default="./data")
 
     parser.add_argument('-i', '--imagelist'  , help='Image list file.', required=True)
