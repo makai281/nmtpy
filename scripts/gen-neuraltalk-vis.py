@@ -7,17 +7,23 @@ from itertools import izip
 if __name__ == '__main__':
     try:
         imglist = sys.argv[1]
-        hyps = sys.argv[2]
+        srcfile = sys.argv[2]
+        hypfile = sys.argv[3]
     except Exception as e:
-        print "Usage: %s <image list> <hyps1> <hyps2> .." % sys.argv[0]
+        print "Usage: %s <image list> <src file> <hyps1> <hyps2> .." % sys.argv[0]
         sys.exit(1)
 
     with open(imglist) as f:
         imglist = f.read().strip().split("\n")
 
+    with open(srcfile) as f:
+        src_sents = f.read().strip().split("\n")
+
+    assert len(src_sents) == len(imglist)
+
     metadata = []
     hyps = []
-    for fname in sys.argv[2:]:
+    for fname in sys.argv[3:]:
         print "Reading %s" % fname
         sysname = os.path.basename(fname).rsplit(".", 2)[0]
         score = open('%s.score' % fname).read().strip()
@@ -38,8 +44,8 @@ if __name__ == '__main__':
 
     # list of dicts, each element is {'image_id': somenumber, 'caption': list of captions}
     dump = []
-    for hyp, img in izip(hyps, imglist):
-        dump.append({'image_id' : img, 'sents' : hyp})
+    for ssent, hyp, img in izip(src_sents, hyps, imglist):
+        dump.append({'image_id' : img, 'sents' : hyp, 'src' : ssent})
 
     final = {'captions' : dump, 'metadata' : metadata}
 
