@@ -111,10 +111,13 @@ class WMTIterator(object):
         if self.img_feats_file:
             self.img_feats = np.load(self.img_feats_file)
 
-            # Transpose and fix dimensionality of convolutional patches
-            self.img_feats.shape = (self.img_feats.shape[0], 512, 14, 14)
-            self.img_feats.shape = (self.img_feats.shape[0], 512, 196)
-            self.img_feats = self.img_feats.transpose(0, 2, 1)
+            # NOTE: Hacky check to distinguish btw resnet and VGG
+            if self.img_feats.ndim == 2:
+                # Transpose and fix dimensionality of convolutional patches
+                # for VGG
+                self.img_feats.shape = (self.img_feats.shape[0], 512, 14, 14)
+                self.img_feats.shape = (self.img_feats.shape[0], 512, 196)
+                self.img_feats = self.img_feats.transpose(0, 2, 1)
 
         # Load the samples
         with open(self.pkl_file, 'rb') as f:
