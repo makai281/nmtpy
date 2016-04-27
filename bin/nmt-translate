@@ -215,8 +215,20 @@ class Translator(object):
         t = time.time()
         for i in xrange(self.n_sentences):
             resp = read_queue.get()
-            self.trans[resp[0]] = resp[1]
-            self.scores[resp[0]] = resp[2]
+            idx = resp[0]
+            self.trans[idx] = [resp[1]] if self.nbest <= 1 else resp[1]
+            self.scores[idx] = resp[2]
+
+            # Convert idxs to words
+            hyps = []
+            for hyp in self.trans[idx]:
+                hyp = idx_to_sent(self.ref_idict, hyp)
+                for filt in self.filters:
+                    hyp = filt(hyp)
+                hyps.append(hyp)
+            self.trans[idx] = hyps
+
+            # Print progress
             if (i+1) % 100 == 0:
                 t = time.time() - t
                 log.info("%d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, t))
@@ -228,17 +240,6 @@ class Translator(object):
             self.processes[idx].terminate()
             cleanup.unregister_proc(self.processes[idx].pid)
 
-        # Convert idxs to words
-        for idx in xrange(self.n_sentences):
-            # hyps can be a list or a list of lists, manage this
-            if self.nbest <= 1:
-                self.trans[idx] = [self.trans[idx]]
-
-            for hidx, hyp in enumerate(self.trans[idx]):
-                hyp_sent = idx_to_sent(self.ref_idict, hyp)
-                for filt in self.filters:
-                    hyp_sent = filt(hyp_sent)
-                self.trans[idx][hidx] = hyp_sent
 
     def write_hyps(self, filename):
         def __encode(s):
