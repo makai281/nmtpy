@@ -15,7 +15,7 @@ class Meteor:
 
     def __init__(self, language):
         self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, \
-                '-', '-', '-stdio', '-l', language, '-norm']
+                '-', '-', '-stdio', '-l', language]
         self.meteor_p = subprocess.Popen(self.meteor_cmd, \
                 cwd=os.path.dirname(os.path.abspath(__file__)), \
                 stdin=subprocess.PIPE, \
