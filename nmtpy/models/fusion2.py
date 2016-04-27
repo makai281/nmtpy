@@ -38,9 +38,6 @@ class Model(BaseModel):
         self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
 
-        # Convolutional feature dim
-        self.n_convfeats = 512
-
         # Collect options
         self.options = dict(self.__dict__)
 
@@ -96,7 +93,7 @@ class Model(BaseModel):
         params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
 
         # convfeats (512) to ctx dim (2000) for image modality
-        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.n_convfeats, nout=self.ctx_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.conv_dim, nout=self.ctx_dim, scale=self.weight_init)
 
         #############################################
         # Source sentence encoder: bidirectional GRU
