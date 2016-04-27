@@ -4,8 +4,6 @@ import cPickle
 from collections import OrderedDict, Counter
 from itertools import izip_longest, izip
 
-# NOTE: Not ready for usage
-
 import numpy as np
 
 import os
@@ -19,6 +17,7 @@ import argparse
 # [ssplit, tsplit, imgid, imgname, swords, twords]
 
 puncs = list(string.punctuation)
+puncs += ["..", "...", "&amp;", "&apos;", "&gt;", "&lt;", "&quot;"]
 
 _ = os.path.expanduser
 
