@@ -32,7 +32,9 @@ class Bleu:
             assert(type(hypo) is list)
             assert(len(hypo) == 1)
             assert(type(ref) is list)
-            assert(len(ref) > 1)
+
+            if len(ref) == 1:
+                return None, None
 
             bleu_scorer += (hypo[0], ref)
 
