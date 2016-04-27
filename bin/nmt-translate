@@ -230,25 +230,30 @@ class Translator(object):
 
         # Convert idxs to words
         for idx in xrange(self.n_sentences):
-            # Can be a list or a list of lists if nbest > r
-            if not isinstance(self.trans[idx][0], list):
+            # hyps can be a list or a list of lists, manage this
+            if self.nbest <= 1:
                 self.trans[idx] = [self.trans[idx]]
 
             for hidx, hyp in enumerate(self.trans[idx]):
-                hyp = idx_to_sent(self.ref_idict, hyp)
+                hyp_sent = idx_to_sent(self.ref_idict, hyp)
                 for filt in self.filters:
-                    hyp = filt(hyp)
-                self.trans[idx][hidx] = hyp
+                    hyp_sent = filt(hyp_sent)
+                self.trans[idx][hidx] = hyp_sent
 
     def write_hyps(self, filename):
         def __encode(s):
             return s.encode('utf-8') if self.utf8 else s
 
         with open(filename, 'w') as f:
-            if self.mode == "forced" or self.nbest > 1:
+            if self.mode == "forced":
+                # We have a single hypothesis and a score for each sentence
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
-                    for t, s in zip(tr, sc):
-                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, t, s)))
+                    f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc)))
+            elif self.nbest > 1:
+                # We have a n hypotheses and n scores for each sentence
+                for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
+                    for tr, sc in zip(trs, scs):
+                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr, sc)))
             else:
                 hyps = "\n".join([s[0] for s in self.trans]) + "\n"
                 f.write(__encode(hyps))
