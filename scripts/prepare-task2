@@ -105,6 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('-T', '--traintrg'   , nargs='+', help="Training target sentence file(s).", required=True)
     parser.add_argument('-v', '--validsrc'   , nargs='+', help="Validation source sentence file(s).", required=True)
     parser.add_argument('-V', '--validtrg'   , nargs='+', help="Validation target sentence file(s).", required=True)
+    parser.add_argument('-e', '--testsrc'    , nargs='+', help="Test source sentence file(s).", required=False)
 
     args = parser.parse_args()
 
@@ -122,6 +123,9 @@ if __name__ == '__main__':
     train_trg_files = sorted(args.traintrg)
     valid_src_files = sorted(args.validsrc)
     valid_trg_files = sorted(args.validtrg)
+    test_src_files  = []
+    if args.testsrc:
+        test_src_files = sorted(args.testsrc)
 
     srclang = train_src_files[0].split(".")[-1]
     trglang = train_trg_files[0].split(".")[-1]
@@ -134,8 +138,10 @@ if __name__ == '__main__':
     print "Min word freq for vocab: %d" % args.minvocab
     print "Found %d training files." % len(train_src_files)
     print "Found %d validation files." % len(valid_src_files)
+    if len(test_src_files) > 0:
+        print "Found %d test files." % len(test_src_files)
     print "Source language: %s" % srclang
-    print "Source language: %s" % trglang
+    print "Target language: %s" % trglang
 
     assert len(train_src_files) == len(train_trg_files)
     assert len(valid_src_files) == len(valid_trg_files)
@@ -143,15 +149,11 @@ if __name__ == '__main__':
     # Number of input sentence files
     n_splits = len(train_src_files)
 
-    # Specific to Flickr30k
-    n_train = 29000
-    n_valid = 1014
-    n_test  = 1000
-
     train_src_sents = []
     train_trg_sents = []
     valid_src_sents = []
     valid_trg_sents = []
+    test_src_sents  = []
 
     # Read all sentences once, do lowercasing and strip punctuations if requested
     for f in train_src_files:
@@ -170,6 +172,10 @@ if __name__ == '__main__':
         print f
         valid_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
 
+    for f in test_src_files:
+        print f
+        test_src_sents.append(process_file(f, args.lowercase, args.strippunc))
+
     if args.lowercase or args.strippunc:
         print "Rewriting processed validation sentences"
         # Rewrite validation files as they are now processed
@@ -182,6 +188,7 @@ if __name__ == '__main__':
             with open(os.path.join(args.output, 'valid.%d.tok%s.%s' % (idx, suffix, srclang)), 'wb') as f:
                 for sent in split:
                     f.write(" ".join(sent).encode('utf-8') + '\n')
+
         for idx, split in enumerate(valid_trg_sents, 1):
             with open(os.path.join(args.output, 'valid.%d.tok%s.%s' % (idx, suffix, trglang)), 'wb') as f:
                 for sent in split:
@@ -189,12 +196,21 @@ if __name__ == '__main__':
 
     tr_sum = sum([len(spl) for spl in train_src_sents])
     vl_sum = sum([len(spl) for spl in valid_src_sents])
+    ts_sum = sum([len(spl) for spl in test_src_sents])
     print "Total number of training sentences: %d" % (tr_sum)
     print "Total number of validation sentences: %d" % (vl_sum)
+    print "Total number of test sentences: %d" % (ts_sum)
 
-    sentences = {'train' : [], 'valid' : []}
-    splits = {'train' : [train_src_sents, train_trg_sents, 0],
-              'valid' : [valid_src_sents, valid_trg_sents, n_train],
+    # Specific to Flickr30k
+    n_train = 29000
+    n_valid = 1014
+    n_test  = 1000
+
+    sentences = {'train' : [], 'valid' : [], 'test' : []}
+    splits = {
+                'train' : [train_src_sents, train_trg_sents, 0],
+                'valid' : [valid_src_sents, valid_trg_sents, n_train],
+                'test'  : [test_src_sents,  None, n_train + n_valid],
              }
 
     for split in ['train', 'valid']:
@@ -211,9 +227,21 @@ if __name__ == '__main__':
             print
 
         print "Final %s pair count: %d" % (split, len(sentences[split]))
-        print "Dumping pkl file"
-        with open(os.path.join(args.output, 'flickr_30k_align.%s.pkl' % split), 'wb') as f:
-            cPickle.dump(sentences[split], f, -1)
+
+    if len(test_src_sents) > 0:
+        # We also have test sentences
+        print "Processing test splits"
+        split = "test"
+        src_sents, trg_sents, img_offset = splits[split]
+        for sidx, ssentsplit in enumerate(src_sents):
+            for idx, swords in enumerate(ssentsplit):
+                sentences[split].append([sidx, None, idx, imgs[img_offset+idx], swords, None])
+
+    for split in ['train', 'valid', 'test']:
+        if len(sentences[split]) > 0:
+            print "Dumping %s pkl file" % split
+            with open(os.path.join(args.output, 'flickr_30k_align.%s.pkl' % split), 'wb') as f:
+                cPickle.dump(sentences[split], f, -1)
 
     # Create the dictionary with nmt-build-dict afterwards
     create_dictionaries(sentences['train'], args.output, args.minvocab)
