@@ -60,7 +60,7 @@ class WMTIterator(object):
 
         # 'all'     : Use everything available in the pkl file (default)
         # 'single'  : Take only the first pair e.g., train0.en->train0.de
-        # 'pairs'   : Take only one-to-one apirs e.g., train_i.en->train_i.de
+        # 'pairs'   : Take only one-to-one pairs e.g., train_i.en->train_i.de
         self.mode = mode
 
         # keys define what to return during iteration

@@ -58,7 +58,7 @@ class Model(BaseModel):
                 img_feats_file=self.data['train_img'],
                 trg_dict=self.trg_dict, src_dict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                mode='pairs', shuffle=True)
+                mode=self.options.get('data_mode', 'pairs'), shuffle=True)
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False):
