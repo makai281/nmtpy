@@ -41,7 +41,7 @@ TRAIN_DEFAULTS = {
         'seed':               1234,           # RNG seed
         'suffix':             "",             # Model suffix
         'save_iter':          False,          # Save each best valid weights to separate file
-        'restore':            False,
+        'restore':            False,          # NOTE: NOT FUNCTIONAL RIGHT NOW
         'device_id':          'auto',         #
         'patience':           10,             # Early stopping patience
         'max_epochs':         100,            # Max number of epochs to train
@@ -49,7 +49,6 @@ TRAIN_DEFAULTS = {
         'valid_start':        1,              # Epoch which validation will start
         'valid_freq':         0,              # 0: End of epochs
         'valid_metric':       'bleu',         # bleu, px, meteor
-        #'valid_freq_decay':   10,             # Halve validation frequency after epoch 10 for once if the perf doesn't improve
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
         'njobs':              8,              # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
@@ -259,22 +258,21 @@ if __name__ == '__main__':
     early_stop      = False
     uidx            = 0
     bad_counter     = 0
-    valid_halved    = False
+    cur_lrate       = args.lrate
     valid_losses    = []
     metric_history  = []
     metric_results  = []
-    cur_lrate       = args.lrate
 
-    # Helper method for summary
+    # Helper method for validation summary
     def dump_val_summary():
         if len(metric_history) > 0:
             best_metric_idx = np.argmax(np.array(metric_history))
             best_valid = metric_results[best_metric_idx]
             for _, v in sorted(best_valid.iteritems()):
-                log.info("[Validation %3d] Best %s" % (best_metric_idx + 1, v[0]))
+                log.info("[Validation %3d] Current Best %s" % (best_metric_idx + 1, v[0]))
         else:
             best_valid_idx = np.argmin(np.array(valid_losses))
-            log.info('[Validation %3d] Best loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
+            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
 
     ################
     # Training loop
@@ -374,17 +372,13 @@ if __name__ == '__main__':
                     # We passed the limit for checking patience
                     is_bad = False
                     if args.valid_metric == 'px':
-                        if valid_losses[-1] >= np.array(valid_losses)[-args.patience:].min():
+                        if valid_losses[-1] >= np.array(valid_losses)[:-args.patience].min():
                             is_bad = True
                     else:
-                        if metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
+                        if metric_history[-1] <= np.array(metric_history)[:-args.patience].max():
                             is_bad = True
 
                     if is_bad:
-                        #if eidx >= args.valid_freq_decay and not valid_halved and bad_counter == 0:
-                        #    args.valid_freq = int(args.valid_freq / 2)
-                        #    valid_halved = True
-                        #    log.info("Validation frequency halved: %d" % args.valid_freq)
                         bad_counter += 1
                         log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
 
