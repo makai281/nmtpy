@@ -153,16 +153,6 @@ class WMTIterator(object):
 
         self.set_batch_size(self.batch_size)
 
-    def set_dropwords(self, state, p_src=0.2, p_trg=0.2):
-        # Replace words stochastically with <unk> to allow
-        # learning <unk>'s representation even with full vocabulary
-        # May be meaningful after fine tuning and maybe disabling
-        # backprop for every word vector other than <unk>
-        self.do_dropwords = state
-        if self.do_dropwords:
-            self.p_src = p_src
-            self.p_trg = p_trg
-
     def next(self):
         try:
             # Get batch idxs
