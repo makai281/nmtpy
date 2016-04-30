@@ -96,7 +96,7 @@ class Translator(object):
         self.tparams = self.model.load_params(np.load(self.model_file))
         self.model.set_dropout(False)
 
-    def set_model_options(self, model_options, model_file):
+    def set_model_options(self, model_options, model_file, valid_mode):
         self.model_options = model_options
         self.model_file = model_file
 
@@ -130,36 +130,38 @@ class Translator(object):
                                         trg_name='y_true')
             self.iterator.prepare_batches()
 
-        # else if we have at least a source file, translate it
-        elif self.src_file:
-            # Let's do a hack here and pretend that the given
-            # file is validation data provided to the model :)
-            self.model.data['valid_src'] = self.src_file
-            if self.ref_files:
-                self.model.data['valid_trg'] = self.ref_files
-
-            self.model.load_valid_data(from_translate=True)
-            self.iterator  = self.model.valid_iterator
-
-        # If nothing is given translate on validation set
         else:
-            log.info("No test data given, assuming validation dataset.")
+            if self.src_file:
+                # Let's do a hack here and pretend that the given
+                # file is validation data provided to the model :)
+                self.model.data['valid_src'] = self.src_file
+                if self.ref_files:
+                    self.model.data['valid_trg'] = self.ref_files
 
             # Load validation data from the model
-            self.model.load_valid_data(from_translate=True)
-            self.iterator  = self.model.valid_iterator
-            self.src_file  = self.model.data['valid_src']
-
-            # User may provide another reference set in 'valid_trg_orig' for example
-            # with compound splitting reverted so that we can compute
-            # the metrics correctly.
-            if "valid_trg_orig" in self.model.data:
-                self.ref_files = self.model.data['valid_trg_orig']
+            # Check whether load_valid_data has a param to set valid data mode
+            if 'data_mode' in inspect.getargspec(self.model.load_valid_data).args:
+                self.model.load_valid_data(from_translate=True, data_mode=valid_mode)
             else:
-                self.ref_files = self.model.valid_ref_files
+                self.model.load_valid_data(from_translate=True)
+            self.iterator = self.model.valid_iterator
 
-            if not isinstance(self.ref_files, list):
-                self.ref_files = [self.ref_files]
+            if not self.src_file:
+                log.info("No test data given, assuming validation dataset.")
+
+                self.src_file = self.model.data['valid_src']
+
+                # User may provide another reference set in 'valid_trg_orig' for example
+                # with compound splitting reverted so that we can compute
+                # the metrics correctly.
+                if "valid_trg_orig" in self.model.data:
+                    self.ref_files = self.model.data['valid_trg_orig']
+                else:
+                    self.ref_files = self.model.valid_ref_files
+
+                if not isinstance(self.ref_files, list):
+                    self.ref_files = [self.ref_files]
+
 
         # Common to each mode
         self.iterator.prepare_batches()
@@ -282,6 +284,7 @@ if __name__ == "__main__":
                                                   default=None)
 
     parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
+    parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/single")
 
     parser.add_argument('-S', '--src-file'      , type=str, help="Source data (default: validation set)",
                                                   default=None)
@@ -322,7 +325,7 @@ if __name__ == "__main__":
     with open(args.pkl_file, 'rb') as f:
         model_options = fix_model_options(cPickle.load(f))
 
-    translator.set_model_options(model_options, args.model)
+    translator.set_model_options(model_options, args.model, args.validmode)
     translator.set_model_params()
     translator.start()
 
