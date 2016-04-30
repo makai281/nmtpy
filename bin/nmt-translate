@@ -4,7 +4,6 @@
 
 import os
 import sys
-import glob
 import atexit
 import cPickle
 import argparse
@@ -79,11 +78,7 @@ class Translator(object):
         self.beam_size = beam_size
 
         self.src_file = src_file
-        self.ref_files = None
-
-        if ref_files:
-            # Add ability to use wildcards
-            self.ref_files = glob.glob(ref_files)
+        self.ref_files = ref_files
 
         self.nbest = nbest
         self.n_jobs = n_jobs
@@ -289,6 +284,7 @@ if __name__ == "__main__":
     parser.add_argument('-S', '--src-file'      , type=str, help="Source data (default: validation set)",
                                                   default=None)
     parser.add_argument('-R', '--ref-files'     , type=str, help="Reference files delimited by comma or * wildcard (default: validation set)",
+                                                  nargs='+',
                                                   default=None)
 
     args = parser.parse_args()
