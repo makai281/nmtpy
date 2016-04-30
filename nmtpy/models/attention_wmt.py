@@ -58,7 +58,7 @@ class Model(BaseModel):
                 mode='pairs', shuffle=True)
         self.load_valid_data()
 
-    def load_valid_data(self, from_translate=False):
+    def load_valid_data(self, from_translate=False, data_mode='single'):
         # Load validation data
         batch_size = 1 if from_translate else 64
 
@@ -70,7 +70,7 @@ class Model(BaseModel):
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     src_dict=self.src_dict, n_words_src=self.n_words_src,
-                    mode='single')
+                    mode=data_mode)
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
