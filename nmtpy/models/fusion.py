@@ -61,7 +61,7 @@ class Model(BaseModel):
                 mode=self.options.get('data_mode', 'pairs'), shuffle=True)
         self.load_valid_data()
 
-    def load_valid_data(self, from_translate=False):
+    def load_valid_data(self, from_translate=False, data_mode='single'):
         # Load validation data
         batch_size = 1 if from_translate else 64
         if from_translate:
@@ -73,7 +73,7 @@ class Model(BaseModel):
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
                     src_dict=self.src_dict, n_words_src=self.n_words_src,
-                    mode='single')
+                    mode=data_mode)
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
