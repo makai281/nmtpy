@@ -49,6 +49,12 @@ class Model(BaseModel):
         # We call this once to setup dropout mechanism correctly
         self.set_dropout(False)
 
+    def info(self, logger):
+        logger.info('Source vocabulary size: %d', self.n_words_src)
+        logger.info('Target vocabulary size: %d', self.n_words_trg)
+        logger.info('%d training samples' % self.train_iterator.n_samples)
+        logger.info('%d validation samples' % self.valid_iterator.n_samples)
+
     def load_valid_data(self, from_translate=False):
         self.valid_ref_files = self.data['valid_trg']
         if isinstance(self.valid_ref_files, str):
