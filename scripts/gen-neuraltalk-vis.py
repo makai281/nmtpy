@@ -26,11 +26,15 @@ if __name__ == '__main__':
     for fname in sys.argv[3:]:
         print "Reading %s" % fname
         sysname = os.path.basename(fname).rsplit(".", 2)[0]
-        score = open('%s.score' % fname).read().strip()
-        d = eval(score)
-        d = dict([(k.upper().replace("_", ""), "%.2f" % (100*float(v))) for k,v \
-                    in d.iteritems() if k.startswith(("Bleu", "METEOR"))])
-        d['name'] = sysname
+        d = {'name' : sysname}
+        try:
+            score = open('%s.score' % fname).read().strip()
+            d = eval(score)
+            d = dict([(k.upper().replace("_", ""), "%.2f" % (100*float(v))) for k,v \
+                        in d.iteritems() if k.startswith(("Bleu", "METEOR"))])
+        except IOError as ie:
+            pass
+
         metadata.append(d)
 
         with open(fname) as f:
