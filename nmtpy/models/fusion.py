@@ -50,6 +50,15 @@ class Model(BaseModel):
         self.set_trng(seed)
         self.set_dropout(False)
 
+    def info(self, logger):
+        logger.info('Source vocabulary size: %d', self.n_words_src)
+        logger.info('Target vocabulary size: %d', self.n_words_trg)
+        logger.info('%d training samples' % self.train_iterator.n_samples)
+        logger.info('  %d UNKs in source, %d UNKs in target' % self.train_iterator.unk_src,
+                                                               self.train_iterator.unk_trg)
+        logger.info('%d validation samples' % self.valid_iterator.n_samples)
+        logger.info('  %d UNKs in source' % self.valid_iterator.unk_src)
+
     def load_data(self):
         # Load training data
         self.train_iterator = WMTIterator(
@@ -297,9 +306,6 @@ class Model(BaseModel):
         text_ctx_mean   = text_ctx.mean(0)
         text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
 
-        # Stack them together so that init_states[:, 0] == text_init_state, vs.
-        #init_states     = tensor.stack([text_init_state, img_init_state], axis=1)
-        #init_states     = tensor.unbroadcast(init_states, 0)
         ################
         # Build f_init()
         ################
