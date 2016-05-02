@@ -151,6 +151,20 @@ class WMTIterator(object):
                 if self.trg_avail:
                     sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
 
+        # Count UNK's
+        unk_trg = 0
+        unk_src = 0
+        if self.src_avail:
+            for sent in self.samples:
+                unk_src += sent[4].count(1)
+
+        if self.trg_avail:
+            for sent in self.samples:
+                unk_trg += sent[5].count(1)
+
+        self.unk_src = unk_src
+        self.unk_trg = unk_trg
+
         self.set_batch_size(self.batch_size)
 
     def next(self):
