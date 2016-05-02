@@ -126,44 +126,38 @@ class WMTIterator(object):
 
         # Check for what is available
         ss = self.samples[0]
-        if ss[4] is not None and self.src_dict:
+        if ss[0] is not None and self.src_dict:
             self.src_avail = True
-        if ss[5] is not None and self.trg_dict:
+        if ss[1] is not None and self.trg_dict:
             self.trg_avail = True
         if ss[2] is not None and self.img_feats is not None:
             self.img_avail = True
 
         if self.mode == 'single':
             # Just take the first src-trg pair. Useful for validation
-            if self.src_avail and self.trg_avail:
+            if ss[0] is not None and ss[1] is not None:
                 self.samples = [s for s in self.samples if (s[0] == s[1] == 0)]
             elif self.src_avail:
                 self.samples = [s for s in self.samples if (s[0] == 0)]
-        elif self.trg_avail and self.mode == 'pairs':
+        elif ss[1] is not None and self.mode == 'pairs':
             # Take the pairs with split idx's equal
             self.samples = [s for s in self.samples if s[0] == s[1]]
 
         # We now have a list of samples
         self.n_samples = len(self.samples)
 
+        unk_trg = 0
+        unk_src = 0
+
         # Let's map the sentences once to idx's
         if self.src_avail or self.trg_avail:
             for sample in self.samples:
                 if self.src_avail:
                     sample[4] = sent_to_idx(self.src_dict, sample[4], self.n_words_src)
+                    unk_src += sample[4].count(1)
                 if self.trg_avail:
                     sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
-
-        # Count UNK's
-        unk_trg = 0
-        unk_src = 0
-        if self.src_avail:
-            for sent in self.samples:
-                unk_src += sent[4].count(1)
-
-        if self.trg_avail:
-            for sent in self.samples:
-                unk_trg += sent[5].count(1)
+                    unk_trg += sample[5].count(1)
 
         self.unk_src = unk_src
         self.unk_trg = unk_trg
