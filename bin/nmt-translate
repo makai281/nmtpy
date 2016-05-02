@@ -72,12 +72,13 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, s
 """Translator starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Translator(object):
-    def __init__(self, beam_size, src_file=None, ref_files=None, nbest=1, n_jobs=8,
+    def __init__(self, beam_size, src_files=None, ref_files=None, nbest=1, n_jobs=8,
                        unnorm=False, seed=1234, mode="beamsearch"):
 
         self.beam_size = beam_size
 
-        self.src_file = src_file
+        # Always lists provided by argparse (nargs:'+')
+        self.src_files = src_files
         self.ref_files = ref_files
 
         self.nbest = nbest
@@ -114,15 +115,16 @@ class Translator(object):
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.model.trg_dict.iteritems()])
 
+        # Be compatible for both utf-8 and normal dictionaries
         if isinstance(self.ref_idict[2], unicode):
             self.utf8 = True
 
         # If forced and we got a src file and also ref file(s)
         # do the forced decoding
-        if self.mode == "forced" and self.src_file and self.ref_files:
+        if self.mode == "forced" and self.src_files and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
             self.iterator = get_iterator('bitext')(
-                                        self.src_file, self.model.src_dict,
+                                        self.src_files[0], self.model.src_dict,
                                         self.ref_files[0], self.model.trg_dict,
                                         batch_size=1,
                                         n_words_src=self.model.n_words_src,
@@ -131,11 +133,15 @@ class Translator(object):
             self.iterator.prepare_batches()
 
         else:
-            if self.src_file:
-                # Let's do a hack here and pretend that the given
-                # file is validation data provided to the model :)
-                self.model.data['valid_src'] = self.src_file
-                if self.ref_files:
+            # Normal translation mode
+            if self.src_files is not None:
+                # We're given source files from the commandline
+                # 1st should be textual data
+                self.model.data['valid_src'] = self.src_files[0]
+                if 'valid_img' in self.model.data:
+                    self.model.data['valid_img'] = self.src_files[1]
+
+                if self.ref_files is not None:
                     self.model.data['valid_trg'] = self.ref_files
 
             # Load validation data from the model
@@ -144,31 +150,30 @@ class Translator(object):
                 self.model.load_valid_data(from_translate=True, data_mode=valid_mode)
             else:
                 self.model.load_valid_data(from_translate=True)
+
             self.iterator = self.model.valid_iterator
 
-            if not self.src_file:
-                log.info("No test data given, assuming validation dataset.")
+            log.info('I will translate %d samples' % self.iterator.n_samples)
 
-                self.src_file = self.model.data['valid_src']
+            if self.src_files is None:
+                self.src_files = listify(self.model.data['valid_src'])
+                log.info("No test data given, assuming validation dataset.")
 
                 # User may provide another reference set in 'valid_trg_orig' for example
                 # with compound splitting reverted so that we can compute
                 # the metrics correctly.
                 if "valid_trg_orig" in self.model.data:
-                    self.ref_files = self.model.data['valid_trg_orig']
+                    self.ref_files = listify(self.model.data['valid_trg_orig'])
                 else:
-                    self.ref_files = self.model.valid_ref_files
-
-                if not isinstance(self.ref_files, list):
-                    self.ref_files = [self.ref_files]
-
+                    self.ref_files = listify(self.model.valid_ref_files)
 
         # Common to each mode
         self.iterator.prepare_batches()
 
         # Print information
-        log.info("Source")
-        log.info("  %s" % self.src_file)
+        log.info("Source file(s)")
+        for f in self.src_files:
+            log.info("  %s" % f)
 
         # It's possible that we don't have any reference files, e.g. for test sets.
         if self.ref_files:
@@ -284,17 +289,17 @@ if __name__ == "__main__":
                                                   default=None)
 
     parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
-    parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/single")
+    parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/pairs/single")
 
-    parser.add_argument('-S', '--src-file'      , type=str, help="Source data (default: validation set)",
-                                                  default=None)
-    parser.add_argument('-R', '--ref-files'     , type=str, help="Reference files delimited by comma or * wildcard (default: validation set)",
+    parser.add_argument('-S', '--src-files'     , type=str, help="Source data(s) in order: text,image (default: validation set)",
+                                                  nargs='+', default=None)
+    parser.add_argument('-R', '--ref-files'     , type=str, help="One or multiple reference files (default: validation set)",
                                                   nargs='+',
                                                   default=None)
 
     args = parser.parse_args()
 
-    if args.decoder == "forced" and (args.src_file is None or args.ref_files is None):
+    if args.decoder == "forced" and (args.src_files is None or args.ref_files is None):
         print "Error: Forced decoding requires that you give src and ref files explicitly."
         sys.exit(1)
 
@@ -314,7 +319,7 @@ if __name__ == "__main__":
     # Select device
     os.environ["THEANO_FLAGS"] = "device=%s" % args.device
 
-    translator = Translator(beam_size=args.beam_size, src_file=args.src_file,
+    translator = Translator(beam_size=args.beam_size, src_files=args.src_files,
                             ref_files=args.ref_files, nbest=args.nbest,
                             n_jobs=args.n_jobs, seed=args.seed, mode=args.decoder)
 
@@ -336,6 +341,11 @@ if __name__ == "__main__":
         hypf = get_temp_file(suffix=".nbest_hyps")
         out_file = hypf.name
         hypf.close()
+
+    # If we evaluate multiple source phrases and take their best
+    # assume -s is given
+    if args.validmode != 'single':
+        args.score = True
 
     translator.write_hyps(out_file, args.score)
 
