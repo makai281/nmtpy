@@ -205,22 +205,15 @@ if __name__ == '__main__':
     model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
     model = Model(seed=args.seed, **model_args)
 
-    if model.options.get('n_words_src', 0) > 0:
-        log.info("Source vocabulary size: %d" % model.options['n_words_src'])
-    if model.options.get('n_words_trg', 0) > 0:
-        log.info("Target vocabulary size: %d" % model.options['n_words_trg'])
-
     log.info("Preparing data")
     model.load_data()
-    log.info("Training data: %d samples" % model.train_iterator.n_samples)
-    do_valid = False
-    if model.valid_iterator:
-        log.info("Validation data: %d samples" % model.valid_iterator.n_samples)
-        do_valid = True
 
     # If valid_freq == 0, do validation at end of epochs
     if args.valid_freq == 0:
         args.valid_freq = math.ceil(model.train_iterator.n_samples / float(args.batch_size))
+
+    # Dump model information
+    model.info(log)
 
     log.info("Early stopping metric is %s" % args.valid_metric)
 
@@ -316,7 +309,7 @@ if __name__ == '__main__':
            ###############################################################
             # Validate model on validation set and early stop if necessary
             ###############################################################
-            if do_valid and eidx >= args.valid_start and uidx % args.valid_freq == 0:
+            if eidx >= args.valid_start and uidx % args.valid_freq == 0:
                 # Compute validation loss
                 model.set_dropout(False)
                 valid_losses.append(model.val_loss())
