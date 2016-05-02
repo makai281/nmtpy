@@ -21,6 +21,11 @@ def ensure_dirs(dirs):
 def real_path(p):
     return os.path.abspath(os.path.expanduser(p))
 
+def listify(l):
+    if not isinstance(l, list):
+        return [l]
+    return l
+
 def fix_model_options(d):
     """Removes old stuff to make old models work with latest code."""
     # Remove fault theano trng object from dict
