@@ -17,7 +17,7 @@ if __name__ == '__main__':
         n_samples = int(sys.argv[1])
         hyps_file = sys.argv[2]
     except:
-        print "Usage: %s <# samples in valid set> <hyps file>" % sys.argv[0]
+        print "Usage: %s <# samples in the set> <hyps file>" % sys.argv[0]
         sys.exit(1)
 
     lines = []
@@ -36,5 +36,14 @@ if __name__ == '__main__':
 
     for hyp in izip(*hyps):
         # Sort by last column which is score and take the minimum one
-        best = sorted(hyp, key=lambda x: float(x[-1]))[0]
-        print best[1]
+        sorted_hyps = sorted(hyp, key=lambda x: float(x[-1]))
+        found = False
+        for h in sorted_hyps:
+            if "<unk>" not in h[1]:
+                print h[1]
+                found = True
+                break
+
+        if not found:
+            # If every hyp contains <unk>, return the one with best score
+            print sorted_hyps[0][1]
