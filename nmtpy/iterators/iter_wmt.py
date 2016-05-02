@@ -135,8 +135,11 @@ class WMTIterator(object):
 
         if self.mode == 'single':
             # Just take the first src-trg pair. Useful for validation
-            self.samples = [s for s in self.samples if (s[0] == s[1] == 0)]
-        elif self.mode == 'pairs':
+            if self.src_avail and self.trg_avail:
+                self.samples = [s for s in self.samples if (s[0] == s[1] == 0)]
+            elif self.src_avail:
+                self.samples = [s for s in self.samples if (s[0] == 0)]
+        elif self.trg_avail and self.mode == 'pairs':
             # Take the pairs with split idx's equal
             self.samples = [s for s in self.samples if s[0] == s[1]]
 
