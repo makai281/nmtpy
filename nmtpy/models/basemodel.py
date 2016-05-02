@@ -210,6 +210,9 @@ class BaseModel(object):
         # in child classes
         return None
 
+    def info(self, logger):
+        pass
+
     ##########################################################
     # For all the abstract methods below, you can take a look
     # at attention.py to understand how they are implemented.
