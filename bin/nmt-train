@@ -9,14 +9,12 @@ import logging
 import argparse
 import platform
 import importlib
-import cPickle as pkl
 
 import numpy as np
 
 # Our classes
 from nmtpy.config import Config
 from nmtpy.logger import Logger
-from nmtpy.typedef import INT
 from nmtpy.sysutils import *
 from nmtpy.nmtutils import unzip
 import nmtpy.cleanup as cleanup
