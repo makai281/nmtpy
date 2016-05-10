@@ -279,7 +279,6 @@ if __name__ == "__main__":
                                                   help="Output n-best list size (only for beam-search case)")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
                                                   help="Random number seed (default: 1234)")
-    parser.add_argument('-d', '--device'        , default='cpu', help="Where to run beam search.")
     parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
@@ -303,21 +302,18 @@ if __name__ == "__main__":
         print "Error: Forced decoding requires that you give src and ref files explicitly."
         sys.exit(1)
 
-    if args.device.startswith("gpu"):
-        args.n_jobs = 1
-    elif args.device.startswith("cpu"):
-        if args.n_jobs == 0:
-            # Auto infer CPU number
-            args.n_jobs = (cpu_count() / 2) - 1
+    if args.n_jobs == 0:
+        # Auto infer CPU number
+        args.n_jobs = (cpu_count() / 2) - 1
 
-        if args.n_jobs > 1:
-            # This is to avoid thread explosion. Allow
-            # each process to use a single thread.
-            os.environ["OMP_NUM_THREADS"] = "1"
-            os.environ["MKL_NUM_THREADS"] = "1"
+    else:
+        # This is to avoid thread explosion. Allow
+        # each process to use a single thread.
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
 
     # Select device
-    os.environ["THEANO_FLAGS"] = "device=%s" % args.device
+    os.environ["THEANO_FLAGS"] = "device=cpu"
 
     translator = Translator(beam_size=args.beam_size, src_files=args.src_files,
                             ref_files=args.ref_files, nbest=args.nbest,
