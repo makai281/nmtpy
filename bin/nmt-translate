@@ -272,7 +272,7 @@ class Translator(object):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-translate')
     parser.add_argument('-j', '--n-jobs'        , type=int, default=8,
-                                                  help="Number of processes (default: 8, 0: Auto")
+                                                  help="Number of processes (default: 8, 0: Auto)")
     parser.add_argument('-b', '--beam-size'     , type=int, default=12,
                                                   help="Beam size (only for beam-search case)")
     parser.add_argument('-N', '--nbest'         , type=int, default=1,
