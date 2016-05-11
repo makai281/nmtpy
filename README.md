@@ -15,6 +15,10 @@ nmtpy is a suite of Python tools, primarily based on the starter code provided i
 
 ## News
 
+### v0.2 -> v0.3
+
+ - Removed obsolete iterators `iter_multi` and `iter_imgfeats`.
+
 ### v0.1 -> v0.2
 
 A lot has been changed in this version. Notably:
