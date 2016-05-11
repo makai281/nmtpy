@@ -198,7 +198,7 @@ class BaseModel(object):
 
             # Add the word idx
             final_sample.append(nw)
-            final_score += next_log_p[0, nw]
+            final_score -= next_log_p[0, nw]
 
         final_sample = [final_sample]
         final_score = np.array(final_score)

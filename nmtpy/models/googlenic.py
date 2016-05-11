@@ -233,7 +233,7 @@ class Model(BaseModel):
 
             # Add the word idx
             final_sample.append(nw)
-            final_score += next_log_p[0, nw]
+            final_score -= next_log_p[0, nw]
 
             # NOTE: I think we should exit before adding EOS score
             if nw == 0:
