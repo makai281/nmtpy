@@ -2,28 +2,28 @@
 import os
 import sys
 import json
+import argparse
 from itertools import izip
 
 if __name__ == '__main__':
-    try:
-        imglist = sys.argv[1]
-        srcfile = sys.argv[2]
-        hypfile = sys.argv[3]
-    except Exception as e:
-        print "Usage: %s <image list> <src file> <hyps1> <hyps2> .." % sys.argv[0]
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--imglist', type=str, help='List of image files.')
+    parser.add_argument('-s', '--srcfile', type=str, help='Source sentences file.')
+    parser.add_argument('-t', '--hypfiles', nargs='+', type=str, help='System output(s).')
+    args = parser.parse_args()
 
-    with open(imglist) as f:
+    with open(args.imglist) as f:
         imglist = f.read().strip().split("\n")
 
-    with open(srcfile) as f:
+    with open(args.srcfile) as f:
         src_sents = f.read().strip().split("\n")
 
     assert len(src_sents) == len(imglist)
 
     metadata = []
     hyps = []
-    for fname in sys.argv[3:]:
+
+    for fname in args.hypfiles:
         print "Reading %s" % fname
         sysname = os.path.basename(fname).rsplit(".", 2)[0]
         d = {'name' : sysname}
