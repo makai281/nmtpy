@@ -146,21 +146,26 @@ class WMTIterator(object):
         # We now have a list of samples
         self.n_samples = len(self.samples)
 
+        # Some statistics
         unk_trg = 0
         unk_src = 0
+        total_src_words = []
+        total_trg_words = []
 
         # Let's map the sentences once to idx's
         if self.src_avail or self.trg_avail:
             for sample in self.samples:
                 if self.src_avail:
                     sample[4] = sent_to_idx(self.src_dict, sample[4], self.n_words_src)
-                    unk_src += sample[4].count(1)
+                    total_src_words.extend(sample[4])
                 if self.trg_avail:
                     sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
-                    unk_trg += sample[5].count(1)
+                    total_trg_words.extend(sample[5])
 
-        self.unk_src = unk_src
-        self.unk_trg = unk_trg
+        self.unk_src = total_src_words.count(1)
+        self.unk_trg = total_trg_words.count(1)
+        self.total_src_words = len(total_src_words)
+        self.total_trg_words = len(total_trg_words)
 
         self.set_batch_size(self.batch_size)
 
