@@ -54,8 +54,10 @@ class Model(BaseModel):
         logger.info('Source vocabulary size: %d', self.n_words_src)
         logger.info('Target vocabulary size: %d', self.n_words_trg)
         logger.info('%d training samples' % self.train_iterator.n_samples)
-        logger.info('  %d UNKs in source, %d UNKs in target' % (self.train_iterator.unk_src,
-                                                               self.train_iterator.unk_trg))
+        logger.info('  %d/%d UNKs in source, %d/%d UNKs in target' % (self.train_iterator.unk_src,
+                                                                      self.train_iterator.total_src_words,
+                                                                      self.train_iterator.unk_trg,
+                                                                      self.train_iterator.total_trg_words))
         logger.info('%d validation samples' % self.valid_iterator.n_samples)
         logger.info('  %d UNKs in source' % self.valid_iterator.unk_src)
 
