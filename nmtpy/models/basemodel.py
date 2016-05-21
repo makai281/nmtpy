@@ -40,7 +40,7 @@ class BaseModel(object):
         self.f_grad_shared = None
 
         self.initial_params = None
-        self.tparams = None
+        self.tparams = OrderedDict()
 
         # Iterators
         self.train_iterator = None
@@ -76,7 +76,6 @@ class BaseModel(object):
         return readable_size(total)
 
     def load_params(self, params):
-        self.tparams = OrderedDict()
         for k,v in params.iteritems():
             # FIXME: Hack to avoid these params to appear
             if not k.startswith(("uidx", "zipped", "valid_history", "bleu_history")):
@@ -97,7 +96,6 @@ class BaseModel(object):
         # if _from is None, use initial_params
         if _from is None:
             _from = self.initial_params
-        self.tparams = OrderedDict()
         for kk, pp in _from.iteritems():
             self.tparams[kk] = theano.shared(_from[kk], name=kk)
 
