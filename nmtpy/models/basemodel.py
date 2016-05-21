@@ -92,11 +92,14 @@ class BaseModel(object):
         with open(filepath, 'wb') as f:
             cPickle.dump(self.options, f, cPickle.HIGHEST_PROTOCOL)
 
-    def init_shared_variables(self):
-        # initialize Theano shared variables according to the initial parameters
+    def init_shared_variables(self, _from=None):
+        # initialize Theano shared variables according to the _from
+        # if _from is None, use initial_params
+        if _from is None:
+            _from = self.initial_params
         self.tparams = OrderedDict()
-        for kk, pp in self.initial_params.iteritems():
-            self.tparams[kk] = theano.shared(self.initial_params[kk], name=kk)
+        for kk, pp in _from.iteritems():
+            self.tparams[kk] = theano.shared(_from[kk], name=kk)
 
     def val_loss(self):
         probs = []
