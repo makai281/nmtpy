@@ -125,8 +125,21 @@ class BaseModel(object):
         # This should be reimplemented in attentional models
         return cost
 
-    def build_optimizer(self, cost, clip_c):
-        grads = tensor.grad(cost, wrt=itemlist(self.tparams))
+    def build_optimizer(self, cost, clip_c, dont_update=None):
+        # List of model parameters
+        tparams = self.tparams
+        # Any parameters to not update in SGD?
+        if dont_update is not None:
+            avail_keys = [k for k in dont_update if k in tparams]
+            for key in avail_keys:
+                del tparams[key]
+        # Now get the list of model parameters
+        params = itemlist(tparams)
+
+        # Get gradients of cost with respect to parameters
+        grads = tensor.grad(cost, wrt=params)
+
+        # Gradient clipping
         if clip_c > 0.:
             g2 = 0.
             new_grads = []
@@ -138,9 +151,14 @@ class BaseModel(object):
                                                g))
             grads = new_grads
 
+        # Load optimizer
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
+
+        # learning-rate (only used in plain SGD)
         lr = tensor.scalar(name='lr')
-        self.f_grad_shared, self.f_update = opt(lr, self.tparams,
+
+        # Compile forwards and backwards pass functions
+        self.f_grad_shared, self.f_update = opt(lr, tparams,
                                                 grads, self.inputs.values(),
                                                 cost, profile=self.profile,
                                                 mode=self.func_mode)
@@ -149,7 +167,6 @@ class BaseModel(object):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save_params(tmpf.name, **unzip(self.tparams))
-
             result = get_valid_evaluation(tmpf.name,
                                           pkl_path=self.model_path + ".pkl",
                                           beam_size=beam_size,
@@ -253,4 +270,3 @@ class BaseModel(object):
         # nmt-translate will also used the relevant beam_search
         # based on the model type.
         pass
-
