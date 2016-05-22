@@ -24,7 +24,7 @@ import nmtpy.cleanup as cleanup
 log = Logger._logger
 
 """Worker process which does beam search."""
-def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, seed=1234, mode="beamsearch"):
+def translate_model(queue, rqueue, pid, model, beam_size, nbest, seed=1234, mode="beamsearch"):
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(seed)
     model.build_sampler()
@@ -33,14 +33,11 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, s
         if mode == "beamsearch":
             return 'model.beam_search(data_dict.values(), beam_size=beam_size)'
 
-        if mode == "forced":
+        elif mode in ["forced", "sample"]:
             return 'model.gen_sample(data_dict)'
 
-        if mode == "argmax":
+        elif mode == "argmax":
             return 'model.gen_sample(data_dict, argmax=True)'
-
-        if mode == "sample":
-            return 'model.gen_sample(data_dict)'
 
     while True:
         req = queue.get()
@@ -55,9 +52,8 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, s
         sample, score = eval(__get_func_call(mode))
 
         # normalize scores according to sequence lengths
-        if not unnormalized:
-            lengths = np.array([len(s) for s in sample])
-            score = score / lengths
+        lengths = np.array([len(s) for s in sample])
+        score = score / lengths
 
         if nbest > 1:
             sidx = np.argsort(score)[:nbest]
@@ -65,47 +61,46 @@ def translate_model(queue, rqueue, pid, model, beam_size, unnormalized, nbest, s
             sidx = np.argmin(score)
 
         sample = np.array(sample)[sidx]
-
         rqueue.put((idx, sample, score[sidx]))
 
 
 """Translator starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Translator(object):
-    def __init__(self, beam_size, src_files=None, ref_files=None, nbest=1, n_jobs=8,
-                       unnorm=False, seed=1234, mode="beamsearch"):
+    def __init__(self, args):
 
-        self.beam_size = beam_size
+        self.beam_size = args.beam_size
 
         # Always lists provided by argparse (nargs:'+')
-        self.src_files = src_files
-        self.ref_files = ref_files
+        self.src_files = args.src_files
+        self.ref_files = args.ref_files
 
-        self.nbest = nbest
-        self.n_jobs = n_jobs
-        self.unnorm = unnorm
-        self.seed = seed
-        self.mode = mode
+        self.nbest = args.nbest
+        self.n_jobs = args.n_jobs
+        self.seed = args.seed
+        self.mode = args.mode
+        self.valid_mode = args.validmode
+        self.suppress_unks = args.suppress_unks
+        self.model_file = args.model
+
         self.utf8 = False
         self.filters = []
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
 
-    def set_model_params(self):
-        # load model parameters and set theano shared variables
-        self.tparams = self.model.load_params(np.load(self.model_file))
-        self.model.set_dropout(False)
-
-    def set_model_options(self, model_options, model_file, valid_mode):
+    def set_model_options(self, model_options):
         self.model_options = model_options
-        self.model_file = model_file
 
         # Import the module
         self.__class = importlib.import_module("nmtpy.models.%s" % self.model_options['model_type']).Model
 
         # Create the model
         self.model = self.__class(seed=self.seed, **self.model_options)
+
+        # load model parameters and set theano shared variables
+        self.tparams = self.model.load_params(np.load(self.model_file))
+        self.model.set_dropout(False)
 
         # Check for post-processing filter
         if "filter" in self.model_options:
@@ -147,7 +142,7 @@ class Translator(object):
             # Load validation data from the model
             # Check whether load_valid_data has a param to set valid data mode
             if 'data_mode' in inspect.getargspec(self.model.load_valid_data).args:
-                self.model.load_valid_data(from_translate=True, data_mode=valid_mode)
+                self.model.load_valid_data(from_translate=True, data_mode=self.valid_mode)
             else:
                 self.model.load_valid_data(from_translate=True)
 
@@ -190,7 +185,7 @@ class Translator(object):
             for idx in xrange(self.n_jobs):
                 self.processes[idx] = \
                         Process(target=translate_model,
-                                args=(write_queue, read_queue, idx, self.model, self.beam_size, self.unnorm,
+                                args=(write_queue, read_queue, idx, self.model, self.beam_size,
                                       self.nbest, self.seed, self.mode))
                 self.processes[idx].start()
                 cleanup.register_proc(self.processes[idx].pid)
@@ -211,7 +206,7 @@ class Translator(object):
         if self.n_jobs == 1:
             # Don't fork, use this process. Useful for debugging
             translate_model(write_queue, read_queue, -1,
-                            self.model, self.beam_size, self.unnorm,
+                            self.model, self.beam_size,
                             self.nbest, self.seed, self.mode)
 
         t = time.time()
@@ -241,7 +236,6 @@ class Translator(object):
             write_queue.put(None)
             self.processes[idx].terminate()
             cleanup.unregister_proc(self.processes[idx].pid)
-
 
     def write_hyps(self, filename, dump_scores=False):
         def __encode(s):
@@ -288,6 +282,7 @@ if __name__ == "__main__":
                                                   default=None)
 
     parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
+    parser.add_argument('-u', '--suppress-unks' , action='store_true', help="Don't produce <unk>'s in beam search")
     parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/pairs/single")
 
     parser.add_argument('-S', '--src-files'     , type=str, help="Source data(s) in order: text,image (default: validation set)",
@@ -306,18 +301,14 @@ if __name__ == "__main__":
         # Auto infer CPU number
         args.n_jobs = (cpu_count() / 2) - 1
 
-    else:
+    if args.n_jobs > 1:
         # This is to avoid thread explosion. Allow
         # each process to use a single thread.
         os.environ["OMP_NUM_THREADS"] = "1"
         os.environ["MKL_NUM_THREADS"] = "1"
 
-    # Select device
+    # Force CPU
     os.environ["THEANO_FLAGS"] = "device=cpu"
-
-    translator = Translator(beam_size=args.beam_size, src_files=args.src_files,
-                            ref_files=args.ref_files, nbest=args.nbest,
-                            n_jobs=args.n_jobs, seed=args.seed, mode=args.decoder)
 
     # load model options
     if not args.pkl_file:
@@ -326,8 +317,8 @@ if __name__ == "__main__":
     with open(args.pkl_file, 'rb') as f:
         model_options = fix_model_options(cPickle.load(f))
 
-    translator.set_model_options(model_options, args.model, args.validmode)
-    translator.set_model_params()
+    translator = Translator(args)
+    translator.set_model_options(model_options)
     translator.start()
 
     out_file = args.saveto
