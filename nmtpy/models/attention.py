@@ -302,7 +302,7 @@ class Model(BaseModel):
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
-    def beam_search(self, inputs, beam_size=12, maxlen=50):
+    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False):
         # Final results and their scores
         final_sample = []
         final_score  = []
@@ -343,6 +343,9 @@ class Model(BaseModel):
             # the 2nd dimension as the context vectors of the source sequence
             # is always the same regardless of the decoding step.
             next_log_p, _, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
+
+            if suppress_unks:
+                next_log_p[1] = -np.inf
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
