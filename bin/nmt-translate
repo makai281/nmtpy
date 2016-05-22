@@ -24,20 +24,21 @@ import nmtpy.cleanup as cleanup
 log = Logger._logger
 
 """Worker process which does beam search."""
-def translate_model(queue, rqueue, pid, model, beam_size, nbest, seed=1234, mode="beamsearch"):
+def translate_model(queue, rqueue, pid, model, beam_size, nbest,
+                    suppress_unks, seed=1234, mode="beamsearch"):
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(seed)
     model.build_sampler()
 
-    def __get_func_call(mode):
-        if mode == "beamsearch":
-            return 'model.beam_search(data_dict.values(), beam_size=beam_size)'
+    # Get function call string
+    if mode == "beamsearch":
+        func_call = 'model.beam_search(data_dict.values(), beam_size=beam_size, suppress_unks=%s)' % suppress_unks
 
-        elif mode in ["forced", "sample"]:
-            return 'model.gen_sample(data_dict)'
+    elif mode in ["forced", "sample"]:
+        func_call = 'model.gen_sample(data_dict)'
 
-        elif mode == "argmax":
-            return 'model.gen_sample(data_dict, argmax=True)'
+    elif mode == "argmax":
+        func_call = 'model.gen_sample(data_dict, argmax=True)'
 
     while True:
         req = queue.get()
@@ -49,17 +50,13 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest, seed=1234, mode
         # Get data from queue
         idx, data_dict = req[0], req[1]
 
-        sample, score = eval(__get_func_call(mode))
+        sample, score = eval(func_call)
 
         # normalize scores according to sequence lengths
         lengths = np.array([len(s) for s in sample])
         score = score / lengths
 
-        if nbest > 1:
-            sidx = np.argsort(score)[:nbest]
-        else:
-            sidx = np.argmin(score)
-
+        sidx = np.argsort(score)[:nbest]
         sample = np.array(sample)[sidx]
         rqueue.put((idx, sample, score[sidx]))
 
@@ -78,7 +75,7 @@ class Translator(object):
         self.nbest = args.nbest
         self.n_jobs = args.n_jobs
         self.seed = args.seed
-        self.mode = args.mode
+        self.mode = args.decoder
         self.valid_mode = args.validmode
         self.suppress_unks = args.suppress_unks
         self.model_file = args.model
@@ -186,7 +183,7 @@ class Translator(object):
                 self.processes[idx] = \
                         Process(target=translate_model,
                                 args=(write_queue, read_queue, idx, self.model, self.beam_size,
-                                      self.nbest, self.seed, self.mode))
+                                      self.nbest, self.suppress_unks, self.seed, self.mode))
                 self.processes[idx].start()
                 cleanup.register_proc(self.processes[idx].pid)
 
@@ -207,23 +204,21 @@ class Translator(object):
             # Don't fork, use this process. Useful for debugging
             translate_model(write_queue, read_queue, -1,
                             self.model, self.beam_size,
-                            self.nbest, self.seed, self.mode)
+                            self.nbest, self.suppress_unks, self.seed, self.mode)
 
         t = time.time()
         for i in xrange(self.n_sentences):
             resp = read_queue.get()
             idx = resp[0]
-            self.trans[idx] = [resp[1]] if self.nbest <= 1 else resp[1]
-            self.scores[idx] = resp[2]
+            hyps, self.scores[idx] = resp[1], resp[2]
 
-            # Convert idxs to words
-            hyps = []
-            for hyp in self.trans[idx]:
+            outs = []
+            for hyp in hyps:
                 hyp = idx_to_sent(self.ref_idict, hyp)
                 for filt in self.filters:
                     hyp = filt(hyp)
-                hyps.append(hyp)
-            self.trans[idx] = hyps
+                outs.append(hyp)
+            self.trans[idx] = outs
 
             # Print progress
             if (i+1) % 100 == 0:
