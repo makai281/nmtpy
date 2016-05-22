@@ -345,7 +345,7 @@ class Model(BaseModel):
             next_log_p, _, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
 
             if suppress_unks:
-                next_log_p[1] = -np.inf
+                next_log_p[:, 1] = -np.inf
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
