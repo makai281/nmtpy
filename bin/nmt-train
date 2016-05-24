@@ -27,7 +27,6 @@ DEFAULTS = {
         'batch_size':         32,             # Training batch size
         'lrate':              0.0001,         # lrate for SGD
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
-        'dropout':            0,              # dropout ratio (0: disabled)
         'profile':            False,          # Profile Theano
         'nanguard':           False,          #
         }
@@ -86,8 +85,6 @@ def setup(args):
         else:
             p = "%.3f" % p
         name += "-weights_%s" % p
-    if args.dropout > 0:
-        name += "-dropout_%.1f" % args.dropout
     if args.seed != 1234:
         name += "-seed_%d" % args.seed
 
@@ -114,7 +111,6 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--config'        , type=str,   help="Path to model configuration file.", required=True)
     parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
 
-    parser.add_argument('-d', '--dropout'       , type=float, help="Dropout ratio")
     parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
     parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
     parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
@@ -213,6 +209,9 @@ if __name__ == '__main__':
     # Dump model information
     model.info(log)
 
+    # Save model options
+    model.save_options()
+
     log.info("Early stopping metric is %s" % args.valid_metric)
 
     # Initialize parameters
@@ -242,9 +241,6 @@ if __name__ == '__main__':
     # Build optimizer
     log.info('Building "%s" optimizer' % args.optimizer)
     model.build_optimizer(cost, args.clip_c)
-
-    # Save model options
-    model.save_options()
 
     early_stop      = False
     uidx            = 0
