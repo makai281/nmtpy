@@ -75,16 +75,18 @@ def setup(args):
 
     # Set model name
     name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
+
     if args.decay_c > 0:
         name += "-decay_%.5f" % args.decay_c
+
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
-    if args.weight_init != 0.01:
-        if isinstance(args.weight_init, str):
-            p = args.weight_init
-        else:
-            p = "%.3f" % p
-        name += "-weights_%s" % p
+
+    if isinstance(args.weight_init, str):
+        name += "-winit_%s" % args.weight_init
+    else:
+        name += "-winit_%.3f" % args.weight_init
+
     if args.seed != 1234:
         name += "-seed_%d" % args.seed
 
