@@ -17,12 +17,12 @@ class CPUPool(object):
             yield data[i:i+count]
             i += count
 
-    def process(self, data, func):
+    def process(self, data, func, **kwargs):
         """Spawns a process for each chunk executing the given function."""
         self.__pool = []
         for pid, chunk in enumerate(self.__chunkify(data)):
-            self.__pool.append(Process(target=lambda i,r,c,f: r.put((i, f(c))),
-                                       args=(pid, self.__queue, chunk, func)))
+            self.__pool.append(Process(target=lambda i,r,c,f: r.put((i, f(c, **kwargs))),
+                                       args=(pid, self.__queue, chunk, kwargs)))
         for p in self.__pool:
             p.start()
 
