@@ -62,6 +62,8 @@ def adadelta(lr, tparams, grads, inp, cost, profile=False, mode=None):
                                     name='%s_rgrad2' % k)
                       for k, p in tparams.iteritems()]
 
+    eps = 1e-6
+
     zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
     rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
              for rg2, g in zip(running_grads2, grads)]
@@ -69,7 +71,7 @@ def adadelta(lr, tparams, grads, inp, cost, profile=False, mode=None):
     f_grad_shared = theano.function(inp, cost, updates=zgup+rg2up,
                                     profile=profile, mode=mode)
 
-    updir = [-tensor.sqrt(ru2 + 1e-6) / tensor.sqrt(rg2 + 1e-6) * zg
+    updir = [-tensor.sqrt(ru2 + eps) / tensor.sqrt(rg2 + eps) * zg
              for zg, ru2, rg2 in zip(zipped_grads,
                                      running_up2,
                                      running_grads2)]
