@@ -96,8 +96,8 @@ class MultiBleuScorer(object):
 """Meteor wrapper."""
 class METEORScorer(object):
     def __init__(self):
-        self.path = real_path(os.environ['METEOR_JAR'])
-        if not os.path.exists(self.path):
+        self.path = real_path(os.environ.get('METEOR_JAR', None))
+        if self.path is None or not os.path.exists(self.path):
             raise Exception("METEOR jar file not found.")
 
         self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]

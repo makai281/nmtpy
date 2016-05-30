@@ -9,14 +9,12 @@ import logging
 import argparse
 import platform
 import importlib
-import cPickle as pkl
 
 import numpy as np
 
 # Our classes
 from nmtpy.config import Config
 from nmtpy.logger import Logger
-from nmtpy.typedef import INT
 from nmtpy.sysutils import *
 from nmtpy.nmtutils import unzip
 import nmtpy.cleanup as cleanup
@@ -24,23 +22,23 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 DEFAULTS = {
-        'weight_scale':       0.01,           # Scale of the uniform distribution for weight init
+        'weight_init':        0.01,           # Scale of the uniform distribution for weight initialization.
+                                              # Can be a float, "xavier" or "he".
         'batch_size':         32,             # Training batch size
         'lrate':              0.0001,         # lrate for SGD
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
-        'dropout':            0,              # dropout ratio (0: disabled)
         'profile':            False,          # Profile Theano
         'nanguard':           False,          #
         }
 
 TRAIN_DEFAULTS = {
         'decay_c':            0.0005,         # L2 penalty factor
-        'clip_c':             0.,             # Clip gradients above clip_c
+        'clip_c':             5.,             # Clip gradients above clip_c
         'alpha_c':            0.,             # Alpha regularization for attentional models
         'seed':               1234,           # RNG seed
         'suffix':             "",             # Model suffix
         'save_iter':          False,          # Save each best valid weights to separate file
-        'restore':            False,
+        'restore':            False,          # NOTE: NOT FUNCTIONAL RIGHT NOW
         'device_id':          'auto',         #
         'patience':           10,             # Early stopping patience
         'max_epochs':         100,            # Max number of epochs to train
@@ -77,14 +75,18 @@ def setup(args):
 
     # Set model name
     name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
+
     if args.decay_c > 0:
         name += "-decay_%.5f" % args.decay_c
+
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
-    if args.weight_scale != 0.01:
-        name += "-weights_%.3f" % args.weight_scale
-    if args.dropout > 0:
-        name += "-dropout_%.1f" % args.dropout
+
+    if isinstance(args.weight_init, str):
+        name += "-winit_%s" % args.weight_init
+    else:
+        name += "-winit_%.3f" % args.weight_init
+
     if args.seed != 1234:
         name += "-seed_%d" % args.seed
 
@@ -111,7 +113,6 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--config'        , type=str,   help="Path to model configuration file.", required=True)
     parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
 
-    parser.add_argument('-d', '--dropout'       , type=float, help="Dropout ratio")
     parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
     parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
     parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
@@ -200,22 +201,18 @@ if __name__ == '__main__':
     model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
     model = Model(seed=args.seed, **model_args)
 
-    if model.options.get('n_words_src', 0) > 0:
-        log.info("Source vocabulary size: %d" % model.options['n_words_src'])
-    if model.options.get('n_words_trg', 0) > 0:
-        log.info("Target vocabulary size: %d" % model.options['n_words_trg'])
-
     log.info("Preparing data")
     model.load_data()
-    log.info("Training data: %d samples" % model.train_iterator.n_samples)
-    do_valid = False
-    if model.valid_iterator:
-        log.info("Validation data: %d samples" % model.valid_iterator.n_samples)
-        do_valid = True
 
     # If valid_freq == 0, do validation at end of epochs
     if args.valid_freq == 0:
         args.valid_freq = math.ceil(model.train_iterator.n_samples / float(args.batch_size))
+
+    # Dump model information
+    model.info(log)
+
+    # Save model options
+    model.save_options()
 
     log.info("Early stopping metric is %s" % args.valid_metric)
 
@@ -223,6 +220,7 @@ if __name__ == '__main__':
     log.info("Initializing parameters")
     model.init_params()
     model.init_shared_variables()
+    log.info("Number of parameters: %s" % model.get_nb_params())
 
     # Build the model
     log.info("Building model")
@@ -246,27 +244,24 @@ if __name__ == '__main__':
     log.info('Building "%s" optimizer' % args.optimizer)
     model.build_optimizer(cost, args.clip_c)
 
-    # Save model options
-    model.save_options()
-
     early_stop      = False
     uidx            = 0
     bad_counter     = 0
+    cur_lrate       = args.lrate
     valid_losses    = []
     metric_history  = []
     metric_results  = []
-    cur_lrate       = args.lrate
 
-    # Helper method for summary
+    # Helper method for validation summary
     def dump_val_summary():
         if len(metric_history) > 0:
             best_metric_idx = np.argmax(np.array(metric_history))
             best_valid = metric_results[best_metric_idx]
             for _, v in sorted(best_valid.iteritems()):
-                log.info("[Validation %3d] Best %s" % (best_metric_idx + 1, v[0]))
+                log.info("[Validation %3d] Current Best %s" % (best_metric_idx + 1, v[0]))
         else:
             best_valid_idx = np.argmin(np.array(valid_losses))
-            log.info('[Validation %3d] Best loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
+            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
 
     ################
     # Training loop
@@ -310,7 +305,7 @@ if __name__ == '__main__':
            ###############################################################
             # Validate model on validation set and early stop if necessary
             ###############################################################
-            if do_valid and eidx >= args.valid_start and uidx % args.valid_freq == 0:
+            if eidx >= args.valid_start and uidx % args.valid_freq == 0:
                 # Compute validation loss
                 model.set_dropout(False)
                 valid_losses.append(model.val_loss())
@@ -321,12 +316,11 @@ if __name__ == '__main__':
                 # Start beam-search if validation metric is different from NLL/PX
                 if args.valid_metric != 'px':
                     t = time.time()
-                    log.info("Starting beam search")
+                    log.info("Starting translation")
                     results = model.run_beam_search(beam_size=12,
                                                     n_jobs=args.njobs,
                                                     metric=args.valid_metric,
-                                                    mode=args.decoder_mode,
-                                                    out_file="val_%d.txt" % (len(metric_history) + 1))
+                                                    mode=args.decoder_mode)
                     log.info("Done: %.2f seconds" % (time.time() - t))
 
                     # We'll receive the requested metrics in a dict
@@ -367,10 +361,10 @@ if __name__ == '__main__':
                     # We passed the limit for checking patience
                     is_bad = False
                     if args.valid_metric == 'px':
-                        if valid_losses[-1] >= np.array(valid_losses)[-args.patience:].min():
+                        if valid_losses[-1] >= np.array(valid_losses)[:-args.patience].min():
                             is_bad = True
                     else:
-                        if metric_history[-1] <= np.array(metric_history)[-args.patience:].max():
+                        if metric_history[-1] <= np.array(metric_history)[:-args.patience].max():
                             is_bad = True
 
                     if is_bad:

@@ -15,8 +15,8 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
-from ..sysutils import get_valid_evaluation, get_temp_file
 from ..nmtutils import unzip, itemlist
+from ..sysutils import *
 from ..typedef import *
 
 class BaseModel(object):
@@ -26,8 +26,8 @@ class BaseModel(object):
 
         self.name = os.path.splitext(os.path.basename(self.model_path))[0]
 
-        self.do_dropout = True if self.dropout > 0 else False
-        self.use_dropout = theano.shared(np.float32(0.))
+        # Will be set when set_dropout is first called
+        self.use_dropout = None
 
         # Input tensor lists
         self.inputs = OrderedDict()
@@ -63,7 +63,17 @@ class BaseModel(object):
     def set_dropout(self, val):
         """Sets dropout indicator for activation scaling
         if dropout is available through configuration."""
-        self.use_dropout.set_value(float(val))
+        if self.use_dropout is None:
+            self.use_dropout = theano.shared(np.float32(0.))
+        else:
+            self.use_dropout.set_value(float(val))
+
+    def get_nb_params(self):
+        """Returns the number of parameters of the model."""
+        total = 0
+        for p in self.initial_params.values():
+            total += p.size
+        return readable_size(total)
 
     def load_params(self, params):
         self.tparams = OrderedDict()
@@ -82,18 +92,26 @@ class BaseModel(object):
         with open(filepath, 'wb') as f:
             cPickle.dump(self.options, f, cPickle.HIGHEST_PROTOCOL)
 
-    def init_shared_variables(self):
-        # initialize Theano shared variables according to the initial parameters
-        self.tparams = OrderedDict()
-        for kk, pp in self.initial_params.iteritems():
-            self.tparams[kk] = theano.shared(self.initial_params[kk], name=kk)
+    def init_shared_variables(self, _from=None):
+        # initialize Theano shared variables according to the _from
+        # if _from is None, use initial_params
+        if self.tparams is None:
+            self.tparams = OrderedDict()
+        if _from is None:
+            _from = self.initial_params
+        for kk, pp in _from.iteritems():
+            self.tparams[kk] = theano.shared(_from[kk], name=kk)
 
     def val_loss(self):
         probs = []
 
         # dict of x, x_mask, y, y_mask
         for data in self.valid_iterator:
-            probs.extend(self.f_log_probs(*data.values()))
+            # Don't fail if data doesn't contain y_mask. The loss won't
+            # be normalized but the training will continue
+            norm = data['y_mask'].sum(0) if 'y_mask' in data else 1
+            log_probs = self.f_log_probs(*data.values()) / norm
+            probs.extend(log_probs)
 
         return np.array(probs).mean()
 
@@ -110,8 +128,21 @@ class BaseModel(object):
         # This should be reimplemented in attentional models
         return cost
 
-    def build_optimizer(self, cost, clip_c):
-        grads = tensor.grad(cost, wrt=itemlist(self.tparams))
+    def build_optimizer(self, cost, clip_c, dont_update=None):
+        # List of model parameters
+        tparams = self.tparams
+        # Any parameters to not update in SGD?
+        if dont_update is not None:
+            avail_keys = [k for k in dont_update if k in tparams]
+            for key in avail_keys:
+                del tparams[key]
+        # Now get the list of model parameters
+        params = itemlist(tparams)
+
+        # Get gradients of cost with respect to parameters
+        grads = tensor.grad(cost, wrt=params)
+
+        # Gradient clipping
         if clip_c > 0.:
             g2 = 0.
             new_grads = []
@@ -123,9 +154,14 @@ class BaseModel(object):
                                                g))
             grads = new_grads
 
+        # Load optimizer
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
+
+        # learning-rate (only used in plain SGD)
         lr = tensor.scalar(name='lr')
-        self.f_grad_shared, self.f_update = opt(lr, self.tparams,
+
+        # Compile forwards and backwards pass functions
+        self.f_grad_shared, self.f_update = opt(lr, tparams,
                                                 grads, self.inputs.values(),
                                                 cost, profile=self.profile,
                                                 mode=self.func_mode)
@@ -134,7 +170,6 @@ class BaseModel(object):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save_params(tmpf.name, **unzip(self.tparams))
-
             result = get_valid_evaluation(tmpf.name,
                                           pkl_path=self.model_path + ".pkl",
                                           beam_size=beam_size,
@@ -159,11 +194,7 @@ class BaseModel(object):
 
         inputs = input_dict.values()
 
-        # Make it work with multiple inputs as well
-        if len(inputs) == 1:
-            next_state, ctx0 = self.f_init(inputs[0])
-        else:
-            next_state, ctx0 = self.f_init(*inputs)
+        next_state, ctx0 = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_word = np.array([-1], dtype=INT)
@@ -173,7 +204,7 @@ class BaseModel(object):
             next_log_p, next_word, next_state = self.f_next(*[next_word, ctx0, next_state])
 
             if target is not None:
-                nw = target[ii]
+                nw = int(target[ii])
 
             elif argmax:
                 # argmax() works the same for both probas and log_probas
@@ -188,18 +219,20 @@ class BaseModel(object):
 
             # Add the word idx
             final_sample.append(nw)
-            final_score += next_log_p[0, nw]
+            final_score -= next_log_p[0, nw]
 
         final_sample = [final_sample]
         final_score = np.array(final_score)
 
         return final_sample, final_score
 
-
     def generate_samples(self, batch_dict, n_samples):
         # Silently fail if generate_samples is not reimplemented
         # in child classes
         return None
+
+    def info(self, logger):
+        pass
 
     ##########################################################
     # For all the abstract methods below, you can take a look
@@ -240,4 +273,3 @@ class BaseModel(object):
         # nmt-translate will also used the relevant beam_search
         # based on the model type.
         pass
-

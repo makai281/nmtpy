@@ -7,12 +7,12 @@ from .nmtutils import DotDict
 from .sysutils import real_path
 
 is_path = lambda p: p.startswith(('~', '/', '../', './'))
+
 def check_get_path(p):
     if is_path(p):
         paths = glob.glob(real_path(p))
-        for path in paths:
-            if not os.path.exists(path):
-                raise Exception("%s doesn't exist." % path)
+        if len(paths) == 0:
+            raise Exception("%s doesn't match a file." % p)
 
         p = paths[0] if len(paths) == 1 else paths
     return p

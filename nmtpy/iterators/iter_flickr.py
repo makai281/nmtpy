@@ -11,7 +11,7 @@ import numpy as np
 from ..nmtutils import mask_data, idx_to_sent, load_dictionary
 from ..typedef  import INT, FLOAT
 
-class IterFlickr(object):
+class FlickrIterator(object):
     def __init__(self, pkl_file, pkl_split, batch_size, trg_dict, n_words_trg=0, src_name='x_img', trg_name='y'):
         # For minibatch shuffling
         random.seed(1234)
@@ -53,13 +53,6 @@ class IterFlickr(object):
         return self
 
     def read(self):
-        with open(self.pkl_file) as f:
-            d = cPickle.load(f)
-
-        self.feats = d['feats'].T
-        self.img_dim = self.feats.shape[1]
-        sents = d['sents'][self.split]
-
         def to_idx(tokens):
             idxs = []
             for w in tokens:
@@ -69,6 +62,24 @@ class IterFlickr(object):
                     widx = widx if widx < self.n_words_trg else 1
                 idxs.append(widx)
             return idxs
+
+        ##############
+        with open(self.pkl_file) as f:
+            d = cPickle.load(f)
+
+        self.feats = d['feats']
+
+        # hackish way to understand the dimensions
+        if self.feats.shape[0] < self.feats.shape[1]:
+            # feat_dim is 0, n_samples 1
+            self.feats = self.feats.T
+
+        self.img_dim = self.feats.shape[1]
+
+        # NOTE: Add ability to read multiple splits which will
+        # help during final training on both train and valid
+        # Make this by checking the type of pkl_split against str or list
+        sents = d['sents'][self.split]
 
         # feats has size (feat_dim, n_samples)
         # sents: list of dict (train: 29000, test: 1000)
@@ -117,7 +128,7 @@ if __name__ == '__main__':
     vocab, ivocab = load_dictionary(os.path.expanduser("~/data/flickr30k/tok/dictionary.pkl"))
 
     feats_pkl = os.path.expanduser("~/data/flickr30k/features-karpathy.pkl")
-    it = IterFlickr(feats_pkl, "train", 32, vocab)
+    it = FlickrIterator(feats_pkl, "train", 32, vocab)
     it.prepare_batches(shuffle=True)
 
     bs = []
@@ -130,5 +141,5 @@ if __name__ == '__main__':
     assert bsizes[0] == it.batch_size
     assert bsizes[1] == it.n_samples % it.batch_size
 
-    tit = IterFlickr(feats_pkl, "test", 1, vocab)
+    tit = FlickrIterator(feats_pkl, "test", 1, vocab)
     tit.prepare_batches(shuffle=False)

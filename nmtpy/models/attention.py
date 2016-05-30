@@ -38,13 +38,24 @@ class Model(BaseModel):
                 self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
                 self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
 
+        # Create options. This will saved as .pkl
         self.options = dict(self.__dict__)
+
         self.trg_idict = trg_idict
         self.src_idict = src_idict
 
         self.ctx_dim = 2 * self.rnn_dim
         self.set_nanguard()
         self.set_trng(seed)
+
+        # We call this once to setup dropout mechanism correctly
+        self.set_dropout(False)
+
+    def info(self, logger):
+        logger.info('Source vocabulary size: %d', self.n_words_src)
+        logger.info('Target vocabulary size: %d', self.n_words_trg)
+        logger.info('%d training samples' % self.train_iterator.n_samples)
+        logger.info('%d validation samples' % self.valid_iterator.n_samples)
 
     def load_valid_data(self, from_translate=False):
         self.valid_ref_files = self.data['valid_trg']
@@ -81,28 +92,28 @@ class Model(BaseModel):
         params = OrderedDict()
 
         # embedding weights for encoder and decoder
-        params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim)
-        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim)
+        params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim, scale=self.weight_init)
+        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim, scale=self.weight_init)
 
         # encoder: bidirectional RNN
         #########
         # Forward encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim)
+        params = get_new_layer('gru')[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
         # Backwards encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim)
+        params = get_new_layer('gru')[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
 
         # Context is the concatenation of forward and backwards encoder
 
         # init_state, init_cell
-        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim)
+        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
         # decoder
-        params = get_new_layer(self.dec_type)[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim)
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'   , nin=self.rnn_dim, nout=self.embedding_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_prev'  , nin=self.embedding_dim, nout=self.embedding_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'   , nin=self.ctx_dim, nout=self.embedding_dim, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.embedding_dim, nout=self.n_words_trg)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_prev' , nin=self.embedding_dim , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit'      , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
 
         self.initial_params = params
 
@@ -129,24 +140,20 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask,
-                                               profile=self.profile, mode=self.func_mode)
+        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask,
+                                       profile=self.profile, mode=self.func_mode)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
-                                                profile=self.profile, mode=self.func_mode)
+        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
+                                        profile=self.profile, mode=self.func_mode)
 
         # context will be the concatenation of forward and backward rnns
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
 
         # mean of the context (across time) will be used to initialize decoder rnn
         ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
-
-        # NOTE: Tried this, no improvement
-        # or you can use the last state of forward + backward encoder rnns
-        # ctx_mean = tensor.concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
 
         # initial decoder state
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
@@ -162,14 +169,14 @@ class Model(BaseModel):
         emb = emb_shifted
 
         # decoder - pass through the decoder conditional gru with attention
-        proj = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                                    prefix='decoder',
-                                                    mask=y_mask, context=ctx,
-                                                    context_mask=x_mask,
-                                                    one_step=False,
-                                                    init_state=init_state,
-                                                    profile=self.profile,
-                                                    mode=self.func_mode)
+        proj = get_new_layer('gru_cond')[1](self.tparams, emb,
+                                            prefix='decoder',
+                                            mask=y_mask, context=ctx,
+                                            context_mask=x_mask,
+                                            one_step=False,
+                                            init_state=init_state,
+                                            profile=self.profile,
+                                            mode=self.func_mode)
         # hidden states of the decoder gru
         proj_h = proj[0]
 
@@ -180,9 +187,9 @@ class Model(BaseModel):
         alphas = proj[2]
 
         # compute word probabilities
-        logit_gru = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
+        logit_gru  = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
+        logit_ctx  = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
         logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
-        logit_ctx = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
 
@@ -208,17 +215,12 @@ class Model(BaseModel):
                                            mode=self.func_mode,
                                            profile=self.profile)
 
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        norm_cost = cost / y_mask.sum()
-
         # For alpha regularization
         self.x_mask = x_mask
         self.y_mask = y_mask
         self.alphas = alphas
 
-        return cost.mean(), norm_cost.mean()
+        return cost.mean()
 
     def add_alpha_regularizer(self, cost, alpha_c):
         alpha_c = theano.shared(alpha_c.astype(FLOAT), name='alpha_c')
@@ -242,8 +244,8 @@ class Model(BaseModel):
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
 
         # encoder
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder')
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r')
+        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder')
+        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r')
 
         # concatenate forward and backward rnn hidden states
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -266,16 +268,17 @@ class Model(BaseModel):
                             self.tparams['Wemb_dec'][y])
 
         # apply one step of conditional gru with attention
-        # get the next hidden state
-        # get the weighted averages of context for this target word y
-        r = get_new_layer(self.dec_type)[1](self.tparams, emb,
-                                                    prefix='decoder',
-                                                    mask=None, context=ctx,
-                                                    one_step=True,
-                                                    init_state=init_state)
+        # get the next hidden states
+        # get the weighted averages of contexts for this target word y
+        r = get_new_layer('gru_cond')[1](self.tparams, emb,
+                                         prefix='decoder',
+                                         mask=None, context=ctx,
+                                         one_step=True,
+                                         init_state=init_state)
 
         next_state = r[0]
         ctxs = r[1]
+        alphas = r[2]
 
         logit_prev = get_new_layer('ff')[1](self.tparams, emb,          prefix='ff_logit_prev',activ='linear')
         logit_ctx  = get_new_layer('ff')[1](self.tparams, ctxs,         prefix='ff_logit_ctx', activ='linear')
@@ -301,7 +304,7 @@ class Model(BaseModel):
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
-    def beam_search(self, inputs, beam_size=12, maxlen=50):
+    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False):
         # Final results and their scores
         final_sample = []
         final_score  = []
@@ -342,6 +345,9 @@ class Model(BaseModel):
             # the 2nd dimension as the context vectors of the source sequence
             # is always the same regardless of the decoding step.
             next_log_p, _, next_state = self.f_next(*[next_w, tiled_ctx, next_state])
+
+            if suppress_unks:
+                next_log_p[:, 1] = -np.inf
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p

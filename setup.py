@@ -10,11 +10,18 @@ setup(
         author='Ozan Çağlayan',
         author_email='ozancag@gmail.com',
         license='MIT',
-        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators'],
+        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'pycocoevalcap'],
         install_requires=[
           'numpy',
           'theano',
           'six',
         ],
-        scripts=['bin/nmt-train', 'bin/nmt-translate', 'bin/nmt-build-dict'],
+        scripts=[
+                    # These will be installed into your system
+                    'bin/nmt-train',
+                    'bin/nmt-extract',
+                    'bin/nmt-translate',
+                    'bin/nmt-build-dict',
+                    'bin/nmt-coco-metrics',
+                ],
         zip_safe=False)

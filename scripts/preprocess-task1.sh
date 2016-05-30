@@ -6,19 +6,19 @@
 #   normalize-punctuation.perl
 #   clean-corpus-n-frac.perl
 
-ROOT=/lium/trad4a/wmt/2016/data
-BDIC=/lium/buster1/caglayan/git/nmtpy/bin/nmt-build-dict
-SELECT_LINES=/lium/buster1/caglayan/bin/select-lines
+# Create a symlink in your HOME to the data folders
+# so that the script works on every machine
+ROOT=~/wmt16/data/raw-text/task1
+
 SL="en"
 TL="de"
 MAX="50"
 
 # For train/val, src/trg languages
-# lowercase->normalize->strip punctuation->tokenize
-for TYPE in train valid; do
+for TYPE in train val; do
   OUT=${TYPE}.norm
   for l in $SL $TL; do
-    PREFIX="${ROOT}/text-$TYPE/$TYPE"
+    PREFIX="${ROOT}/$TYPE"
     FNAME="${PREFIX}.$l"
     echo $FNAME
     cat $FNAME | normalize-punctuation.perl -l $l > $OUT.$l
@@ -26,16 +26,10 @@ for TYPE in train valid; do
   done
 
   # Filter corpus
-  clean-corpus-n-frac.perl tmp_${TYPE} $SL $TL ${OUT}.tok 1 $MAX 3 ${TYPE}.lines
+  clean-corpus-n-frac.perl -ratio 3 tmp_${TYPE} $SL $TL ${OUT}.tok 1 $MAX ${TYPE}.lines
   cat ${OUT}.tok.$SL | lowercase.perl > ${OUT}.lc.tok.$SL
   cat ${OUT}.tok.$TL | lowercase.perl > ${OUT}.lc.tok.$TL
 done
 
-## Lium's split
-#for l in $SL $TL; do
-#  $SELECT_LINES tmp_train.$l lium_train.id 1 > lium_train.norm.tok.$l
-#  cat lium_train.norm.tok.$l | lowercase.perl > lium_train.norm.lc.tok.$l
-#done
-
 rm tmp_*
-$BDIC *train*lc.tok.$TL *train*tok.$SL
+nmt-build-dict *train*lc.tok.$TL *train*lc.tok.$SL

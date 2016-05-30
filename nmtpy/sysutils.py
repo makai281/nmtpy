@@ -21,6 +21,38 @@ def ensure_dirs(dirs):
 def real_path(p):
     return os.path.abspath(os.path.expanduser(p))
 
+def listify(l):
+    if not isinstance(l, list):
+        return [l]
+    return l
+
+def fix_model_options(d):
+    """Removes old stuff to make old models work with latest code."""
+    # Remove fault theano trng object from dict
+    if "trng" in d:
+        del d["trng"]
+
+    data = d['data']
+    # Remove iterator types from data dict
+    for k, v in data.iteritems():
+        if isinstance(v, list) and v[0] in ["img_feats", "text", "bitext"]:
+            d['data'] = dict([[k, v[1]] for k,v in data.iteritems()])
+
+    return d
+
+def readable_size(n):
+    sizes = ['K', 'M', 'G']
+    fmt = ''
+    size = n
+    for i,s in enumerate(sizes):
+        nn = n / (1000.**(i+1))
+        if nn >= 1:
+            size = nn
+            fmt = sizes[i]
+        else:
+            break
+    return '%.1f%s' % (size, fmt)
+
 def get_temp_file(suffix="", name=None, delete=False):
     """Creates a temporary file under /tmp. If name is not None
     it will be used as the temporary file's name."""

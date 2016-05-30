@@ -1,73 +1,112 @@
 #!/usr/bin/env python
 
-import sys
 import os
+import sys
 import cPickle
+import subprocess
+from datetime import datetime
 
-import pandas as pd
+# Evaluate on both valid and test split using nmt-coco-metrics
+def evaluate_metrics(hyps_file, ref_list, language):
+    res = subprocess.check_output(['nmt-coco-metrics', '-l', language, hyps_file] + ref_list)
+    return eval(res)
 
-def plot(model):
-    # Plot model training_loss, validation_loss, (BLEU in the future)
-    pass
+def gen_report(log_file, outs_dir):
+    attributes = ['alpha_c', 'batch_size', 'clip_c', 'decay_c',
+                  'dropout', 'lrate', 'optimizer', 'model_type',
+                  'patience','rnn_dim', 'trg_emb_dim', 'valid_freq',
+                  'valid_metric', 'weight_init']
 
-def generate_html_report(reports):
-    # Generate a table with parameters and results
-    # include also plots?
-    pass
+    time_format = '%Y-%m-%d %H:%M:%S'
+
+    report = {}
+    vals = []
+    last_epoch = 0
+    last_update = 0
+
+    with open(log_file) as f:
+        # Get start time
+        start_time = datetime.strptime(f.readline().strip().split(",")[0], time_format)
+
+        # Read other lines
+        for line in f:
+            line = line.strip()
+            # Configuration parameter
+            if " -> " in line:
+                fields = line.split(" ")
+                key, value = fields[-3], fields[-1]
+                if key in attributes:
+                    report[key] = value
+            elif "[Validation " in line:
+                vals.append(line)
+            elif "Epoch:" in line:
+                fields = line.split(",")
+                last_epoch = fields[1].split(" ")[-1]
+                last_update = fields[2].split(" ")[-1]
+
+        stop_time = datetime.strptime(line.split(",", 1)[0], time_format)
+
+    # Number of updates and epoch during training
+    report['nb_updates'] = last_update
+    report['nb_epochs'] = last_epoch
+
+    report['best_val_update'] = vals[-1].split("]")[0].split(" ")[-1]
+    report['best_val_metric'] = vals[-1].split("Best ")[-1]
+
+    for line in vals:
+        if "%s] LOSS" % report['best_val_update'] in line:
+            report['best_val_loss'] = line.split(" ")[-1]
+
+    # Training duration
+    report['duration'] = stop_time - start_time
+
+    if "weight_init" not in report:
+        # This was default when this parameter wasn't around
+        report['weight_init'] = '0.01'
+
+    # lrate not effective when optimizer is not sgd for now
+    if report['optimizer'] != 'sgd':
+        del report['lrate']
+
+    return report
+
+def translate(npz_file, outs_dir, beamsize=12, src_file=None):
+    split = "dev" if src_file is None else "test"
+    model = os.path.basename(npz_file)
+    dirname = os.path.dirname(npz_file)
+    hyp_file = os.path.join(outs_dir, "%s.beam%d.%s.1best" % (model, beamsize, split))
+
+    if not os.path.exists(hyp_file):
+        cmd = ['nmt-translate', '-m', npz_file, '-b', str(beamsize), '-o', hyp_file]
+        if src_file:
+            cmd.extend(['-S', src_file])
+
+        print "Translating '%s' with beamsize: %d" % (split, beamsize)
+        result = subprocess.check_output(cmd)
+        print "Done."
+    else:
+        print "%s already exists, skipping."
+    return hyp_file
+
+def process_model(log_file):
+    dirname = os.path.dirname(log_file)
+    outs_dir = os.path.join(dirname, 'outs')
+
+    if not os.path.exists(outs_dir):
+        os.mkdir(outs_dir)
+
+    base_file = os.path.basename(log_file)
+    model = os.path.splitext(base_file)[0]
+    npz = os.path.join(dirname, model + ".npz")
+    pkl = os.path.join(dirname, npz + ".pkl")
+
+    assert os.path.exists(npz)
+    assert os.path.exists(pkl)
+
+    # Collect information about the model
+    report = gen_report(log_file, outs_dir)
+
+
 
 if __name__ == '__main__':
-    # keys are model identifiers, values are model parameters and results
-    # parsed from log file
-    reports = {}
-
-    for log_file in sys.argv[1:]:
-        print "Analyzing %s" % log_file
-
-        model_id = os.path.splitext(os.path.basename(log_file))[0]
-        # It is easier to read params from model params pkl file instead of the log file
-        model_params = cPickle.load(open("%s.npz.pkl" % model_id, "rb"))
-
-        report = {}
-
-        report['src_vocab_size'] = len(model_params['src_vocab'])
-        report['trg_vocab_size'] = len(model_params['trg_vocab'])
-        report['optimizer'] = model_params['optimizer']
-        report['lrate'] = model_params['lrate']
-        report['batch_size'] = model_params['batch_size']
-        report['emb_dim'] = model_params['embedding_dim']
-        report['gru_dim'] = model_params['gru_dim']
-        report['dropout'] = model_params['dropout'] if model_params['dropout'] > 0. else "no"
-        report['vgg'] = model_params.get("vgg-feats-file", "no")
-        report['maxlen'] = model_params['maxlen']
-        report['alpha_c'] = model_params['alpha_c']
-        report['decay_c'] = model_params['decay_c']
-        report['clip_c'] = model_params['clip_c'] if model_params['clip_c'] > 0. else "no"
-
-        log_lines = open(log_file, "rb").read().strip().split("\n")
-
-        mb_updates = [l for l in log_lines if "Epoch: " in l]
-        report['n_updates'] = len(mb_updates)
-
-        train_costs = []
-        mean_batch_train_time = 0.0
-        for line in mb_updates:
-            fields = line.split(" ")
-            train_costs.append(float(fields[-3].strip(",")))
-            mean_batch_train_time += float(fields[-1].strip())
-
-        # Compute some statistics
-        mean_batch_train_time /= len(mb_updates)
-
-        # Downsample train costs (step: 20)
-        report['train_costs'] = train_costs[::20]
-        report['mean_cost'] = sum(train_costs) / len(train_costs)
-        report['mean_batch_train_time'] = mean_batch_train_time
-
-        # Compute validation loss
-        val = [float(l.split()[-4]) for l in log_lines if "Validation loss" in l]
-        mean_val_loss = sum(val) / len(val)
-        report['n_validation'] = len(val)
-        report['mean_val_loss'] = mean_val_loss
-
-        # Add to final list
-        reports[model_id] = report
+    log_file = sys.argv[1]
