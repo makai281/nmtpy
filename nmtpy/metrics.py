@@ -8,6 +8,21 @@ from functools import total_ordering
 from .sysutils import find_executable, real_path, get_temp_file
 
 @total_ordering
+class Metric(object):
+    def __init__(self):
+        self.score = 0.
+        self.name = None
+
+    def __eq__(self, other):
+        return self.score == other.score
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+    def __repr__(self):
+        return "%s = %3.3f" % (self.name, self.score)
+
+@total_ordering
 class METEORScore(object):
     def __init__(self, score=""):
         if score:
