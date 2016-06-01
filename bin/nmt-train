@@ -47,7 +47,7 @@ TRAIN_DEFAULTS = {
         'valid_freq':         0,              # 0: End of epochs
         'valid_metric':       'bleu',         # bleu, px, meteor
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
-        'njobs':              8,              # # of parallel CPU tasks to do beam-search
+        'njobs':              10,             # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
         }
 
