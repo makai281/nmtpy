@@ -58,7 +58,7 @@ class BLEUScore(object):
 
     def __repr__(self):
         if self.__parsed == False:
-            return "0"
+            return "BLEU = 0.0"
         return "BLEU = %3.2f, %2.1f/%2.1f/%2.1f/%2.1f (BP=%.3f, ratio=%.3f, hyp_len=%d, ref_len=%d)" % \
                 (self.score,
                  self.ngram_scores[0], self.ngram_scores[1], self.ngram_scores[2], self.ngram_scores[3],
