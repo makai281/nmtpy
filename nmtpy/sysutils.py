@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 import os
 import sys
-import time
-import select
-import cPickle
-import inspect
+import gzip
 import tempfile
 import subprocess
-import gzip
 
 from . import cleanup
 
@@ -131,3 +127,69 @@ def get_gpu(which='auto'):
 
         lock_file = create_gpu_lock(which)
         return ("gpu%d" % which)
+
+def setup_train_args(args):
+    # Check METEOR path
+    if args.valid_metric == "meteor":
+        if "meteor_path" in args:
+            os.environ['METEOR_JAR'] = args['meteor_path']
+        else:
+            raise Exception("You need to provide 'meteor-path' in your configuration.")
+
+    # Find out dimensional information
+    dim_str = ""
+    for k in sorted(args):
+        if k.endswith("_dim"):
+            dim_str += "%s_%d-" % (k, args[k])
+    if len(dim_str) > 0:
+        dim_str = dim_str[:-1]
+
+    # Append learning rate only for the SGD case
+    args.lrate = float(args.lrate)
+    opt_string = args.optimizer
+    if args.optimizer == "sgd":
+        opt_string += "-lr_%.4f" % args.lrate
+
+    # Set model name
+    name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
+
+    if args.decay_c > 0:
+        name += "-decay_%.5f" % args.decay_c
+
+    if args.clip_c > 0:
+        name += "-gclip_%.1f" % args.clip_c
+
+    if isinstance(args.weight_init, str):
+        name += "-winit_%s" % args.weight_init
+    else:
+        name += "-winit_%.3f" % args.weight_init
+
+    if args.seed != 1234:
+        name += "-seed_%d" % args.seed
+
+    if len(args.get('suffix', '')) > 0:
+        name = "%s-%s" % (name, args.suffix)
+
+    if 'suffix' in args:
+        del args['suffix']
+
+    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
+    del args['model_path_suffix']
+
+    ensure_dirs([args.model_path])
+
+    # Log file
+    args.log_file = os.path.join(args.model_path, name + ".log")
+
+    i = 1
+    __name = name
+    while os.path.exists(args.log_file):
+        __name = "%s_%d" % (name, i)
+        args.log_file = os.path.join(args.model_path, __name + ".log")
+        i += 1
+
+    args.model_name = __name
+    args.model_path = os.path.join(args.model_path,
+                                   args.model_name + ".npz")
+
+    return args
