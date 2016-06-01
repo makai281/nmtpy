@@ -8,20 +8,23 @@ import theano.tensor as tensor
 
 from .nmtutils import itemlist
 
+def get_shared_grads(tparams):
+    """Returns shared theano variables of 0 for each param to keep grads."""
+    return [theano.shared(p.get_value() * np.float32(0.), name='%s_grad' % k) \
+                for k, p in tparams.iteritems()]
+
 # optimizers
 # name(hyperp, tparams, grads, inputs (list), cost) = f_grad_shared, f_update
 def adam(lr, tparams, grads, inp, cost, profile=False, mode=None):
-    gshared = [theano.shared(p.get_value() * 0.,
-                             name='%s_grad' % k)
-               for k, p in tparams.iteritems()]
+    gshared = get_shared_grads(tparams)
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
     f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile, mode=mode)
 
     lr0 = 0.0002
-    b1 = 0.9
-    b2 = 0.999
-    e = 1e-8
+    b1  = 0.9
+    b2  = 0.999
+    eps = 1e-8
 
     updates = []
 
@@ -41,7 +44,7 @@ def adam(lr, tparams, grads, inp, cost, profile=False, mode=None):
         v_t = (b2 * v) + ((1. - b2) * tensor.sqr(g))
         updates.append((v, v_t))
 
-        p_t = p - (lr_t * (m_t / (tensor.sqrt(v_t) + e)))
+        p_t = p - (lr_t * (m_t / (tensor.sqrt(v_t) + eps)))
         updates.append((p, p_t))
 
     updates.append((i, i_t))
@@ -52,9 +55,7 @@ def adam(lr, tparams, grads, inp, cost, profile=False, mode=None):
 
 
 def adadelta(lr, tparams, grads, inp, cost, profile=False, mode=None):
-    zipped_grads = [theano.shared(p.get_value() * np.float32(0.),
-                                  name='%s_grad' % k)
-                    for k, p in tparams.iteritems()]
+    gshared = get_shared_grads(tparams)
     running_up2 = [theano.shared(p.get_value() * np.float32(0.),
                                  name='%s_rup2' % k)
                    for k, p in tparams.iteritems()]
@@ -64,7 +65,7 @@ def adadelta(lr, tparams, grads, inp, cost, profile=False, mode=None):
 
     eps = 1e-6
 
-    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
+    zgup = [(zg, g) for zg, g in zip(gshared, grads)]
     rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
              for rg2, g in zip(running_grads2, grads)]
 
@@ -72,7 +73,7 @@ def adadelta(lr, tparams, grads, inp, cost, profile=False, mode=None):
                                     profile=profile, mode=mode)
 
     updir = [-tensor.sqrt(ru2 + eps) / tensor.sqrt(rg2 + eps) * zg
-             for zg, ru2, rg2 in zip(zipped_grads,
+             for zg, ru2, rg2 in zip(gshared,
                                      running_up2,
                                      running_grads2)]
     ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2))
@@ -86,9 +87,8 @@ def adadelta(lr, tparams, grads, inp, cost, profile=False, mode=None):
 
 
 def rmsprop(lr, tparams, grads, inp, cost, profile=False, mode=None):
-    zipped_grads = [theano.shared(p.get_value() * np.float32(0.),
-                                  name='%s_grad' % k)
-                    for k, p in tparams.iteritems()]
+    """RMSProp optimizer."""
+    gshared = get_shared_grads(tparams)
     running_grads = [theano.shared(p.get_value() * np.float32(0.),
                                    name='%s_rgrad' % k)
                      for k, p in tparams.iteritems()]
@@ -96,7 +96,7 @@ def rmsprop(lr, tparams, grads, inp, cost, profile=False, mode=None):
                                     name='%s_rgrad2' % k)
                       for k, p in tparams.iteritems()]
 
-    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
+    zgup = [(zg, g) for zg, g in zip(gshared, grads)]
     rgup = [(rg, 0.95 * rg + 0.05 * g) for rg, g in zip(running_grads, grads)]
     rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
              for rg2, g in zip(running_grads2, grads)]
@@ -108,7 +108,7 @@ def rmsprop(lr, tparams, grads, inp, cost, profile=False, mode=None):
                            name='%s_updir' % k)
              for k, p in tparams.iteritems()]
     updir_new = [(ud, 0.9 * ud - 1e-4 * zg / tensor.sqrt(rg2 - rg ** 2 + 1e-4))
-                 for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads,
+                 for ud, zg, rg, rg2 in zip(updir, gshared, running_grads,
                                             running_grads2)]
     param_up = [(p, p + udn[1])
                 for p, udn in zip(itemlist(tparams), updir_new)]
@@ -119,11 +119,8 @@ def rmsprop(lr, tparams, grads, inp, cost, profile=False, mode=None):
 
 
 def sgd(lr, tparams, grads, inp, cost, profile=False, mode=None):
-
-    # allocate gradients and set them all to zero
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad' % k)
-               for k, p in tparams.iteritems()]
-
+    """Stochastic Gradient Descent optimizer."""
+    gshared = get_shared_grads(tparams)
     # create gradient copying list,
     # from grads (tensor variable) to gshared (shared variable)
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
