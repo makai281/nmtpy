@@ -7,6 +7,7 @@ import cPickle
 import inspect
 import tempfile
 import subprocess
+import gzip
 
 from . import cleanup
 
