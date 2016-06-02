@@ -32,6 +32,12 @@ if __name__ == '__main__':
                             word_freqs[w] = 0
                         word_freqs[w] += 1
 
+        # Remove already available <eos> and <unk> if any
+        if '<eos>' in word_freqs:
+            del word_freqs['<eos>']
+        if '<unk>' in word_freqs:
+            del word_freqs['<unk>']
+
         words = word_freqs.keys()
         freqs = np.array(word_freqs.values())
 
@@ -44,10 +50,13 @@ if __name__ == '__main__':
         sorted_idx = np.argsort(freqs)
         sorted_words = [words[ii] for ii in sorted_idx[::-1] if freqs[ii] >= args.min_freq]
 
+        print "# of unique words in %s: %d" % (filename, len(sorted_words))
+
         worddict = OrderedDict()
         worddict['<eos>'] = 0
         worddict['<unk>'] = 1
 
+        # Start inserting from index 2
         for ii, ww in enumerate(sorted_words):
             worddict[ww] = ii + 2
 
