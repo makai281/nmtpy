@@ -47,62 +47,9 @@ TRAIN_DEFAULTS = {
         'valid_freq':         0,              # 0: End of epochs
         'valid_metric':       'bleu',         # bleu, px, meteor
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
-        'njobs':              8,              # # of parallel CPU tasks to do beam-search
+        'njobs':              10,             # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
         }
-
-def setup(args):
-    # Check METEOR path
-    if args.valid_metric == "meteor":
-        if "meteor_path" in args:
-            os.environ['METEOR_JAR'] = args['meteor_path']
-        else:
-            raise Exception("You need to provide 'meteor-path' in your configuration.")
-
-    # Find out dimensional information
-    dim_str = ""
-    for k in sorted(args):
-        if k.endswith("_dim"):
-            dim_str += "%s_%d-" % (k, args[k])
-    if len(dim_str) > 0:
-        dim_str = dim_str[:-1]
-
-    # Append learning rate only for the SGD case
-    args.lrate = float(args.lrate)
-    opt_string = args.optimizer
-    if args.optimizer == "sgd":
-        opt_string += "-lr_%.4f" % args.lrate
-
-    # Set model name
-    name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
-
-    if args.decay_c > 0:
-        name += "-decay_%.5f" % args.decay_c
-
-    if args.clip_c > 0:
-        name += "-gclip_%.1f" % args.clip_c
-
-    if isinstance(args.weight_init, str):
-        name += "-winit_%s" % args.weight_init
-    else:
-        name += "-winit_%.3f" % args.weight_init
-
-    if args.seed != 1234:
-        name += "-seed_%d" % args.seed
-
-    if len(args.get('suffix', '')) > 0:
-        name = "%s-%s" % (name, args.suffix)
-
-    if 'suffix' in args:
-        del args['suffix']
-
-    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
-    del args['model_path_suffix']
-
-    ensure_dirs([args.model_path])
-    args.model_path = os.path.join(args.model_path, name + ".npz")
-
-    return args
 
 ##########
 # main() #
@@ -148,13 +95,12 @@ if __name__ == '__main__':
     ###################
     # Setup arguments
     ###################
-    args = setup(args)
+    args = setup_train_args(args)
 
     ######################################################
     # Start logging module (both to terminal and to file)
     ######################################################
-    log_file = os.path.join(args.model_path.replace(".npz", ".log"))
-    Logger.set_file(log_file)
+    Logger.set_file(args.log_file)
     log = Logger._logger
 
     #############
@@ -163,6 +109,9 @@ if __name__ == '__main__':
     args.device_id = get_gpu(args.device_id)
     os.environ["THEANO_FLAGS"] = "device=%s" % args.device_id
 
+    ###############
+    # Import theano
+    ###############
     import theano
     import theano.tensor as tensor
     log.info("Using device: %s (on machine %s)" % (args.device_id, platform.node()))
@@ -201,6 +150,7 @@ if __name__ == '__main__':
     model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
     model = Model(seed=args.seed, **model_args)
 
+    log.info("Early stopping metric is %s" % args.valid_metric)
     log.info("Preparing data")
     model.load_data()
 
@@ -213,8 +163,6 @@ if __name__ == '__main__':
 
     # Save model options
     model.save_options()
-
-    log.info("Early stopping metric is %s" % args.valid_metric)
 
     # Initialize parameters
     log.info("Initializing parameters")
@@ -244,6 +192,7 @@ if __name__ == '__main__':
     log.info('Building "%s" optimizer' % args.optimizer)
     model.build_optimizer(cost, args.clip_c)
 
+    # Loop parameters
     early_stop      = False
     uidx            = 0
     bad_counter     = 0

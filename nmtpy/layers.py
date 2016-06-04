@@ -41,6 +41,7 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     # According to paper, this should be [h = u * h_tilda + (1 - u) * h_]
     h = u * h_tilda + (1. - u) * h_
     # What's the logic to invert the mask and add it after multiplying by h_?
+    # -> h is new h if mask is not 0 (a word was presented), otherwise, h is the copy of previous h which is h_
     h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
     return h

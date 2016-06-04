@@ -8,6 +8,21 @@ from functools import total_ordering
 from .sysutils import find_executable, real_path, get_temp_file
 
 @total_ordering
+class Metric(object):
+    def __init__(self):
+        self.score = 0.
+        self.name = None
+
+    def __eq__(self, other):
+        return self.score == other.score
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+    def __repr__(self):
+        return "%s = %3.3f" % (self.name, self.score)
+
+@total_ordering
 class METEORScore(object):
     def __init__(self, score=""):
         if score:
@@ -43,7 +58,7 @@ class BLEUScore(object):
 
     def __repr__(self):
         if self.__parsed == False:
-            return "0"
+            return "BLEU = 0.0"
         return "BLEU = %3.2f, %2.1f/%2.1f/%2.1f/%2.1f (BP=%.3f, ratio=%.3f, hyp_len=%d, ref_len=%d)" % \
                 (self.score,
                  self.ngram_scores[0], self.ngram_scores[1], self.ngram_scores[2], self.ngram_scores[3],
