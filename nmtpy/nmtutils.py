@@ -59,6 +59,13 @@ def itemlist(tparams):
 def _p(pp, name):
     return '%s_%s' % (pp, name)
 
+def get_param_dict(path):
+    pp = np.load(path)
+    p = {}
+    for k,v in pp.iteritems():
+        p[k] = v
+    return p
+
 # load parameters
 def load_params(path, params):
     pp = np.load(path)
