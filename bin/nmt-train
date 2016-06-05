@@ -16,7 +16,7 @@ import numpy as np
 from nmtpy.config import Config
 from nmtpy.logger import Logger
 from nmtpy.sysutils import *
-from nmtpy.nmtutils import unzip
+from nmtpy.nmtutils import unzip, get_param_dict
 import nmtpy.cleanup as cleanup
 
 cleanup.register_handler()
@@ -170,11 +170,13 @@ if __name__ == '__main__':
     # Use pretrained weights if any
     if args.model:
         log.info("Loading embeddings from pretrained model")
-        pretrained = np.load(args.model)
-        # Use en-de's embeddings for de-en training
-        updates = {'Wemb_enc' : pretrained['Wemb_dec'],
-                   'Wemb_dec' : pretrained['Wemb_enc']}
-        model.init_shared_variables(_from=updates)
+        pretrained = get_param_dict(args.model)
+        # Switch embeddings
+        embeddings = {
+                        'Wemb_dec': pretrained['Wemb_enc'],
+                        'Wemb_enc': pretrained['Wemb_dec'],
+                     }
+        model.init_shared_variables(_from=embeddings)
 
     # Build the model
     log.info("Building model")
