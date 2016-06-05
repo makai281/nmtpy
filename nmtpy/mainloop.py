@@ -2,38 +2,43 @@
 from math import ceil
 from shutil import copy
 
-# The serialization of this mainloop can ease
-# resuming of trainings.
-
 class MainLoop(object):
     def __init__(self, model, logger, train_args):
         # This is the nmtpy model and the logger
-        self.model = model
-        self.__log = logger
-        self.__args = train_args
+        self.model          = model
+        self.__log          = logger
+        self.__args         = train_args
 
         # Counters
-        self.update_ctr = 1
-        self.epoch_ctr = 1
-        self.valid_ctr = 0
+        self.update_ctr     = 1
+        self.epoch_ctr      = 1
+        self.valid_ctr      = 0
 
         # Only used for SGD
-        self.lrate = self.__args.lrate
+        self.lrate          = self.__args.lrate
 
-        # Breaking conditions
-        self.early_bad = 0
-        self.early_stop = False
-        self.proceed = True
-        self.max_updates = self.__args.max_iteration
-        self.max_epochs = self.__args.max_epochs
+        self.early_bad      = 0
+        self.early_stop     = False
+        self.proceed        = True
+        self.max_updates    = self.__args.max_iteration
+        self.max_epochs     = self.__args.max_epochs
         self.early_patience = self.__args.patience
+        self.valid_metric   = self.__args.valid_metric
+        self.do_beam_search = self.valid_metric != 'px'
+
+        # Number of samples to produce
+        self.n_samples      = 5
 
         # Losses and metrics
-        self.__batch_losses = []
-        self.__mean_epoch_losses = []
+        self.__batch_losses         = []
+        self.__valid_losses         = []
+        self.__valid_metrics        = []
+        # List of lists
+        self.__train_losses         = []
 
-        self.batch_size = self.__args.batch_size
-        self.valid_freq = self.__args.valid_freq
+        self.batch_size     = self.__args.batch_size
+        self.valid_freq     = self.__args.valid_freq
+        self.sample_freq    = self.__args.sample_freq
         # If valid_freq == 0, do validation at end of epochs
         if self.valid_freq == 0:
             self.valid_freq = ceil(self.model.train_iterator.n_samples / float(self.batch_size))
@@ -70,18 +75,20 @@ class MainLoop(object):
 
     def __update_lrate(self):
         """Update learning rate by annealing it (for SGD)."""
+        # TODO
         self.lrate = self.lrate
 
     def __run_epoch(self):
         self.__header('Starting Epoch %d' % self.epoch_ctr)
+        batch_losses = []
         # Iterate over batches
         for batch_dict in self.model.train_iterator:
             self.update_ctr += 1
             self.model.set_dropout(True)
 
             # Forward pass and record batch loss
-            batch_loss = self.model.f_grad_shared(*batch_dict.values())
-            self.__batch_losses.append(batch_loss)
+            loss = self.model.f_grad_shared(*batch_dict.values())
+            batch_losses.append(loss)
             self.__update_lrate()
             # Update weights. lrate only useful for SGD
             self.model.f_update(self.lrate)
@@ -90,20 +97,57 @@ class MainLoop(object):
             if self.update_ctr % 10 == 0:
                 self.__log.info("Epoch: %4d, update: %7d, Cost: %10.2f" % (self.epoch_ctr,
                                                                            self.update_ctr,
-                                                                           batch_loss))
+                                                                           loss))
 
             # Do sampling
-            self.__do_sample()
+            self.__do_sample(batch_dict)
             # Do validation
-            self.__do_validation()
+            if self.epoch_ctr >= self.valid_start and self.update_ctr % self.valid_freq == 0:
+                self.__do_validation()
 
             # TODO: Index based periodic stuff can be further done
             # in a single check like pseudo timer
 
+        self.__train_losses.append(batch_losses)
+
+    def __do_sample(self, bdict):
+        """Generates samples and prints them."""
+        samples = self.model.generate_samples(bdict, self.n_samples)
+        if samples is not None:
+            for src, truth, sample in samples:
+                if src:
+                    self.__log.info("Source: %s" % src)
+                self.__log.info("Sample: %s" % sample)
+                self.__log.info(" Truth: %s" % truth)
+
+    def __do_validation(self):
+        # Compute validation loss
+        self.model.set_dropout(False)
+        self.__valid_losses.append(self.model.val_loss())
+        self.__log.info("[Validation %2d] LOSS = %5.5f" % (len(self.__valid_losses), self.__valid_losses[-1]))
+        if self.do_beam_search:
+            results = model.run_beam_search(beam_size=12,
+                                            n_jobs=self.njobs,
+                                            metric=self.valid_metric,
+                                            mode=self.decoder_mode)
+
+            # We'll receive the requested metrics in a dict
+            metric_results.append(results)
+            for _, v in sorted(results.iteritems()):
+                log.info("[Validation %2d] %s" % (len(metric_history)+1, v[0]))
+
+            # Pick the one selected as valid_metric and add it to metric_history
+            metric_history.append(results[args.valid_metric][1])
+
+
+    def __print_eval_summary(self):
+        if len(self.metric_history) > 0:
+            best_metric_uidx = np.argmax(np.array(self.metric_history))
+            best_metric = self.
+
     def run(self):
         while self.proceed:
             self.__run_epoch()
-
 
             # Update stopping conditions
             # FIXME: Not here actually but after each update? in eval?
