@@ -223,7 +223,7 @@ class Model(BaseModel):
         return cost.mean()
 
     def add_alpha_regularizer(self, cost, alpha_c):
-        alpha_c = theano.shared(alpha_c.astype(FLOAT), name='alpha_c')
+        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
         alpha_reg = alpha_c * (
             (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), FLOAT)[:, None] -
              self.alphas.sum(0))**2).sum(1).mean()
