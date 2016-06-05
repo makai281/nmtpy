@@ -191,13 +191,8 @@ if __name__ == '__main__':
         log.info('Building sampler')
         model.build_sampler()
 
-    # apply L2 regularization on weights
-    if args.decay_c > 0.:
-        cost = model.add_l2_weight_decay(cost, args.decay_c)
-
-    # This is a NO-OP if not reimplemented in the model
-    if args.alpha_c > 0.:
-        cost = model.add_alpha_regularizer(cost, args.alpha_c)
+    # Get regularized training cost
+    cost = model.get_regularized_cost(cost, args.decay_c, args.alpha_c)
 
     # Build optimizer
     log.info('Building "%s" optimizer' % args.optimizer)
