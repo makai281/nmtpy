@@ -82,6 +82,10 @@ class BaseModel(object):
             if not k.startswith(("uidx", "zipped", "valid_history", "bleu_history")):
                 self.tparams[k] = theano.shared(v, name=k)
 
+    def set_shared_variables(self, updates):
+        for k in self.tparams.keys():
+            self.tparams[k].set_value(updates[k])
+
     def save_params(self, fname, **kwargs):
         np.savez(fname, **kwargs)
 
