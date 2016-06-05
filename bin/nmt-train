@@ -49,6 +49,7 @@ TRAIN_DEFAULTS = {
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
         'njobs':              10,             # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
+        'model':              None,
         }
 
 ##########
@@ -59,7 +60,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-c', '--config'        , type=str,   help="Path to model configuration file.", required=True)
     parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
-
+    parser.add_argument('-m', '--model'         , type=str,   help="Optional pretrained model to fetch weights from.")
     parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
     parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
     parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
@@ -77,10 +78,6 @@ if __name__ == '__main__':
     args = Config(pargs.config).get()
     args['model_path_suffix'] = os.path.splitext(os.path.basename(pargs.config))[0]
     del pargs.__dict__['config']
-
-    # Append user-defined suffix to model id
-    if pargs.suffix:
-        args['suffix'] = pargs.suffix
 
     # Update args by reading cmdline args
     args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
@@ -170,6 +167,15 @@ if __name__ == '__main__':
     model.init_shared_variables()
     log.info("Number of parameters: %s" % model.get_nb_params())
 
+    # Use pretrained weights if any
+    if args.model:
+        log.info("Loading embeddings from pretrained model")
+        pretrained = np.load(args.model)
+        # Use en-de's embeddings for de-en training
+        updates = {'Wemb_enc' : pretrained['Wemb_dec'],
+                   'Wemb_dec' : pretrained['Wemb_enc']}
+        model.init_shared_variables(_from=updates)
+
     # Build the model
     log.info("Building model")
     cost = model.build()
@@ -177,8 +183,9 @@ if __name__ == '__main__':
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
 
-    log.info('Building sampler')
-    model.build_sampler()
+    if args.sample_freq > 0:
+        log.info('Building sampler')
+        model.build_sampler()
 
     # apply L2 regularization on weights
     if args.decay_c > 0.:
