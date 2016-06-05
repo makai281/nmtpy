@@ -6,8 +6,8 @@ class MainLoop(object):
     def __init__(self, model, logger, train_args):
         # This is the nmtpy model and the logger
         self.model          = model
+        self.model_path     = train_args.model_path
         self.__log          = logger
-        self.__args         = train_args
 
         # Counters
         self.update_ctr     = 1
@@ -15,15 +15,16 @@ class MainLoop(object):
         self.valid_ctr      = 0
 
         # Only used for SGD
-        self.lrate          = self.__args.lrate
+        self.lrate          = train_args.lrate
 
         self.early_bad      = 0
         self.early_stop     = False
         self.proceed        = True
-        self.max_updates    = self.__args.max_iteration
-        self.max_epochs     = self.__args.max_epochs
-        self.early_patience = self.__args.patience
-        self.valid_metric   = self.__args.valid_metric
+        self.save_iter      = train_args.save_iter
+        self.max_updates    = train_args.max_iteration
+        self.max_epochs     = train_args.max_epochs
+        self.early_patience = train_args.patience
+        self.valid_metric   = train_args.valid_metric
         self.do_beam_search = self.valid_metric != 'px'
 
         # Number of samples to produce
@@ -36,34 +37,38 @@ class MainLoop(object):
         # List of lists
         self.__train_losses         = []
 
-        self.batch_size     = self.__args.batch_size
-        self.valid_freq     = self.__args.valid_freq
-        self.sample_freq    = self.__args.sample_freq
+        self.batch_size     = train_args.batch_size
+        self.valid_freq     = train_args.valid_freq
+        self.sample_freq    = train_args.sample_freq
+        self.do_sampling    = self.sample_freq > 0
+
         # If valid_freq == 0, do validation at end of epochs
         if self.valid_freq == 0:
             self.valid_freq = ceil(self.model.train_iterator.n_samples / float(self.batch_size))
+
+        # Periodic hooks to run during training
+        self.__hooks        = []
+
+    def __header(self, msg):
+        """Pretty prints a message with ending dashes."""
+        self.__log.info(msg)
+        self.__log.info('-' * len(msg))
 
     def save_best_model(self):
         """Overwrites best on-disk model and saves it as a different file optionally."""
         self.__log.info('Saving the best model')
         self.early_bad = 0
-        self.model.save_params(self.__args.model_path,
+        self.model.save_params(self.model_path,
                               #valid_losses=valid_losses, TODO
                               #metric_history=metric_history, TODO
                               uidx=self.update_ctr, **unzip(self.model.tparams))
 
         # Save each best model as different files
         # Can be useful for ensembling
-        if self.__args.save_iter:
+        if self.save_iter:
             self.__log.info('Saving best model at iteration %d' % self.update_ctr)
-            model_path_uidx = '%s.iter%d.npz' % (os.path.splitext(self.__args.model_path)[0], self.update_ctr)
-            copy(self.__args.model_path, model_path_uidx)
-
-
-    def __header(self, msg):
-        """Prints a message with trailing dashes."""
-        self.__log.info(msg)
-        self.__log.info('-' * len(msg))
+            model_path_uidx = '%s.iter%d.npz' % (os.path.splitext(self.model_path)[0], self.update_ctr)
+            copy(self.model_path, model_path_uidx)
 
     def __update_stop_conditions(self):
         if self.update_ctr == self.max_updates:
@@ -90,7 +95,8 @@ class MainLoop(object):
             loss = self.model.f_grad_shared(*batch_dict.values())
             batch_losses.append(loss)
             self.__update_lrate()
-            # Update weights. lrate only useful for SGD
+
+            # Backward pass
             self.model.f_update(self.lrate)
 
             # verbose
@@ -98,17 +104,18 @@ class MainLoop(object):
                 self.__log.info("Epoch: %4d, update: %7d, Cost: %10.2f" % (self.epoch_ctr,
                                                                            self.update_ctr,
                                                                            loss))
-
             # Do sampling
-            self.__do_sample(batch_dict)
+            if self.do_sampling and self.update_ctr % self.sample_freq == 0:
+                self.__do_sample(batch_dict)
+
             # Do validation
             if self.epoch_ctr >= self.valid_start and self.update_ctr % self.valid_freq == 0:
                 self.__do_validation()
 
-            # TODO: Index based periodic stuff can be further done
-            # in a single check like pseudo timer
-
+        # Save epoch losses
         self.__train_losses.append(batch_losses)
+        mean_loss = np.array(batch_losses).mean()
+        self.__log.info("Epoch %d finished with mean loss %.5f" % (self.epoch_ctr, mean_loss))
 
     def __do_sample(self, bdict):
         """Generates samples and prints them."""
