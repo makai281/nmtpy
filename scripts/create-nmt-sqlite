@@ -1,0 +1,129 @@
+#!/usr/bin/env python
+
+# Disable garbage collector
+import gc
+gc.disable()
+
+import sys
+import gzip
+import sqlite3
+import argparse
+
+from multiprocessing import Process, Queue
+from Queue import Empty as ExceptionEmpty
+
+from nmtpy.sysutils import fopen
+from itertools import izip
+
+CHUNKSIZE = 100000
+
+CTABLE = """\
+CREATE TABLE IF NOT EXISTS data (
+    src     TEXT,
+    trg     TEXT,
+    slen    INT,
+    tlen    INT,
+    UNIQUE  (src, trg)
+)"""
+CINDEX = """\
+CREATE INDEX IF NOT EXISTS IdxLen ON data(tlen, slen)
+"""
+
+def process_file(queue, files):
+    sf = fopen(files[0])
+    tf = fopen(files[1])
+
+    pairs = set()
+
+    for idx, (src, trg) in enumerate(izip(sf, tf)):
+        src = tuple(unicode(src, 'utf-8').strip().split(' '))
+        trg = tuple(unicode(trg, 'utf-8').strip().split(' '))
+        pairs.add((" ".join(src), len(src), " ".join(trg), len(trg)))
+        if (idx+1) % CHUNKSIZE == 0:
+            queue.put(pairs)
+            pairs = set()
+
+    if len(pairs) > 0:
+        queue.put(pairs)
+
+    sf.close()
+    tf.close()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-a', '--append', action='store_true', help='Append to database.')
+    parser.add_argument('-o', '--output', type=str, help='Output pkl file', required=True)
+    parser.add_argument('-l', '--lang', type=str, help='Language pair, i.e. "en-fr"', required=True)
+    parser.add_argument('files', type=str, nargs='+', help='Path to corpora files')
+    args = parser.parse_args()
+
+    src_lang, trg_lang = args.lang.split('-')
+
+    files = sorted(args.files)
+    pairs = [[files[i], files[i+1]] for i in range(0, len(files), 2)]
+
+    if len(pairs) % 2 != 0:
+        print "Error: Number of files not a multiple of 2."
+        sys.exit(1)
+
+    if ".%s." % src_lang not in pairs[0][0]:
+        # Switch direction
+        pairs = [x[::-1] for x in pairs]
+
+    print '%d files assuming %d parallel corpora' % (len(files), len(pairs))
+    print '\n'.join(pairs)
+
+    # Remove if any
+    args.output = args.output.replace(".sql", "")
+    args.output = "%s.%s.sql" % (args.output, args.lang)
+    print 'Will write into %s' % args.output
+    sys.exit(0)
+
+    if not args.append:
+        print "Removing previously created database if any."
+        try:
+            os.unlink(args.output)
+        except:
+            pass
+
+    # Create database connection
+    con = sqlite3.connect(args.output + '.sql')
+    c = con.cursor()
+
+    # Some possible speedups
+    c.execute('PRAGMA synchronous = OFF')
+    c.execute('PRAGMA journal_mode = OFF')
+    c.execute(CTABLE)
+
+    # Multi process queue
+    queue = Queue()
+    procs = [None] * len(pairs)
+    for idx in range(len(pairs)):
+        procs[idx] = Process(target=process_file, args=(queue, pairs[idx]))
+        procs[idx].start()
+
+    # Consumer part
+    processed = 0
+    n_empty = 20
+    while n_empty > 0:
+        try:
+            # Minimize timeout, bail out if queue empty 20 times
+            sents = queue.get(timeout=.2)
+        except ExceptionEmpty as qe:
+            n_empty -= 1
+            print 'Queue returned nothing.'
+        else:
+            c.executemany('INSERT OR IGNORE INTO data VALUES(?,?,?,?)', sents)
+            processed += len(sents)
+            print '\r%d' % processed,
+            sys.stdout.flush()
+            n_empty = 0
+
+    # Kill the workers
+    for idx in range(len(procs)):
+        procs[idx].terminate()
+
+    print 'Creating index...'
+    c.execute(CINDEX)
+    con.commit()
+    con.close()
