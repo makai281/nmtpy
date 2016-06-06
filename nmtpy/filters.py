@@ -1,5 +1,5 @@
-"""Filters out fillers from compound splitted sentences."""
 class CompoundFilter(object):
+    """Filters out fillers from compound splitted sentences."""
     def __init__(self):
         pass
 
@@ -12,8 +12,8 @@ class CompoundFilter(object):
         else:
             return [self.__filter(e) for e in inp]
 
-
-__filters = {'compound'     : CompoundFilter()}
-
 def get_filter(name):
-    return __filters.get(name, None)
+    filters = {
+                "compound"     : CompoundFilter(),
+              }
+    return filters.get(name, None)
