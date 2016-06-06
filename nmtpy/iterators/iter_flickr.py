@@ -12,6 +12,7 @@ from ..nmtutils import mask_data, idx_to_sent, load_dictionary
 from ..typedef  import INT, FLOAT
 
 class FlickrIterator(object):
+    """Iterator for Karpathy's DeepSent dataset."""
     def __init__(self, pkl_file, pkl_split, batch_size, trg_dict, n_words_trg=0, src_name='x_img', trg_name='y'):
         # For minibatch shuffling
         random.seed(1234)
