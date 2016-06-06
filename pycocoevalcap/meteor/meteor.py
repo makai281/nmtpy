@@ -12,10 +12,12 @@ import threading
 METEOR_JAR = 'meteor-1.5.jar'
 
 class Meteor:
-
-    def __init__(self, language):
+    def __init__(self, language, norm=False):
         self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, \
                 '-', '-', '-stdio', '-l', language]
+        if norm:
+            self.meteor_cmd.append('-norm')
+
         self.meteor_p = subprocess.Popen(self.meteor_cmd, \
                 cwd=os.path.dirname(os.path.abspath(__file__)), \
                 stdin=subprocess.PIPE, \
