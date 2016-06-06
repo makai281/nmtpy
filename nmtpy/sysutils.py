@@ -159,6 +159,9 @@ def setup_train_args(args):
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
 
+    if args.alpha_c > 0:
+        name += "-alpha_%.3f" % args.alpha_c
+
     if isinstance(args.weight_init, str):
         name += "-winit_%s" % args.weight_init
     else:
