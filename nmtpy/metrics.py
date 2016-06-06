@@ -9,9 +9,9 @@ from .sysutils import find_executable, real_path, get_temp_file
 
 @total_ordering
 class Metric(object):
-    def __init__(self):
-        self.score = 0.
-        self.name = None
+    def __init__(self, score=None):
+        self.score  = float(score) if score else 0.
+        self.name   = None
 
     def __eq__(self, other):
         return self.score == other.score
@@ -23,21 +23,10 @@ class Metric(object):
         return "%s = %3.3f" % (self.name, self.score)
 
 @total_ordering
-class METEORScore(object):
-    def __init__(self, score=""):
-        if score:
-            self.score = float(score)
-        else:
-            self.score = 0
-
-    def __eq__(self, other):
-        return self.score == other.score
-
-    def __lt__(self, other):
-        return self.score < other.score
-
-    def __repr__(self):
-        return "METEOR = %3.3f" % self.score
+class METEORScore(Metric):
+    def __init__(self, score=None):
+        super(METEORScore, self).__init__(score)
+        self.name = "METEOR"
 
 @total_ordering
 class BLEUScore(object):
