@@ -12,9 +12,13 @@ def singleton(cls):
 
 @singleton
 class Logger(object):
-    def __init__(self):
-        self.formatter = logging.Formatter('%(asctime)s %(message)s')
-        self._logger = logging.getLogger('Theano NMT')
+    def __init__(self, timestamp=True):
+        _format = '%(message)s'
+        if timestamp:
+            _format = '%(asctime)s ' + _format
+
+        self.formatter = logging.Formatter(_format)
+        self._logger = logging.getLogger('nmtpy')
         self._logger.setLevel(logging.DEBUG)
         self._ch = logging.StreamHandler()
         self._ch.setFormatter(self.formatter)
