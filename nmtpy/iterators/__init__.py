@@ -1,8 +1,8 @@
-from iter_wmt import WMTIterator
-from iter_text import TextIterator
-from iter_bitext import BiTextIterator
-from iter_flickr import FlickrIterator
-from iter_sqlite import SQLIterator
+from wmt    import WMTIterator
+from sqlite import SQLIterator
+from text   import TextIterator
+from flickr import FlickrIterator
+from bitext import BiTextIterator
 
 def get_iterator(name):
     iters = {
