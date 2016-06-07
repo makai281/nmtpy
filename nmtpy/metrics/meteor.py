@@ -1,14 +1,15 @@
 import os
 from subprocess import check_output
-from functools import total_ordering
 
-from .sysutils import real_path, get_temp_file
+from ..sysutils import real_path, get_temp_file
+from .metric import Metric
 
 class METEORScore(Metric):
     def __init__(self, score=None):
+        super(METEORScore, self).__init__(score)
         self.name = "METEOR"
         self.score = score if score else 0.
-        self.__score_str = "%.3f" % self.score
+        self.score_str = "%.3f" % self.score
 
 class METEORScorer(object):
     def __init__(self):
@@ -65,4 +66,4 @@ class METEORScorer(object):
             return METEORScore()
         else:
             # Final score: 0.320320320320
-            return METEORScore(score[-1].split(":")[-1].strip())
+            return METEORScore(float(score[-1].split(":")[-1].strip()))

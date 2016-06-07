@@ -1,20 +1,16 @@
 import os
-import re
 from subprocess import Popen, PIPE, check_output
 
-from .sysutils import find_executable, real_path, get_temp_file
+from ..sysutils import find_executable, real_path, get_temp_file
+from .metric    import Metric
 
 class BLEUScore(Metric):
     def __init__(self, score=None):
+        super(BLEUScore, self).__init__(score)
         self.name = "BLEU"
         if score:
-            sc = re.findall("^BLEU = (.*), (.*)/(.*)/(.*)/(.*) \(BP=(.*), ratio=(.*), hyp_len=(.*), ref_len=(.*)\)$", score)
-            self.score = float(sc[0][0])
-            self.__score_str = score.replace('BLEU = ', '')
-        else:
-            # Empty score, 0.0
-            self.score = 0.
-            self.__score_str = "0.0"
+            self.score = float(score.split()[2][:-1])
+            self.score_str = score.replace('BLEU = ', '')
 
 """MultiBleuScorer class."""
 class MultiBleuScorer(object):
