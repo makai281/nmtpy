@@ -43,6 +43,13 @@ You need the following libraries installed in order to use nmtpy:
   - theano >= 0.8 (or a GIT checkout with `tensor.nnet.logsoftmax` available)
   - six
 
+**Note on MKL**: If you are using Anaconda, make sure that in your .theanorc you only give `-lmkl_rt` as linking flags:
+
+```
+[blas]
+ldflags = -lmkl_rt
+```
+
 After fulfilling the dependencies, create a easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
 
 ```
