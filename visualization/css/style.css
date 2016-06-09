@@ -2,35 +2,41 @@ body {
   background-color: #fff;
   background-image: url('lium.png');
   background-repeat: no-repeat;
-  background-position: 10% 10%;
-}
-
-canvas {
-border: 1px solid black;
-position: absolute;
+  background-position: 10% 5%;
 }
 
 div.sentence {
   font-size: 20px;
   color: #333;
   font-weight: bold;
+  border: 1px solid;
+  height: 75px;
+  line-height:65px;
+}
+
+div.imagearea {
+  line-height:200px;
 }
 
 span.srcword {
-  border: 2px solid #DDD;
   text-align: center;
   padding: 6px;
   margin: 0px 10px 0px 10px;
 }
 
 span.trgword {
-  border: 2px solid #DDD;
   text-align: center;
   padding: 6px;
   margin: 0px 10px 0px 10px;
 }
 
 #srctext {
-  margin-bottom: 3cm;
-  color: black;
+  margin-bottom: 1cm;
+  color: blue;
+  border-color: blue;
+}
+
+#trgtext {
+  border-color: red;
+  color: red;
 }
