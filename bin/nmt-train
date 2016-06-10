@@ -209,14 +209,15 @@ if __name__ == '__main__':
 
     # Helper method for validation summary
     def dump_val_summary():
+        if len(valid_losses) > 0:
+            best_valid_idx = np.argmin(np.array(valid_losses))
+            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
+
         if len(metric_history) > 0:
             best_metric_idx = np.argmax(np.array(metric_history))
             best_valid = metric_results[best_metric_idx]
             for _, v in sorted(best_valid.iteritems()):
                 log.info("[Validation %3d] Current Best %s" % (best_metric_idx + 1, v[0]))
-        else:
-            best_valid_idx = np.argmin(np.array(valid_losses))
-            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
 
     ################
     # Training loop
