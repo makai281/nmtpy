@@ -128,8 +128,11 @@ class BaseModel(object):
         cost += weight_decay
         return cost
 
-    def add_alpha_regularizer(self, cost, alpha_c):
-        # This should be reimplemented in attentional models
+    def get_regularized_cost(self, cost, decay_c, alpha_c=None):
+        if decay_c > 0:
+            cost = self.add_l2_weight_decay(cost, decay_c)
+        if alpha_c and alpha_c > 0:
+            cost = self.add_alpha_regularizer(cost, alpha_c)
         return cost
 
     def build_optimizer(self, cost, clip_c, dont_update=None):
@@ -237,6 +240,10 @@ class BaseModel(object):
 
     def info(self, logger):
         pass
+
+    def add_alpha_regularizer(self, cost, alpha_c):
+        # This should be implemented in attentional models if necessary.
+        return cost
 
     ##########################################################
     # For all the abstract methods below, you can take a look

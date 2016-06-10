@@ -222,13 +222,6 @@ class Model(BaseModel):
 
         return cost.mean()
 
-    def get_regularized_cost(self, cost, decay_c, alpha_c):
-        if decay_c > 0:
-            cost = self.add_l2_weight_decay(cost, decay_c)
-        if alpha_c > 0:
-            cost = self.add_alpha_regularizer(cost, alpha_c)
-        return cost
-
     def add_alpha_regularizer(self, cost, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
         alpha_reg = alpha_c * (
