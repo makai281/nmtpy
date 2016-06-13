@@ -1,0 +1,29 @@
+diff --git a/nmtpy/models/attention.py b/nmtpy/models/attention.py
+index eb7ee54..edffebb 100644
+--- a/nmtpy/models/attention.py
++++ b/nmtpy/models/attention.py
+@@ -115,6 +115,8 @@ class Model(BaseModel):
+         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+         params = get_new_layer('ff')[0](params, prefix='ff_logit'      , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
+ 
++        params = get_new_layer('gru')[0](params, prefix='encoder_ctx', nin=self.ctx_dim, dim=self.ctx_dim, scale=self.weight_init)
++
+         self.initial_params = params
+ 
+     def build(self):
+@@ -151,6 +153,7 @@ class Model(BaseModel):
+ 
+         # context will be the concatenation of forward and backward rnns
+         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
++        ctx = get_new_layer('gru')[1](self.tparams, ctx, prefix='encoder_ctx', mask=x_mask, profile=self.profile, mode=self.func_mode)[0]
+ 
+         # mean of the context (across time) will be used to initialize decoder rnn
+         ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+@@ -250,6 +253,7 @@ class Model(BaseModel):
+         # concatenate forward and backward rnn hidden states
+         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+ 
++        ctx = get_new_layer('gru')[1](self.tparams, ctx, prefix='encoder_ctx', profile=self.profile, mode=self.func_mode)[0]
+         # get the input for decoder rnn initializer mlp
+         ctx_mean = ctx.mean(0)
+         # ctx_mean = tensor.concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
