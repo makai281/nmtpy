@@ -251,9 +251,8 @@ if __name__ == '__main__':
             model.f_update(cur_lrate)
             ud = time.time() - ud_start
 
-            # verbose
             if uidx % 10 == 0:
-                log.info("Epoch: %4d, update: %7d, Cost: %10.2f, Time: %.3f" % (eidx, uidx, train_losses[-1], ud))
+                log.info("Epoch: %4d, update: %7d, Cost: %10.5f, Time: %.3f" % (eidx, uidx, train_losses[-1], ud))
 
             # sample?
             if args.sample_freq > 0 and uidx % args.sample_freq == 0:
@@ -354,7 +353,7 @@ if __name__ == '__main__':
 
         # Epoch finished
         train_losses = np.array(train_losses)
-        log.info("Epoch %d finished with mean batch loss: %.3f" % (eidx, train_losses.mean()))
+        log.info("Epoch %d finished with mean batch loss: %.5f" % (eidx, train_losses.mean()))
 
         if early_stop:
             log.info('Early Stopped.')
