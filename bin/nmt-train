@@ -50,6 +50,7 @@ TRAIN_DEFAULTS = {
         'njobs':              10,             # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
         'model':              None,
+        'stop_embedding':     0,              # Stop updating embeddings after this epoch
         }
 
 ##########
@@ -206,6 +207,7 @@ if __name__ == '__main__':
     valid_losses    = []
     metric_history  = []
     metric_results  = []
+    opt_recompiled  = False
 
     # Helper method for validation summary
     def dump_val_summary():
@@ -226,6 +228,11 @@ if __name__ == '__main__':
         msg = 'Starting epoch %d' % eidx
         log.info(msg)
         log.info('-' * len(msg))
+
+        if not opt_recompiled and args.stop_embedding == eidx - 1:
+            log.info('Rebuilding "%s" optimizer to fix embeddings' % args.optimizer)
+            model.build_optimizer(cost, args.clip_c, dont_update=['Wemb_enc', 'Wemb_dec'])
+            opt_recompiled = True
 
         # Train error list
         train_losses = []
