@@ -84,7 +84,7 @@ class BaseModel(object):
 
     def set_shared_variables(self, updates):
         for k in self.tparams.keys():
-            self.tparams[k].set_value(updates[k])
+            self.tparams[k].set_value(updates[k].get_value())
 
     def save_params(self, fname, **kwargs):
         np.savez(fname, **kwargs)
@@ -128,23 +128,23 @@ class BaseModel(object):
         cost += weight_decay
         return cost
 
-    def add_alpha_regularizer(self, cost, alpha_c):
-        # This should be reimplemented in attentional models
+    def get_regularized_cost(self, cost, decay_c, alpha_c=None):
+        if decay_c > 0:
+            cost = self.add_l2_weight_decay(cost, decay_c)
+        if alpha_c and alpha_c > 0:
+            cost = self.add_alpha_regularizer(cost, alpha_c)
         return cost
 
     def build_optimizer(self, cost, clip_c, dont_update=None):
-        # List of model parameters
-        tparams = self.tparams
-        # Any parameters to not update in SGD?
-        if dont_update is not None:
-            avail_keys = [k for k in dont_update if k in tparams]
-            for key in avail_keys:
-                del tparams[key]
-        # Now get the list of model parameters
-        params = itemlist(tparams)
+        tparams = OrderedDict(self.tparams)
 
-        # Get gradients of cost with respect to parameters
-        grads = tensor.grad(cost, wrt=params)
+        if dont_update is not None:
+            for key in tparams:
+                if key in dont_update:
+                    del tparams[key]
+
+        # Get gradients of cost with respect to variables
+        grads = tensor.grad(cost, wrt=tparams.values())
 
         # Gradient clipping
         if clip_c > 0.:
@@ -237,6 +237,10 @@ class BaseModel(object):
 
     def info(self, logger):
         pass
+
+    def add_alpha_regularizer(self, cost, alpha_c):
+        # This should be implemented in attentional models if necessary.
+        return cost
 
     ##########################################################
     # For all the abstract methods below, you can take a look

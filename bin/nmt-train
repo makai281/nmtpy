@@ -50,6 +50,7 @@ TRAIN_DEFAULTS = {
         'njobs':              10,             # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
         'model':              None,
+        'stop_embedding':     0,              # Stop updating embeddings after this epoch
         }
 
 ##########
@@ -206,17 +207,19 @@ if __name__ == '__main__':
     valid_losses    = []
     metric_history  = []
     metric_results  = []
+    opt_recompiled  = False
 
     # Helper method for validation summary
     def dump_val_summary():
+        if len(valid_losses) > 0:
+            best_valid_idx = np.argmin(np.array(valid_losses))
+            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
+
         if len(metric_history) > 0:
             best_metric_idx = np.argmax(np.array(metric_history))
             best_valid = metric_results[best_metric_idx]
             for _, v in sorted(best_valid.iteritems()):
                 log.info("[Validation %3d] Current Best %s" % (best_metric_idx + 1, v[0]))
-        else:
-            best_valid_idx = np.argmin(np.array(valid_losses))
-            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
 
     ################
     # Training loop
@@ -225,6 +228,11 @@ if __name__ == '__main__':
         msg = 'Starting epoch %d' % eidx
         log.info(msg)
         log.info('-' * len(msg))
+
+        if args.stop_embedding > 0 and not opt_recompiled and args.stop_embedding == eidx - 1:
+            log.info('Rebuilding "%s" optimizer to fix embeddings' % args.optimizer)
+            model.build_optimizer(cost, args.clip_c, dont_update=['Wemb_enc', 'Wemb_dec'])
+            opt_recompiled = True
 
         # Train error list
         train_losses = []
