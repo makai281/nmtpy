@@ -1,12 +1,11 @@
 '''
 SGD and variants.
 '''
+from six.moves import zip
 import numpy as np
 
 import theano
 import theano.tensor as tensor
-
-from itertools import izip as zip
 
 from .nmtutils import itemlist
 
