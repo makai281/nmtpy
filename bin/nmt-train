@@ -229,7 +229,7 @@ if __name__ == '__main__':
         log.info(msg)
         log.info('-' * len(msg))
 
-        if not opt_recompiled and args.stop_embedding == eidx - 1:
+        if args.stop_embedding > 0 and not opt_recompiled and args.stop_embedding == eidx - 1:
             log.info('Rebuilding "%s" optimizer to fix embeddings' % args.optimizer)
             model.build_optimizer(cost, args.clip_c, dont_update=['Wemb_enc', 'Wemb_dec'])
             opt_recompiled = True
