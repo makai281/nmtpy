@@ -84,7 +84,7 @@ class BaseModel(object):
 
     def set_shared_variables(self, updates):
         for k in self.tparams.keys():
-            self.tparams[k].set_value(updates[k].get_value())
+            self.tparams[k].set_value(updates[k])
 
     def save_params(self, fname, **kwargs):
         np.savez(fname, **kwargs)
