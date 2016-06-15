@@ -99,16 +99,21 @@ class BaseModel(object):
     def init_shared_variables(self, _from=None):
         # initialize Theano shared variables according to the _from
         # if _from is None, use initial_params
-        if self.tparams is None:
-            self.tparams = OrderedDict()
         if _from is None:
             _from = self.initial_params
-        for kk, pp in _from.iteritems():
-            self.tparams[kk] = theano.shared(_from[kk], name=kk)
+
+        if self.tparams is None:
+            self.tparams = OrderedDict()
+            for kk, pp in _from.iteritems():
+                self.tparams[kk] = theano.shared(_from[kk], name=kk)
+        else:
+            for kk, pp in _from.iteritems():
+                self.tparams[kk].set_value(_from[kk])
 
     def val_loss(self):
         probs = []
 
+        self.set_dropout(False)
         # dict of x, x_mask, y, y_mask
         for data in self.valid_iterator:
             # Don't fail if data doesn't contain y_mask. The loss won't
@@ -116,6 +121,7 @@ class BaseModel(object):
             norm = data['y_mask'].sum(0) if 'y_mask' in data else 1
             log_probs = self.f_log_probs(*data.values()) / norm
             probs.extend(log_probs)
+        self.set_dropout(True)
 
         return np.array(probs).mean()
 
