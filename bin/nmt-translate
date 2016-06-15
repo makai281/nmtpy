@@ -81,6 +81,7 @@ class Translator(object):
         self.valid_mode = args.validmode
         self.suppress_unks = args.suppress_unks
         self.model_file = args.model
+        self.first = args.first
 
         self.utf8 = False
         self.filters = []
@@ -147,7 +148,12 @@ class Translator(object):
 
             self.iterator = self.model.valid_iterator
 
-            log.info('I will translate %d samples' % self.iterator.n_samples)
+            if self.first > 0:
+                self.n_sentences = self.first
+            else:
+                self.n_sentences = self.iterator.n_samples
+
+            log.info('I will translate %d samples' % self.n_sentences)
 
             if self.src_files is None:
                 self.src_files = listify(self.model.data['valid_src'])
@@ -192,10 +198,9 @@ class Translator(object):
         cleanup.register_handler()
 
         # Send data to worker processes
-        for idx, data in enumerate(self.iterator):
-            write_queue.put((idx, data))
+        for idx in xrange(self.n_sentences):
+            write_queue.put((idx, next(self.iterator)))
 
-        self.n_sentences = idx + 1
         log.info("Distributed %d sentences to worker processes." % self.n_sentences)
 
         # Receive the results
@@ -279,6 +284,7 @@ if __name__ == "__main__":
                                                   default=None)
 
     parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
+    parser.add_argument('-f', '--first'         , type=int, default=0, help="How many sentences should be translated, useful for debugging.")
     parser.add_argument('-u', '--suppress-unks' , action='store_true', help="Don't produce <unk>'s in beam search")
     parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/pairs/single")
 

@@ -9,60 +9,88 @@
     <script src="js/jquery-1.12.4.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
     <script type='application/javascript'>
-			var sample = null;
-			var src_alpha = 'rgba(100, 100, 0, %A%)';
-      function preload() {
-        var jsonfile = 'data/sample.json';
+      var sample = null;
+      var src_phrase = "";
+      var trg_phrase = "";
 
-        $.getJSON(jsonfile, function(data) {
-					sample = data;
-          var src_phrase = "";
-          for (var i = 0; i < sample.src.length; ++i) {
-            src_phrase += "<span class='srcword'>" + sample.src[i] + "</span>";
-          }
-          $('#srctext').html(src_phrase).hide().fadeTo(1000, 1);
-				});
-			}
+      var jsonfile = 'sample.json';
 
-      // This removes the emphasis from source words
-			function clear_src_att() {
-				$('#srctext').children().each(function(i) {$(this).removeAttr('style');});
-			}
+      function reset() {
+        $('span').clearQueue().stop();
+        $('#trgtext').children().css('color', '#bbb');
+      }
 
-			function animate_att() {
-				clear_src_att();
-				var trg_phrase = "";
-				for (var i = 0; i < sample.trg.length; ++i) {
-					trg_phrase += "<span class='trgword'>" + sample.trg[i] + "</span>";
-				}
+      $.getJSON(jsonfile, function(data) {
+        sample = data;
+        for (var i = 0; i < sample.src.length; ++i) {
+          src_phrase += "<span class='srcword'>" + sample.src[i] + "</span>";
+        }
+        $('#srctext').html(src_phrase);
 
-				// This fades in the target text word-by-word.
-				$('#trgtext').html(trg_phrase).children().hide().each(function(i) {
-					// List of attentional weights between the i'th target word
-					// and all source contexts.
-					$(this).delay(i*1500).fadeTo('slow', 1).promise().done(function() {
-							$('#srctext').children().each(function(j) {
-								// Apply attentional emphasis on each source word
-								$(this).css('background-color', src_alpha.replace('%A%', sample.alphas[i][j]*0.6));
-							});
-						});
-					});
-				}
+        for (var i = 0; i < sample.trg.length; ++i) {
+          trg_phrase += "<span class='trgword'>" + sample.trg[i] + "</span>";
+        }
+        $('#trgtext').html(trg_phrase);
+
+        reset();
+      });
+
+      $(document).on('click', '#stopbutton', function () {
+        reset();
+        $('#srctext').html(src_phrase);
+      });
+     
+      $(document).on('click', '#startbutton', function () {
+        $('#stopbutton').prop('disabled', false);
+        reset();
+        // Iterate over target words
+        $('#trgtext').children().each(function(i) {
+          var trgw = $(this);
+          $('#srctext').children().each(function(j) {
+            $(this).animate({opacity: sample.alphas[i][j]}, 1000, function() {
+              // Source attentions emphasized, lets fade in the target.
+              trgw.removeAttr('style').fadeTo(750, 1);
+            });
+          });
+        });
+        $('#srctext').children().animate({opacity: 1}, 300, function() {
+          $('#stopbutton').prop('disabled', true);
+        });
+      });
     </script>
 
   </head>
-  <body onLoad='preload()'>
-    <h1 align="center">NMT Attention Visualization</h1>
-    <div class="container" onClick='animate_att()' id="vis">
-			<div class="row text-center">
-				<h4><b>Click below</b> to visualize a target translation decoding process.</h4>
-				<br />
-			</div>
+  <body>
+    <div class="page-header text-center">
+  <h1>NMT Attention Visualization <small>for nmtpy</small></h1>
+    </div>
+    <div class="container" id="vis" style="width:50%">
+      <div class="row text-right">
+				<div class="btn-group" role="group">
+					<button type="button" class="btn btn-primary" aria-label="Start" id="startbutton">Start</button>
+					<button type="button" class="btn btn-primary" aria-label="Stop" disabled="true" id="stopbutton">Stop</button>
+					<button type="button" class="btn btn-primary" aria-label="Randomize">Random</button>
+					<button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu1" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+						Choose Data
+						<span class="caret"></span>
+					</button>
+					<ul class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownMenu1">
+						<li><a href="#">Action</a></li>
+					</ul>
+				</div>
+      </div>
+      <br />
       <div class="row text-center">
-        <div class="sentence" id="srctext"></div>
+        <div class="col-md-2">&nbsp;</div>
+        <div class="imagearea col-md-10"><img class='img-thumbnail' src='css/lium.png' /></div>
       </div>
       <div class="row text-center">
-        <div class="sentence" id="trgtext"></div>
+        <div class="col-md-2"><h3>Source</h3></div>
+        <div class="sentence col-md-10" id="srctext"></div>
+      </div>
+      <div class="row text-center">
+        <div class="col-md-2"><h3>Target</h3></div>
+        <div class="sentence col-md-10" id="trgtext"></div>
       </div>
     </div>
 

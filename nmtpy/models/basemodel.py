@@ -136,18 +136,15 @@ class BaseModel(object):
         return cost
 
     def build_optimizer(self, cost, clip_c, dont_update=None):
-        # List of model parameters
-        tparams = self.tparams
-        # Any parameters to not update in SGD?
-        if dont_update is not None:
-            avail_keys = [k for k in dont_update if k in tparams]
-            for key in avail_keys:
-                del tparams[key]
-        # Now get the list of model parameters
-        params = itemlist(tparams)
+        tparams = OrderedDict(self.tparams)
 
-        # Get gradients of cost with respect to parameters
-        grads = tensor.grad(cost, wrt=params)
+        if dont_update is not None:
+            for key in tparams:
+                if key in dont_update:
+                    del tparams[key]
+
+        # Get gradients of cost with respect to variables
+        grads = tensor.grad(cost, wrt=tparams.values())
 
         # Gradient clipping
         if clip_c > 0.:
