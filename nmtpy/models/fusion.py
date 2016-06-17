@@ -393,7 +393,6 @@ class Model(BaseModel):
             tiled_text_ctx = np.tile(text_ctx, [live_beam, 1])
 
             next_log_p, _, next_state = self.f_next(next_w, tiled_text_ctx, img_ctx, next_state)
-            #next_log_p, _, next_state, a1, a2 = self.f_next(next_w, tiled_text_ctx, img_ctx, next_state)
 
             if suppress_unks:
                 next_log_p[:, 1] = -np.inf
