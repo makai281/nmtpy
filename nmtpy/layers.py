@@ -172,7 +172,7 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
 # Conditional GRU layer with Attention
 ######################################
 def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
-                        nin_nonlin=None, dim_nonlin=None):
+                        nin_nonlin=None, dim_nonlin=None, ctx_fusion='sum'):
     # nin:      input dim (e.g. embedding dim in the case of NMT)
     # dim:      gru_dim   (e.g. 1000)
     # dimctx:   2*gru_dim (e.g. 2000)
@@ -217,6 +217,11 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
     # attention: This gives the alpha's
     params[_p(prefix, 'U_att')]         = norm_weight(dimctx, 1, scale=scale)
     params[_p(prefix, 'c_att')]         = np.zeros((1,)).astype(FLOAT)
+
+    if ctx_fusion == 'concat':
+        # Fuse multimodal contexts using concatenation
+        params[_p(prefix, 'W_fus')]     = norm_weight(2*dimctx, dimctx, scale=scale)
+        params[_p(prefix, 'c_fus')]     = np.zeros((dimctx, )).astype(FLOAT)
 
     return params
 
@@ -398,7 +403,7 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
 ###########################################################
 def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_multi',
                          input_mask=None, one_step=False,
-                         init_state=None, ctx1_mask=None,
+                         init_state=None, ctx1_mask=None, ctx_fusion='sum',
                          profile=False, mode=None):
     if one_step:
         assert init_state, 'previous state must be provided'
@@ -462,7 +467,7 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
     # and all the shared weights and biases..
     def _step(m_, x_, xx_,
               h_, ctx_, alpha1_, alpha2_, # These ctx and alpha's are not used in the computations
-              pctx1_, pctx2_, cc1_, cc2_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
+              pctx1_, pctx2_, cc1_, cc2_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl, W_fus=None, c_fus=None):
 
         # Do a step of classical GRU
         h1 = gru_step(m_, x_, xx_, h_, U, Ux)
@@ -511,9 +516,15 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
         # the initial contexts ctx*'s
         ctx1_ = (cc1_ * alpha1[:, :, None]).sum(0)
         ctx2_ = (cc2_ * alpha2[:, :, None]).sum(0)
+        # n_samples x ctxdim (2000)
 
-        # Sum the weighted-contexts and apply tanh()
-        ctx_ = tanh(ctx1_ + ctx2_)
+        if W_fus is None:
+            # Sum the weighted-contexts and apply tanh()
+            ctx_ = tanh(ctx1_ + ctx2_)
+        else:
+            # Concat both contexts, apply linear transform to shrink size
+            ctx_ = tensor.concatenate([ctx1_, ctx2_], axis=1)
+            ctx_ = tensor.dot(ctx_, W_fus) + c_fus
 
         ############################################
         # ctx*_ and alpha computations are completed
@@ -566,6 +577,11 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
                    tparams[_p(prefix, 'Ux_nl')],
                    tparams[_p(prefix, 'b_nl')],
                    tparams[_p(prefix, 'bx_nl')]]
+
+    if ctx_fusion == 'concat':
+        # Provide concat fusion parameters as well
+        shared_vars.extend([tparams[_p(prefix, 'W_fus')], tparams[_p(prefix, 'c_fus')]])
+
 
     if one_step:
         rval = _step(*(seqs + [init_state, None, None, None, pctx1_, pctx2_, ctx1, ctx2] + shared_vars))
