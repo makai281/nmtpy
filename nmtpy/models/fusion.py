@@ -46,6 +46,9 @@ class Model(BaseModel):
         self.src_idict = src_idict
 
         self.ctx_dim = 2 * self.rnn_dim
+        if "ctx_fusion" not in self.options:
+            # Keep the default fusion as tanh(sum(..))
+            self.ctx_fusion = 'sum'
         self.set_nanguard()
         self.set_trng(seed)
         self.set_dropout(False)
@@ -60,6 +63,7 @@ class Model(BaseModel):
                                                                       self.train_iterator.total_trg_words))
         logger.info('%d validation samples' % self.valid_iterator.n_samples)
         logger.info('  %d UNKs in source' % self.valid_iterator.unk_src)
+        logger.info('Fusion type: %s' % self.ctx_fusion)
 
     def load_data(self):
         # Load training data
@@ -121,7 +125,7 @@ class Model(BaseModel):
 
         # GRU cond decoder
         params = get_new_layer('gru_cond_multi')[0](params, prefix='decoder_multi', nin=self.trg_emb_dim,
-                                                    dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
+                                                    dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init, ctx_fusion=self.ctx_fusion)
 
         # readout
         # NOTE: In the text NMT, we also have logit_prev that is applied onto emb_trg
@@ -230,6 +234,7 @@ class Model(BaseModel):
                                                       input_mask=y_mask,
                                                       ctx1=text_ctx, ctx1_mask=x_mask,
                                                       ctx2=img_ctx,
+                                                      ctx_fusion=self.ctx_fusion,
                                                       one_step=False,
                                                       init_state=text_init_state, # NOTE: init_state only text
                                                       profile=self.profile,
@@ -363,7 +368,7 @@ class Model(BaseModel):
         # Build f_next()
         ################
         inputs = [y, text_ctx, img_ctx, text_init_state]
-        outs = [next_log_probs, next_word, h, alpha]
+        outs = [next_log_probs, next_word, h]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False):
@@ -387,7 +392,8 @@ class Model(BaseModel):
         for ii in xrange(maxlen):
             tiled_text_ctx = np.tile(text_ctx, [live_beam, 1])
 
-            next_log_p, _, next_state, alphas = self.f_next(next_w, tiled_text_ctx, img_ctx, next_state)
+            next_log_p, _, next_state = self.f_next(next_w, tiled_text_ctx, img_ctx, next_state)
+            #next_log_p, _, next_state, a1, a2 = self.f_next(next_w, tiled_text_ctx, img_ctx, next_state)
 
             if suppress_unks:
                 next_log_p[:, 1] = -np.inf
