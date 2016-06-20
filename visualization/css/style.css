@@ -6,12 +6,19 @@ body {
 }
 
 div.sentence {
-  font-size: 20px;
-  color: #333;
-  font-weight: bold;
-  border: 1px solid;
-  height: 75px;
-  line-height:65px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-size: 15px;
+  border: 2px solid;
+}
+
+div.row {
+  margin-bottom: 1cm;
+}
+
+div.infosect {
+  border: 2px solid #CCC;
+  height: 250px;
 }
 
 div.imagearea {
@@ -19,24 +26,25 @@ div.imagearea {
 }
 
 span.srcword {
-  text-align: center;
-  padding: 6px;
-  margin: 0px 10px 0px 10px;
+  margin: 0px 2px 0px 2px;
+  display: inline-block;
 }
 
 span.trgword {
-  text-align: center;
-  padding: 6px;
-  margin: 0px 10px 0px 10px;
+  display: inline-block;
+  cursor: default;
+  margin: 2px;
+}
+span.trgword:hover {
+  color: #A32517;
+  font-weight: bold;
 }
 
 #srctext {
-  margin-bottom: 1cm;
-  color: blue;
-  border-color: blue;
+  border-color: #1A44EB;
 }
 
 #trgtext {
-  border-color: red;
-  color: red;
+  border-color: #A32517;
 }
+

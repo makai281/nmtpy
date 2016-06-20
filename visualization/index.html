@@ -9,80 +9,79 @@
     <script src="js/jquery-1.12.4.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
     <script type='application/javascript'>
-      var sample = null;
-      var src_phrase = "";
-      var trg_phrase = "";
-
+      // This contains all the necessary informations for visualization
       var jsonfile = 'sample.json';
-
-      function reset() {
-        $('span').clearQueue().stop();
-        $('#trgtext').children().css('color', '#bbb');
-      }
+      var samples = null;
+      var item = null;
 
       $.getJSON(jsonfile, function(data) {
-        sample = data;
-        for (var i = 0; i < sample.src.length; ++i) {
-          src_phrase += "<span class='srcword'>" + sample.src[i] + "</span>";
+        samples = data.data;
+        var metadata_html = "";
+        for (var key in data.metadata) {
+          metadata_html += key + ": " + data.metadata[key] + "<br />";
+        }
+        $('div.infosect').html(metadata_html);
+      });
+
+
+      function randomize() {
+        // Get a random sample from the dataset for further visualization
+        var idx = Math.floor(Math.random()*samples.length);
+        console.log(idx);
+        item = samples[idx];
+
+        var src_phrase = "";
+        var trg_phrase = "";
+
+        for (var i = 0; i < item.src.length; ++i) {
+          src_phrase += "<span class='srcword' id='sw" + i + "'>" + item.src[i] + "</span>";
         }
         $('#srctext').html(src_phrase);
 
-        for (var i = 0; i < sample.trg.length; ++i) {
-          trg_phrase += "<span class='trgword'>" + sample.trg[i] + "</span>";
+        for (var i = 0; i < item.trg.length; ++i) {
+          trg_phrase += "<span class='trgword' id='tw" + i + "'>" + item.trg[i] + "</span>";
         }
         $('#trgtext').html(trg_phrase);
+      }
 
-        reset();
+      $(document).on('mouseover', 'div#trgtext', function(e) {
+        var target = $(e.target).attr('id');
+        if (target.startsWith('tw')) {
+          var tw = parseInt(target.replace('tw', ''));
+          // We hovered over target word tw
+          for (var i = 0; i < item.alphas[tw].length; ++i) {
+            $('#sw' + i).animate({'opacity': item.alphas[tw][i]}, 10);
+          }
+        }
       });
 
-      $(document).on('click', '#stopbutton', function () {
-        reset();
-        $('#srctext').html(src_phrase);
+      $(document).on('click', '#randombutton', function () {
+        randomize();
       });
-     
-      $(document).on('click', '#startbutton', function () {
-        $('#stopbutton').prop('disabled', false);
-        reset();
-        // Iterate over target words
-        $('#trgtext').children().each(function(i) {
-          var trgw = $(this);
-          $('#srctext').children().each(function(j) {
-            $(this).animate({opacity: sample.alphas[i][j]}, 1000, function() {
-              // Source attentions emphasized, lets fade in the target.
-              trgw.removeAttr('style').fadeTo(750, 1);
-            });
-          });
-        });
-        $('#srctext').children().animate({opacity: 1}, 300, function() {
-          $('#stopbutton').prop('disabled', true);
+
+      // Revert back to full opacities once we leave the target sentence box
+      $(document).on('mouseleave', 'div#trgtext', function(e) {
+        $('#srctext').children().each(function() {
+          $(this).animate({'opacity' : 1}, 20);
         });
       });
+
     </script>
 
   </head>
-  <body>
+  <body onLoad='randomize();'>
     <div class="page-header text-center">
   <h1>NMT Attention Visualization <small>for nmtpy</small></h1>
     </div>
     <div class="container" id="vis" style="width:50%">
       <div class="row text-right">
 				<div class="btn-group" role="group">
-					<button type="button" class="btn btn-primary" aria-label="Start" id="startbutton">Start</button>
-					<button type="button" class="btn btn-primary" aria-label="Stop" disabled="true" id="stopbutton">Stop</button>
-					<button type="button" class="btn btn-primary" aria-label="Randomize">Random</button>
-					<button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu1" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
-						Choose Data
-						<span class="caret"></span>
-					</button>
-					<ul class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownMenu1">
-						<li><a href="#">Action</a></li>
-					</ul>
-				</div>
+					<button type="button" class="btn btn-primary" aria-label="Randomize" id="randombutton">Randomize</button>
+        </div>
       </div>
-      <br />
       <div class="row text-center">
-        <div class="col-md-2">&nbsp;</div>
-        <div class="imagearea col-md-10"><img class='img-thumbnail' src='css/lium.png' /></div>
+        <div class="col-md-2"><h3>Info</h3></div>
+        <div class="infosect col-md-10">&nbsp;</div>
       </div>
       <div class="row text-center">
         <div class="col-md-2"><h3>Source</h3></div>
