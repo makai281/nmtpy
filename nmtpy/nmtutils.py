@@ -56,8 +56,8 @@ def itemlist(tparams):
     return [vv for kk, vv in tparams.iteritems()]
 
 # make prefix-appended name
-def _p(pp, name):
-    return '%s_%s' % (pp, name)
+def pp(prefix, name):
+    return '%s_%s' % (prefix, name)
 
 def get_param_dict(path):
     pp = np.load(path)
