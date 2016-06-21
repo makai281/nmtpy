@@ -13,6 +13,13 @@ sigmoid = tensor.nnet.sigmoid
 tanh    = tensor.tanh
 relu    = tensor.nnet.relu
 
+def tensor_slice(_x, n, dim):
+    if _x.ndim == 3:
+        return _x[:, :, n*dim:(n+1)*dim]
+    elif _x.ndim == 2:
+        return _x[:, n*dim:(n+1)*dim]
+    return _x[n*dim:(n+1)*dim]
+
 ##################
 # GRU layer step()
 ##################
@@ -30,8 +37,8 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     preact = sigmoid(tensor.dot(h_, U) + x_)
 
     # slice reset and update gates
-    r = _tensor_slice(preact, 0, Ux.shape[1])
-    u = _tensor_slice(preact, 1, Ux.shape[1])
+    r = tensor_slice(preact, 0, Ux.shape[1])
+    u = tensor_slice(preact, 1, Ux.shape[1])
 
     # NOTE: Is this correct or should be tensor.dot(h_ * r, Ux) ?
     # hidden state proposal (h_tilda_j eq. 8)
@@ -45,13 +52,6 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
     return h
-
-def _tensor_slice(_x, n, dim):
-    if _x.ndim == 3:
-        return _x[:, :, n*dim:(n+1)*dim]
-    elif _x.ndim == 2:
-        return _x[:, n*dim:(n+1)*dim]
-    return _x[n*dim:(n+1)*dim]
 
 #########
 # dropout
@@ -172,7 +172,7 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
 # Conditional GRU layer with Attention
 ######################################
 def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
-                        nin_nonlin=None, dim_nonlin=None, ctx_fusion='sum'):
+                        nin_nonlin=None, dim_nonlin=None):
     # nin:      input dim (e.g. embedding dim in the case of NMT)
     # dim:      gru_dim   (e.g. 1000)
     # dimctx:   2*gru_dim (e.g. 2000)
@@ -217,11 +217,6 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
     # attention: This gives the alpha's
     params[_p(prefix, 'U_att')]         = norm_weight(dimctx, 1, scale=scale)
     params[_p(prefix, 'c_att')]         = np.zeros((1,)).astype(FLOAT)
-
-    if ctx_fusion == 'concat':
-        # Fuse multimodal contexts using concatenation
-        params[_p(prefix, 'W_fus')]     = norm_weight(2*dimctx, dimctx, scale=scale)
-        params[_p(prefix, 'c_fus')]     = np.zeros((dimctx, )).astype(FLOAT)
 
     return params
 
@@ -350,8 +345,8 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         preact = sigmoid(preact)
 
         # Slice activations: New gates r2 and u2
-        r2 = _tensor_slice(preact, 0, dim)
-        u2 = _tensor_slice(preact, 1, dim)
+        r2 = tensor_slice(preact, 0, dim)
+        u2 = tensor_slice(preact, 1, dim)
 
         preactx = (tensor.dot(h1, Ux_nl) + bx_nl) * r2
         preactx += tensor.dot(ctx_, Wcx)
@@ -403,7 +398,7 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
 ###########################################################
 def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_multi',
                          input_mask=None, one_step=False,
-                         init_state=None, ctx1_mask=None, ctx_fusion='sum',
+                         init_state=None, ctx1_mask=None,
                          profile=False, mode=None):
     if one_step:
         assert init_state, 'previous state must be provided'
@@ -518,13 +513,8 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
         ctx2_ = (cc2_ * alpha2[:, :, None]).sum(0)
         # n_samples x ctxdim (2000)
 
-        if W_fus is None:
-            # Sum the weighted-contexts and apply tanh()
-            ctx_ = tanh(ctx1_ + ctx2_)
-        else:
-            # Concat both contexts, apply linear transform to shrink size
-            ctx_ = tensor.concatenate([ctx1_, ctx2_], axis=1)
-            ctx_ = tensor.dot(ctx_, W_fus) + c_fus
+        # Sum of contexts
+        ctx_ = tanh(ctx1_ + ctx2_)
 
         ############################################
         # ctx*_ and alpha computations are completed
@@ -546,8 +536,8 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
         preact = sigmoid(preact)
 
         # Slice activations: New gates r2 and u2
-        r2 = _tensor_slice(preact, 0, dim)
-        u2 = _tensor_slice(preact, 1, dim)
+        r2 = tensor_slice(preact, 0, dim)
+        u2 = tensor_slice(preact, 1, dim)
 
         preactx = (tensor.dot(h1, Ux_nl) + bx_nl) * r2
         preactx += tensor.dot(ctx_, Wcx)
@@ -578,10 +568,8 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
                    tparams[_p(prefix, 'b_nl')],
                    tparams[_p(prefix, 'bx_nl')]]
 
-    if ctx_fusion == 'concat':
-        # Provide concat fusion parameters as well
-        shared_vars.extend([tparams[_p(prefix, 'W_fus')], tparams[_p(prefix, 'c_fus')]])
-
+    # Provide concat fusion parameters as well
+    shared_vars.extend([tparams[_p(prefix, 'W_fus')], tparams[_p(prefix, 'c_fus')]])
 
     if one_step:
         rval = _step(*(seqs + [init_state, None, None, None, pctx1_, pctx2_, ctx1, ctx2] + shared_vars))
@@ -682,12 +670,12 @@ def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step
         preact += x_
 
         # input(t) = sigm(W_ix * x_t + W_im * m_tm1)
-        i = sigmoid(_tensor_slice(preact, 0, dim))
-        f = sigmoid(_tensor_slice(preact, 1, dim))
-        o = sigmoid(_tensor_slice(preact, 2, dim))
+        i = sigmoid(tensor_slice(preact, 0, dim))
+        f = sigmoid(tensor_slice(preact, 1, dim))
+        o = sigmoid(tensor_slice(preact, 2, dim))
 
         # cellstate(t)?
-        c = tanh(_tensor_slice(preact, 3, dim))
+        c = tanh(tensor_slice(preact, 3, dim))
 
         # cellstate(t) = forget(t) * cellstate(t-1) + input(t) * cellstate(t)
         c = f * c_ + i * c
@@ -836,13 +824,13 @@ def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
 
         # Recover the activations to the lstm gates
         # [equation (1)]
-        i = _tensor_slice(preact, 0, dim)
-        f = _tensor_slice(preact, 1, dim)
-        o = _tensor_slice(preact, 2, dim)
+        i = tensor_slice(preact, 0, dim)
+        f = tensor_slice(preact, 1, dim)
+        o = tensor_slice(preact, 2, dim)
         i = sigmoid(i)
         f = sigmoid(f)
         o = sigmoid(o)
-        c = tanh(_tensor_slice(preact, 3, dim))
+        c = tanh(tensor_slice(preact, 3, dim))
 
         # compute the new memory/hidden state
         # if the mask is 0, just copy the previous state
