@@ -13,6 +13,8 @@ import argparse
 import importlib
 from multiprocessing import Process, Queue, cpu_count
 
+from collections import OrderedDict
+
 import numpy as np
 
 from nmtpy.logger import Logger
@@ -22,6 +24,7 @@ from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
 from nmtpy.filters import get_filter
 from nmtpy.iterators import get_iterator
+from nmtpy.typedef import *
 import nmtpy.cleanup as cleanup
 
 log = Logger._logger
@@ -51,7 +54,10 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest, suppress_unks, 
         idx, data_dict = req[0], req[1]
 
         # Do decoding
-        sample, score = eval(func_call)
+        result = eval(func_call)
+
+        sample = result[0]
+        score = result[1]
 
         # normalize scores according to sequence lengths
         lengths = np.array([len(s) for s in sample])
@@ -59,7 +65,13 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest, suppress_unks, 
 
         sidx = np.argsort(score)[:nbest]
         sample = np.array(sample)[sidx]
-        rqueue.put((idx, sample, score[sidx]))
+
+        # Check for attention weights
+        if len(result) == 3:
+            alignments = np.array(result[2])[sidx]
+            rqueue.put((idx, sample, score[sidx], alignments))
+        else:
+            rqueue.put((idx, sample, score[sidx]))
 
 
 """Translator starts worker processes, delegates source iterator
@@ -210,6 +222,8 @@ class Translator(object):
         # Receive the results
         self.trans  = [None] * self.n_sentences
         self.scores = [None] * self.n_sentences
+        if self.export:
+            self.att_weights = [None] * self.n_sentences
 
         t = time.time()
         for i in xrange(self.n_sentences):
@@ -224,6 +238,9 @@ class Translator(object):
                     hyp = filt(hyp)
                 outs.append(hyp)
             self.trans[idx] = outs
+
+            if self.export and len(resp) == 4:
+                self.att_weights[idx] = np.array(resp[3][0], dtype=FLOAT)
 
             # Print progress
             if (i+1) % 100 == 0:
@@ -267,13 +284,19 @@ class Translator(object):
 
     def dump_json(self, filename):
         """Export decoding data into json for further visualization."""
-        metadata = {'beam_size'     : self.beam_size,
-                    'model'         : os.path.basename(self.model_file),
-                    'n_srcvocab'    : len(self.model.src_dict),
-                    'n_trgvocab'    : len(self.model.trg_dict),
-                    'results'       : self.results}
+        metadata = OrderedDict()
+        metadata['model'] = os.path.basename(self.model_file)
+        metadata['n_srcvocab'] = len(self.model.src_dict)
+        metadata['n_trgvocab'] = len(self.model.trg_dict)
+        metadata['beam_size'] = self.beam_size
+
+        # add results
+        for key, value in self.results.iteritems():
+            metadata[key.upper()] = value[-1]
 
         srcs = []
+        # Reset iterator
+        self.iterator.rewind()
         for i in range(self.n_sentences):
             data = next(self.iterator)
             srcs.append(idx_to_sent(self.model.src_idict, data['x'].flatten()))
@@ -281,8 +304,8 @@ class Translator(object):
         # Save metadata
         data = {'metadata' : metadata}
         samples = []
-        for s, t in zip(srcs, self.hyps):
-            sample = {'src' : s.split(' '), 'trg' : t.split(' ')}
+        for s, t, att in zip(srcs, self.hyps, self.att_weights):
+            sample = {'src' : s.split(' '), 'trg' : t.split(' '), 'att': att.tolist()}
             samples.append(sample)
         data['data'] = samples
 
