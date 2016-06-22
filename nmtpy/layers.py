@@ -4,7 +4,6 @@ import theano
 from theano import tensor
 
 from .nmtutils import *
-from .nmtutils import _p
 from .typedef import *
 
 # Shorthands for activations
