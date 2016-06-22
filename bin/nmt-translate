@@ -303,9 +303,19 @@ class Translator(object):
 
         # Save metadata
         data = {'metadata' : metadata}
+
+        # Open reference files
+        all_refs = [open(f).read().strip().split("\n") for f in self.ref_files]
+        n_refs = len(all_refs)
+        refs = []
+        # Collect reference sentences
+        for sidx in range(self.n_sentences):
+            refs.append([all_refs[i][sidx] for i in range(n_refs)])
+
+        # Add sources, targets, and references
         samples = []
         for s, t, att in zip(srcs, self.hyps, self.att_weights):
-            sample = {'src' : s.split(' '), 'trg' : t.split(' '), 'att': att.tolist()}
+            sample = {'src' : s.split(' '), 'trg' : t.split(' '), 'ref' : refs.pop(0), 'att': att.tolist()}
             samples.append(sample)
         data['data'] = samples
 
