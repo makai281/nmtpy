@@ -214,7 +214,7 @@ class Model(BaseModel):
 
         return sample, sample_score
 
-    def beam_search(self, inputs, beam_size=12, maxlen=50):
+    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         print 'not implemented'
 
 

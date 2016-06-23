@@ -235,7 +235,7 @@ class Model(BaseModel):
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
-    def beam_search(self, inputs, beam_size=12, maxlen=50):
+    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         # Final results and their scores
         final_sample = []
         final_score  = []
