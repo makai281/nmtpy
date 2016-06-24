@@ -461,7 +461,7 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
     # and all the shared weights and biases..
     def _step(m_, x_, xx_,
               h_, ctx_, alpha1_, alpha2_, # These ctx and alpha's are not used in the computations
-              pctx1_, pctx2_, cc1_, cc2_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl, W_fus=None, c_fus=None):
+              pctx1_, pctx2_, cc1_, cc2_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
 
         # Do a step of classical GRU
         h1 = gru_step(m_, x_, xx_, h_, U, Ux)
@@ -566,9 +566,6 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
                    tparams[pp(prefix, 'Ux_nl')],
                    tparams[pp(prefix, 'b_nl')],
                    tparams[pp(prefix, 'bx_nl')]]
-
-    # Provide concat fusion parameters as well
-    shared_vars.extend([tparams[pp(prefix, 'W_fus')], tparams[pp(prefix, 'c_fus')]])
 
     if one_step:
         rval = _step(*(seqs + [init_state, None, None, None, pctx1_, pctx2_, ctx1, ctx2] + shared_vars))
