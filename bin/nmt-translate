@@ -30,12 +30,13 @@ import nmtpy.cleanup as cleanup
 log = Logger._logger
 
 """Worker process which does beam search."""
-def translate_model(queue, rqueue, pid, model, beam_size, nbest, suppress_unks, seed=1234, mode="beamsearch"):
+def translate_model(queue, rqueue, pid, model, beam_size, nbest,
+                    suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
     model.build_sampler()
 
     # Get function call string
     if mode == "beamsearch":
-        func_call = 'model.beam_search(data_dict.values(), beam_size=beam_size, suppress_unks=%s)' % suppress_unks
+        func_call = 'model.beam_search(data_dict.values(), beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
 
     elif mode in ["forced", "sample"]:
         func_call = 'model.gen_sample(data_dict)'
@@ -85,9 +86,16 @@ class Translator(object):
         self.src_files = args.src_files
         self.ref_files = args.ref_files
 
+        # Save source sentence word idxs as well
+        self.src_sents = []
+
         # Collect processed source sentences in here
         # for further exporting to json
         self.export = args.export
+
+        # Assume for now that a request for JSON exporting
+        # assumes fetching attentional alphas as well.
+        self.get_att_alphas = self.export
 
         self.nbest = args.nbest
         self.n_jobs = args.n_jobs
@@ -207,7 +215,8 @@ class Translator(object):
         for idx in xrange(self.n_jobs):
             self.processes[idx] = Process(target=translate_model,
                                           args=(write_queue, read_queue, idx, self.model, self.beam_size,
-                                          self.nbest, self.suppress_unks, self.seed, self.mode))
+                                          self.nbest, self.suppress_unks, self.get_att_alphas,
+                                          self.seed, self.mode))
             self.processes[idx].start()
             cleanup.register_proc(self.processes[idx].pid)
 
@@ -215,32 +224,48 @@ class Translator(object):
 
         # Send data to worker processes
         for idx in xrange(self.n_sentences):
-            write_queue.put((idx, next(self.iterator)))
+            sample = next(self.iterator)
+            self.src_sents.append(sample['x'])
+            write_queue.put((idx, sample))
 
         log.info("Distributed %d sentences to worker processes." % self.n_sentences)
 
         # Receive the results
         self.trans  = [None] * self.n_sentences
         self.scores = [None] * self.n_sentences
-        if self.export:
-            self.att_weights = [None] * self.n_sentences
+
+        # Will be filled if --export is passed
+        self.att_weights = [None] * self.n_sentences
 
         t = time.time()
         for i in xrange(self.n_sentences):
+            # Get response from worker
             resp = read_queue.get()
+
+            # This is the sample id of the processed sample
             idx = resp[0]
+
+            # Get the hypotheses and scores
             hyps, self.scores[idx] = resp[1], resp[2]
 
+            # Did we receive attention weights from beam search?
+            if len(resp) == 4:
+                self.att_weights[idx] = np.array(resp[3][0], dtype=FLOAT)
+
             outs = []
+
             for hyp in hyps:
                 hyp = idx_to_sent(self.ref_idict, hyp)
+
+                # Apply post-processing filters like compound stitching
                 for filt in self.filters:
                     hyp = filt(hyp)
-                outs.append(hyp)
-            self.trans[idx] = outs
 
-            if self.export and len(resp) == 4:
-                self.att_weights[idx] = np.array(resp[3][0], dtype=FLOAT)
+               # Append the actual hypothesis
+                outs.append(hyp)
+
+            # Place the hypotheses into their relevant places
+            self.trans[idx] = outs
 
             # Print progress
             if (i+1) % 100 == 0:
@@ -329,9 +354,9 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--beam-size'     , type=int, default=12,
                                                   help="Beam size (only for beam-search case)")
     parser.add_argument('-N', '--nbest'         , type=int, default=1,
-                                                  help="Output n-best list size (only for beam-search case)")
+                                                  help="Output n-best list size (only for beam-search)")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,
-                                                  help="Random number seed (default: 1234)")
+                                                  help="Random number seed for sampling mode (default: 1234)")
     parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
