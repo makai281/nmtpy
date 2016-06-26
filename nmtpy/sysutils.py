@@ -153,6 +153,11 @@ def setup_train_args(args):
     # Set model name
     name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
 
+    if args.valid_freq > 0:
+        name += "-each_%d" % args.valid_freq
+    else:
+        name += "-each_epoch"
+
     if args.decay_c > 0:
         name += "-decay_%.5f" % args.decay_c
 
