@@ -244,7 +244,7 @@ class Model(BaseModel):
 
         return final_sample, final_score
 
-    def beam_search(self, inputs, beam_size=12, maxlen=50):
+    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         # Final results and their scores
         final_sample = []
         final_score  = []

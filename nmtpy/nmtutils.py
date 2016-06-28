@@ -20,13 +20,16 @@ def load_dictionary(fname):
     return vocab, ivocab
 
 # Function to convert idxs to sentence
-def idx_to_sent(ivocab, idxs):
+def idx_to_sent(ivocab, idxs, join=True):
     sent = []
     for widx in idxs:
         if widx == 0:
             break
         sent.append(ivocab.get(widx, "<unk>"))
-    return " ".join(sent)
+    if join:
+        return " ".join(sent)
+    else:
+        return sent
 
 # Function to convert sentence to idxs
 def sent_to_idx(vocab, tokens, limit=0):

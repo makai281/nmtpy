@@ -248,6 +248,17 @@ class BaseModel(object):
         # This should be implemented in attentional models if necessary.
         return cost
 
+    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
+        # Beam search can change a lot based on the RNN
+        # layer, types of input etc. Look at the attention model
+        # and copy it into your class and modify it correctly.
+
+        # nmt-translate will also used the relevant beam_search
+        # based on the model type.
+
+        # You can pass additional arguments to beam_search through kwargs.
+        pass
+
     ##########################################################
     # For all the abstract methods below, you can take a look
     # at attention.py to understand how they are implemented.
@@ -276,14 +287,4 @@ class BaseModel(object):
     def build_sampler(self):
         # This is quite similar to build() but works in a
         # sequential manner for beam-search or sampling.
-        pass
-
-    @abstractmethod
-    def beam_search(self, inputs):
-        # Beam search can change a lot based on the RNN
-        # layer, types of input etc. Look at the attention model
-        # and copy it into your class and modify it correctly.
-
-        # nmt-translate will also used the relevant beam_search
-        # based on the model type.
         pass

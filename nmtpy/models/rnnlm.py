@@ -213,20 +213,3 @@ class Model(BaseModel):
                 break
 
         return sample, sample_score
-
-    def beam_search(self, inputs, beam_size=12, maxlen=50):
-        print 'not implemented'
-
-
-
-
-
-
-
-
-
-
-
-
-
-
