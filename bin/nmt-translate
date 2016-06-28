@@ -250,7 +250,7 @@ class Translator(object):
 
             # Did we receive attention weights from beam search?
             if len(resp) == 4:
-                self.att_weights[idx] = np.array(resp[3][0], dtype=FLOAT)
+                self.att_weights[idx] = resp[3][0]
 
             outs = []
 
@@ -315,6 +315,10 @@ class Translator(object):
         metadata['n_trgvocab'] = len(self.model.trg_dict)
         metadata['beam_size'] = self.beam_size
 
+        def _default(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+
         # add results
         for key, value in self.results.iteritems():
             metadata[key.upper()] = value[-1]
@@ -340,12 +344,12 @@ class Translator(object):
         # Add sources, targets, and references
         samples = []
         for s, t, att in zip(srcs, self.hyps, self.att_weights):
-            sample = {'src' : s.split(' '), 'trg' : t.split(' '), 'ref' : refs.pop(0), 'att': att.tolist()}
+            sample = {'src' : s.split(' '), 'trg' : t.split(' '), 'ref' : refs.pop(0), 'att': att}
             samples.append(sample)
         data['data'] = samples
 
         with open(filename, 'w') as f:
-            json.dump(data, f)
+            json.dump(data, f, default=_default)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-translate')
