@@ -19,7 +19,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import WMTHomogeneousIterator
+from ..iterators import WMTHomogeneousIterator, WMTIterator
 
 from ..models.basemodel import BaseModel
 
@@ -298,14 +298,14 @@ class Model(BaseModel):
             if isinstance(self.valid_ref_files, str):
                 self.valid_ref_files = list([self.valid_ref_files])
 
-            self.valid_iterator = WMTHomogeneousIterator(
+            self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
                     src_dict=self.src_dict, n_words_src=self.n_words_src,
                     mode=data_mode)
         else:
             # Just for loss computation
-            self.valid_iterator = WMTHomogeneousIterator(
+            self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
                     trg_dict=self.trg_dict, src_dict=self.src_dict,
@@ -553,9 +553,9 @@ class Model(BaseModel):
                                            init_state=text_init_state,
                                            profile=self.profile,
                                            mode=self.func_mode)
-        h      = dec_mult[0]
-        sumctx = dec_mult[1]
-        alpha  = dec_mult[2:]
+        h       = dec_mult[0]
+        sumctx  = dec_mult[1]
+        alphas  = list(dec_mult[2:])
 
         ########
         # Fusion
@@ -581,7 +581,7 @@ class Model(BaseModel):
         # Build f_next()
         ################
         inputs = [y, text_ctx, img_ctx, text_init_state]
-        outs = [next_log_probs, next_word, h]
+        outs = [next_log_probs, next_word, h] + alphas
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
