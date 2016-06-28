@@ -12,7 +12,7 @@ from nmtpy.sysutils import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-extract')
-    parser.add_argument('-o', '--output'        , help="Output file (without extension).")
+    parser.add_argument('-o', '--output'        , help="Output file (with extension .npy or .tsv).")
     parser.add_argument('-m', '--model'         , help="Model .npz file.")
 
     group = parser.add_mutually_exclusive_group(required=True)
@@ -31,6 +31,13 @@ if __name__ == "__main__":
 
     print "Embedding size: %d, Vocabulary size: %d" % (embs.shape[1], embs.shape[0])
 
-    np.save(args.output, embs)
+    ftype = args.output.split(".")[-1]
+    if ftype == "npy":
+        np.save(args.output, embs)
+    elif ftype == "tsv":
+        # Useful for t-SNE wrappers
+        with open(args.output, 'w') as f:
+            for p in embs:
+                f.write("\t".join(["%f" % i for i in p]) + "\n")
 
     sys.exit(0)
