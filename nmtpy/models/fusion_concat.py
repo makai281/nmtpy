@@ -602,13 +602,15 @@ class Model(BaseModel):
 
             # Compute sum of log_p's for the current n-gram hypotheses and flatten them
             cand_scores = hyp_scores[:, None] - next_log_p
-            cand_flat = cand_scores.flatten()
+
+            # Flatten by modifying .shape (faster)
+            cand_scores.shape = cand_scores.size
 
             # Take the best beam_size-dead_beam hypotheses
-            ranks_flat = cand_flat.argsort()[:(beam_size-dead_beam)]
+            ranks_flat = cand_scores.argpartition(beam_size-dead_beam-1)[:(beam_size-dead_beam)]
 
             # Get their costs
-            costs = cand_flat[ranks_flat]
+            costs = cand_scores[ranks_flat]
 
             # Find out to which initial hypothesis idx this was belonging
             trans_indices = ranks_flat / self.n_words_trg
