@@ -559,7 +559,7 @@ class Model(BaseModel):
                                            mode=self.func_mode)
         h      = dec_mult[0]
         sumctx = dec_mult[1]
-        alpha  = dec_mult[2:]
+        alphas = list(dec_mult[2:])
 
         ########
         # Fusion
@@ -585,7 +585,7 @@ class Model(BaseModel):
         # Build f_next()
         ################
         inputs = [y, text_ctx, img_ctx, text_init_state]
-        outs = [next_log_probs, next_word, h]
+        outs = [next_log_probs, next_word, h] + alphas
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
