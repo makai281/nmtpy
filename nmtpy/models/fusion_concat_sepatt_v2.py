@@ -582,91 +582,121 @@ class Model(BaseModel):
         self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-        # Final results and their scores
-        final_sample = []
-        final_score  = []
+        get_att = kwargs.get('get_att_alphas', False)
 
-        live_beam = 1
-        dead_beam = 0
+        # Final results and their scores
+        final_sample        = []
+        final_score         = []
+        final_alignments    = []
 
         # Initially we have one empty hypothesis with a score of 0
-        hyp_states  = []
-        hyp_samples = [[]]
-        hyp_scores  = np.zeros(1).astype(FLOAT)
+        hyp_alignments  = [[]]
+        hyp_samples     = [[]]
+        hyp_scores      = np.zeros(1, dtype=FLOAT)
+
+        # get initial state of decoder rnn and encoder context vectors
+        # ctx0: the set of context vectors leading to the next_state
+        # with an initial shape of (n_src_words x 1 x ctx_dim)
 
         text_ctx, img_ctx, next_state = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
-        next_w = -1 * np.ones((1,)).astype(INT)
+        next_w = -1 * np.ones((1,), dtype=INT)
+
+        # maxlen or 3 times source length
+        maxlen = min(maxlen, inputs[0].shape[0] * 3)
+
+        # Always starts with the initial tstep's context vectors
+        # e.g. we have a ctx0 of shape (n_words x 1 x ctx_dim)
+        # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
+        # thus we create sth like a batch of live_beam size with every word duplicated
+        # for further state expansion.
+        tiled_ctx = np.tile(text_ctx, [1, 1])
+        live_beam = beam_size
 
         for ii in xrange(maxlen):
-            tiled_text_ctx = np.tile(text_ctx, [live_beam, 1])
+            # Get next states
+            # In the first iteration, we provide -1 and obtain the log_p's for the
+            # first word. In the following iterations tiled_ctx becomes a batch
+            # of duplicated left hypotheses. tiled_ctx is always the same except
+            # the size of the 2nd dimension as the context vectors of the source
+            # sequence is always the same regardless of the decoding process.
+            # next_state's shape is (live_beam, rnn_dim)
+            next_log_p, _, next_state, alpha_txt, alpha_img = self.f_next(next_w, tiled_ctx, img_ctx, next_state)
 
-            next_log_p, _, next_state = self.f_next(next_w, tiled_text_ctx, img_ctx, next_state)
+            # For each f_next, we obtain a new set of alpha's for the next_w
+            # for each hypothesis in the beam search
 
             if suppress_unks:
                 next_log_p[:, 1] = -np.inf
 
-            # Compute sum of log_p's for the current n-gram hypotheses and flatten them
+            # Compute sum of log_p's for the current hypotheses
             cand_scores = hyp_scores[:, None] - next_log_p
 
             # Flatten by modifying .shape (faster)
             cand_scores.shape = cand_scores.size
 
-            # Take the best beam_size-dead_beam hypotheses
-            ranks_flat = cand_scores.argpartition(beam_size-dead_beam-1)[:(beam_size-dead_beam)]
+            # Take the best live_beam hypotheses
+            # argpartition makes a partial sort which is faster than argsort
+            # (Idea taken from https://github.com/rsennrich/nematus)
+            ranks_flat = cand_scores.argpartition(live_beam-1)[:live_beam]
 
-            # Get their costs
+            # Get the costs
             costs = cand_scores[ranks_flat]
 
-            # Find out to which initial hypothesis idx this was belonging
-            trans_indices = ranks_flat / self.n_words_trg
-            # Find out the idx of the appended word
-            word_indices = ranks_flat % self.n_words_trg
-
             # New states, scores and samples
-            new_hyp_states  = []
-            new_hyp_samples = []
-            new_hyp_scores  = np.zeros(beam_size-dead_beam).astype(FLOAT)
+            live_beam           = 0
+            new_hyp_scores      = []
+            new_hyp_samples     = []
+            new_hyp_alignments  = []
 
+            # This will be the new next states in the next iteration
+            hyp_states          = []
+
+            # Find out to which initial hypothesis idx this was belonging
+            # Find out the idx of the appended word
+            trans_idxs  = ranks_flat / self.n_words_trg
+            word_idxs   = ranks_flat % self.n_words_trg
             # Iterate over the hypotheses and add them to new_* lists
-            for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
-                new_hyp_samples.append(hyp_samples[ti]+[wi])
-                new_hyp_scores[idx] = copy.copy(costs[idx])
-                new_hyp_states.append(copy.copy(next_state[ti]))
+            for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
+                # Form the new hypothesis by appending new word to the left hyp
+                new_hyp = hyp_samples[ti] + [wi]
+                new_ali = hyp_alignments[ti] + [[alpha_txt[ti], alpha_img[ti]]]
 
-            # check the finished samples
-            new_live_beam = 0
-            hyp_samples = []
-            hyp_scores = []
-            hyp_states = []
-
-            for idx in xrange(len(new_hyp_samples)):
-                if new_hyp_samples[idx][-1] == 0:
-                    # EOS detected
-                    final_sample.append(new_hyp_samples[idx])
-                    final_score.append(new_hyp_scores[idx])
-                    dead_beam += 1
+                if wi == 0:
+                    # <eos> found, separate out finished hypotheses
+                    final_sample.append(new_hyp)
+                    final_score.append(costs[idx])
+                    final_alignments.append(new_ali)
                 else:
-                    new_live_beam += 1
-                    hyp_samples.append(new_hyp_samples[idx])
-                    hyp_scores.append(new_hyp_scores[idx])
-                    hyp_states.append(new_hyp_states[idx])
+                    # Add formed hypothesis to the new hypotheses list
+                    new_hyp_samples.append(new_hyp)
+                    # Cumulated cost of this hypothesis
+                    new_hyp_scores.append(costs[idx])
+                    # Hidden state of the decoder for this hypothesis
+                    hyp_states.append(next_state[ti])
+                    new_hyp_alignments.append(new_ali)
+                    live_beam += 1
 
-            hyp_scores = np.array(hyp_scores)
-            live_beam = new_live_beam
+            hyp_scores  = np.array(new_hyp_scores, dtype=FLOAT)
+            hyp_samples = new_hyp_samples
+            hyp_alignments = new_hyp_alignments
 
-            if new_live_beam < 1 or dead_beam >= beam_size:
+            if live_beam == 0:
                 break
 
             # Take the idxs of each hyp's last word
-            next_w = np.array([w[-1] for w in hyp_samples])
-            next_state = np.array(hyp_states)
+            next_w      = np.array([w[-1] for w in hyp_samples])
+            next_state  = np.array(hyp_states, dtype=FLOAT)
+            tiled_ctx   = np.tile(text_ctx, [live_beam, 1])
 
         # dump every remaining hypotheses
-        if live_beam > 0:
-            for idx in xrange(live_beam):
-                final_sample.append(hyp_samples[idx])
-                final_score.append(hyp_scores[idx])
+        for idx in xrange(live_beam):
+            final_sample.append(hyp_samples[idx])
+            final_score.append(hyp_scores[idx])
+            final_alignments.append(hyp_alignments[idx])
 
-        return final_sample, final_score
+        if get_att:
+            return final_sample, final_score, final_alignments
+        else:
+            return final_sample, final_score
