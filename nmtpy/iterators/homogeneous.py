@@ -3,7 +3,7 @@ import copy
 
 # Iterator that randomly fetches samples with same target
 # length to be efficient in terms of RNN underlyings.
-
+# Code from https://github.com/kelvinxu/arctic-captions
 class HomogeneousData(object):
     def __init__(self, data, batch_size, target_func):
         self.batch_size = batch_size

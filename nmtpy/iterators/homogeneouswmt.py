@@ -12,7 +12,7 @@ import numpy as np
 
 from nmtpy.nmtutils import sent_to_idx
 from nmtpy.typedef  import INT, FLOAT
-from homogeneous_data import HomogeneousData
+from homogeneous import HomogeneousData
 
 def mask_data(seqs):
     lengths = [len(s) for s in seqs]
