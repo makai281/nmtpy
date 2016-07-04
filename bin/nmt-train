@@ -63,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
     parser.add_argument('-m', '--model'         , type=str,   help="Optional pretrained model to fetch weights from.")
     parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
+    parser.add_argument('-a', '--alpha-c'       , type=float, help="Alpha regularization factor")
     parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
     parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
     parser.add_argument('-V', '--valid-freq'    , type=int  , help="Validation frequency in terms of updates")
@@ -93,12 +94,12 @@ if __name__ == '__main__':
     ###################
     # Setup arguments
     ###################
-    args = setup_train_args(args)
+    args, log_file = setup_train_args(args)
 
     ######################################################
     # Start logging module (both to terminal and to file)
     ######################################################
-    Logger.set_file(args.log_file)
+    Logger.set_file(log_file)
     log = Logger._logger
 
     #############
