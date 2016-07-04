@@ -187,12 +187,13 @@ def setup_train_args(args):
     ensure_dirs([args.model_path])
 
     # Log file
+    __name = name + "_run1"
     args.log_file = os.path.join(args.model_path, name + ".log")
 
-    i = 1
+    i = 2
     __name = name
     while os.path.exists(args.log_file):
-        __name = "%s_%d" % (name, i)
+        __name = "%s_run%d" % (name, i)
         args.log_file = os.path.join(args.model_path, __name + ".log")
         i += 1
 
