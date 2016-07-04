@@ -41,10 +41,14 @@ class MainLoop(object):
         self.valid_freq     = train_args.valid_freq
         self.sample_freq    = train_args.sample_freq
         self.do_sampling    = self.sample_freq > 0
+        # TODO: Do this an option as well
+        self.verbose_freq   = 10
 
         # If valid_freq == 0, do validation at end of epochs
         if self.valid_freq == 0:
-            self.valid_freq = ceil(self.model.train_iterator.n_samples / float(self.batch_size))
+            self.epoch_valid = True
+        else:
+            self.epoch_valid = False
 
         # Periodic hooks to run during training
         self.__hooks        = []
@@ -84,8 +88,11 @@ class MainLoop(object):
         self.lrate = self.lrate
 
     def __run_epoch(self):
+        """Represents a training epoch."""
         self.__header('Starting Epoch %d' % self.epoch_ctr)
+
         batch_losses = []
+
         # Iterate over batches
         for batch_dict in self.model.train_iterator:
             self.update_ctr += 1
@@ -94,13 +101,15 @@ class MainLoop(object):
             # Forward pass and record batch loss
             loss = self.model.f_grad_shared(*batch_dict.values())
             batch_losses.append(loss)
+
+            # Update learning rate if requested
             self.__update_lrate()
 
             # Backward pass
             self.model.f_update(self.lrate)
 
             # verbose
-            if self.update_ctr % 10 == 0:
+            if self.update_ctr % self.verbose_freq == 0:
                 self.__log.info("Epoch: %4d, update: %7d, Cost: %10.2f" % (self.epoch_ctr,
                                                                            self.update_ctr,
                                                                            loss))
