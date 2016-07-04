@@ -457,6 +457,8 @@ class Model(BaseModel):
         h       = dec_mult[0]    # (n_timesteps_trg, batch_size, rnn_dim)
         sumctx  = dec_mult[1]    # (n_timesteps_trg, batch_size, ctx*.shape[-1] (2000, 2*rnn_dim))
 
+        self.alphas  = list(dec_mult[2:])
+
         logit    = emb_trg
         logit   += get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
         logit   += get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
@@ -488,6 +490,12 @@ class Model(BaseModel):
                                            profile=self.profile)
 
         return cost.mean()
+
+    def add_alpha_regularizer(self, cost, alpha_c):
+        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
+        alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
+        cost += alpha_reg
+        return cost
 
     def build_sampler(self):
         x               = tensor.matrix('x', dtype=INT)
