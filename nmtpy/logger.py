@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import logging
 
 def singleton(cls):
@@ -12,6 +10,7 @@ def singleton(cls):
 
 @singleton
 class Logger(object):
+    """Logs to stdout and to file simultaneously."""
     def __init__(self, timestamp=True):
         _format = '%(message)s'
         if timestamp:
