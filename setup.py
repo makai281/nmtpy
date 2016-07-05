@@ -10,7 +10,7 @@ setup(
         author='Ozan Çağlayan',
         author_email='ozancag@gmail.com',
         license='MIT',
-        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'pycocoevalcap'],
+        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics', 'pycocoevalcap'],
         install_requires=[
           'numpy',
           'theano',
