@@ -7,16 +7,19 @@ temp_files = set()
 subprocesses = set()
 
 def register_tmp_file(f):
+    """Add new temp file to global set."""
     temp_files.add(f)
 
 def register_proc(pid):
+    """Add new process to global set."""
     subprocesses.add(pid)
 
 def unregister_proc(pid):
+    """Remove given PID from global set."""
     subprocesses.remove(pid)
 
 def __cleanup():
-    # Correctly remove temporary files
+    """Remove temporary files and kill leftover processes."""
     for f in temp_files:
         try:
             os.unlink(f)
@@ -35,6 +38,7 @@ def __cleanup():
     os._exit(0)
 
 def register_handler():
+    """Setup cleanup() as SIGINT, SIGTERM and exit handler."""
     def handler(signum, frame):
         __cleanup()
 
@@ -42,4 +46,3 @@ def register_handler():
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
     atexit.register(__cleanup)
-
