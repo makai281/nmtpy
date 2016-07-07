@@ -288,13 +288,13 @@ if __name__ == '__main__':
                     # We'll receive the requested metrics in a dict
                     metric_results.append(results)
                     for _, v in sorted(results.iteritems()):
-                        log.info("[Validation %2d] %s" % (len(metric_history)+1, v[0]))
+                        log.info("[Validation %3d] %s" % (len(metric_history)+1, v[0]))
 
                     # Pick the one selected as valid_metric and add it to metric_history
                     metric_history.append(results[args.valid_metric][1])
 
                 # Print validation loss
-                log.info("[Validation %2d] LOSS = %5.5f" % (len(valid_losses), valid_losses[-1]))
+                log.info("[Validation %3d] LOSS = %5.5f" % (len(valid_losses), valid_losses[-1]))
 
                 # Is this the best model?
                 # Also save if we have no models saved so far.
