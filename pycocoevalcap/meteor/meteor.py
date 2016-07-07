@@ -27,8 +27,7 @@ class Meteor:
         self.lock = threading.Lock()
 
     def compute_score(self, gts, res):
-        assert(gts.keys() == res.keys())
-        imgIds = gts.keys()
+        imgIds = sorted(gts.keys())
         scores = []
 
         eval_line = 'EVAL'

@@ -20,11 +20,8 @@ class Bleu:
 
     def compute_score(self, gts, res):
 
-        assert(gts.keys() == res.keys())
-        imgIds = gts.keys()
-
         bleu_scorer = BleuScorer(n=self._n)
-        for id in imgIds:
+        for id in sorted(gts.keys()):
             hypo = res[id]
             ref = gts[id]
 

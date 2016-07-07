@@ -28,12 +28,9 @@ class Cider(object):
         :return: cider (float) : computed CIDEr score for the corpus 
         """
 
-        assert(gts.keys() == res.keys())
-        imgIds = gts.keys()
-
         cider_scorer = CiderScorer(n=self._n, sigma=self._sigma)
 
-        for id in imgIds:
+        for id in sorted(gts.keys()):
             hypo = res[id]
             ref = gts[id]
 
