@@ -217,7 +217,10 @@ if __name__ == '__main__':
     def dump_val_summary():
         if len(valid_losses) > 0:
             best_valid_idx = np.argmin(np.array(valid_losses))
-            log.info('[Validation %3d] Current Best Loss %5.5f' % (best_valid_idx + 1, valid_losses[best_valid_idx]))
+            best_vloss = valid_losses[best_valid_idx]
+            best_px = np.exp(best_vloss)
+            log.info('[Validation %3d] Current Best Loss %5.5f (PX: %4.5f)' % (best_valid_idx + 1,
+                                                                               best_vloss, best_px))
 
         if len(metric_history) > 0:
             best_metric_idx = np.argmax(np.array(metric_history))
@@ -294,7 +297,7 @@ if __name__ == '__main__':
                     metric_history.append(results[args.valid_metric][1])
 
                 # Print validation loss
-                log.info("[Validation %3d] LOSS = %5.5f" % (len(valid_losses), valid_losses[-1]))
+                log.info("[Validation %3d] LOSS = %5.5f (PX: %4.5f)" % (len(valid_losses), valid_losses[-1], np.exp(valid_losses[-1])))
 
                 # Is this the best model?
                 # Also save if we have no models saved so far.
