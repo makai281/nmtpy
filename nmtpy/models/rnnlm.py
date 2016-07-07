@@ -15,8 +15,6 @@ from ..iterators import get_iterator
 
 from ..models.basemodel import BaseModel
 
-
-
 class Model(BaseModel):
     def __init__(self, seed, **kwargs):
         # Call parent's init first
@@ -49,7 +47,7 @@ class Model(BaseModel):
                                self.src_dict,
                                batch_size=self.batch_size,
                                n_words=self.n_words,
-                               data_name='y',
+                               data_name='y', # This is important for the loss to be correctly normalized!
                                do_mask=True)
         self.valid_iterator.prepare_batches()
 
