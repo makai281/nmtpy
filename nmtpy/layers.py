@@ -35,9 +35,11 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     # sigmoid([U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)])
     preact = sigmoid(tensor.dot(h_, U) + x_)
 
+    dim = Ux.shape[1]
+
     # slice reset and update gates
-    r = tensor_slice(preact, 0, Ux.shape[1])
-    u = tensor_slice(preact, 1, Ux.shape[1])
+    r = tensor_slice(preact, 0, dim)
+    u = tensor_slice(preact, 1, dim)
 
     # NOTE: Is this correct or should be tensor.dot(h_ * r, Ux) ?
     # hidden state proposal (h_tilda_j eq. 8)
