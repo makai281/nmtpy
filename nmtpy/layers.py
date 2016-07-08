@@ -69,6 +69,7 @@ def dropout_layer(state_before, use_dropout, dropout_prob, trng):
 def get_new_layer(name):
     # Layer type: (initializer, layer)
     layers = {
+                'conv'              : ('param_init_conv'        , 'conv_layer'),
                 'ff'                : ('param_init_fflayer'     , 'fflayer'),
                 'gru'               : ('param_init_gru'         , 'gru_layer'),
                 'gru_cond'          : ('param_init_gru_cond'    , 'gru_cond_layer'),
@@ -79,6 +80,16 @@ def get_new_layer(name):
 
     init, layer = layers[name]
     return (eval(init), eval(layer))
+
+#####################
+# Convolutional layer
+#####################
+
+def param_init_conv(params, nin, nout, scale=0.01, prefix='conv'):
+    pass
+
+def conv_layer(tparams, state_below, prefix='conv', activ='relu'):
+    pass
 
 #####################################################################
 # feedforward layer: affine transformation + point-wise nonlinearity
