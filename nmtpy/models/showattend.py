@@ -60,7 +60,7 @@ class Model(BaseModel):
             self.valid_iterator = WMTIterator(
                     batch_size, self.data['valid_src'],
                     img_feats_file=self.data['valid_img'],
-                    mode=data_mode)
+                    mode='single')
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
