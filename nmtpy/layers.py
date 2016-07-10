@@ -106,7 +106,7 @@ def conv_layer(tparams, state_below, prefix='conv', activ='relu'):
     out = tensor.nnet.conv2d(state_below, tparams[pp(prefix, 'W')],
                              border_mode='valid')
     # We have 4D output activations: bc01
-    return eval(activ) (out + params[pp(prefix, 'b')][None, :, None, None])
+    return eval(activ) (out + tparams[pp(prefix, 'b')][None, :, None, None])
 
 #####################################################################
 # feedforward layer: affine transformation + point-wise nonlinearity
