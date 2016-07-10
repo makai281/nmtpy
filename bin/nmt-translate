@@ -86,9 +86,6 @@ class Translator(object):
         self.src_files = args.src_files
         self.ref_files = args.ref_files
 
-        # Save source sentence word idxs as well
-        self.src_sents = []
-
         # Collect processed source sentences in here
         # for further exporting to json
         self.export = args.export
@@ -225,7 +222,6 @@ class Translator(object):
         # Send data to worker processes
         for idx in xrange(self.n_sentences):
             sample = next(self.iterator)
-            self.src_sents.append(sample['x'])
             write_queue.put((idx, sample))
 
         log.info("Distributed %d sentences to worker processes." % self.n_sentences)
@@ -311,8 +307,6 @@ class Translator(object):
         """Export decoding data into json for further visualization."""
         metadata = OrderedDict()
         metadata['model'] = os.path.basename(self.model_file)
-        metadata['n_srcvocab'] = len(self.model.src_dict)
-        metadata['n_trgvocab'] = len(self.model.trg_dict)
         metadata['beam_size'] = self.beam_size
 
         def _default(obj):
@@ -324,7 +318,8 @@ class Translator(object):
         self.iterator.rewind()
         for i in range(self.n_sentences):
             data = next(self.iterator)
-            srcs.append(idx_to_sent(self.model.src_idict, data['x'].flatten()))
+            if 'x' in data:
+                srcs.append(idx_to_sent(self.model.src_idict, data['x'].flatten()))
 
         # Save metadata
         data = {'metadata' : metadata}
