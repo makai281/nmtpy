@@ -87,11 +87,26 @@ def get_new_layer(name):
 # Convolutional layer
 #####################
 
-def param_init_conv(params, nin, nout, scale=0.01, prefix='conv'):
-    pass
+def param_init_conv(params, input_shape, filter_shape, scale='he', prefix='conv'):
+    # input_shape : (input_channels, input_rows, input_cols)
+    # filter_shape: (output_channels, input_channels, filter_rows, filter_cols)
+    n_inp_chan, n_inp_row, n_in_col = input_shape
+    n_out_chan, n_inp_chan, n_filt_row, n_filt_col = filter_shape
+
+    W = norm_weight(n_filt_row*n_filt_col*n_inp_chan, n_out_chan, scale=scale)
+    # Conv layer weights as 4D tensor
+    params[pp(prefix, 'W')] = W.reshape((n_out_chan, n_inp_chan, n_filt_row, n_filt_col))
+    # 1 bias per output channel
+    params[pp(prefix, 'b')] = np.zeros((n_out_chan, )).astype(FLOAT)
+
+    return params
 
 def conv_layer(tparams, state_below, prefix='conv', activ='relu'):
-    pass
+    # state_below shape should be bc01
+    out = tensor.nnet.conv2d(state_below, tparams[pp(prefix, 'W')],
+                             border_mode='valid')
+    # We have 4D output activations: bc01
+    return eval(activ) (out + params[pp(prefix, 'b')][None, :, None, None])
 
 #####################################################################
 # feedforward layer: affine transformation + point-wise nonlinearity
