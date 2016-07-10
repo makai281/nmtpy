@@ -511,10 +511,6 @@ class Model(BaseModel):
         img_ctx         = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
         # Broadcast middle dimension to make it 196 x 1 x 2000
         img_ctx         = img_ctx[:, None, :]
-        # Take the mean over the first dimension: 1 x 2000
-        img_ctx_mean    = img_ctx.mean(0)
-        # Give the mean to compute the initial state: 1 x 1000
-        #img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx_mean, prefix='ff_img_state_init', activ='tanh')
 
         #####################
         # Text Bi-GRU Encoder
