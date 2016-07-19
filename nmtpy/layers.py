@@ -93,7 +93,7 @@ def param_init_conv(params, input_shape, filter_shape, scale='he', prefix='conv'
     n_inp_chan, n_inp_row, n_in_col = input_shape
     n_out_chan, n_inp_chan, n_filt_row, n_filt_col = filter_shape
 
-    W = norm_weight(n_filt_row*n_filt_col*n_inp_chan, n_out_chan, scale=scale)
+    W = norm_weight(n_filt_row*n_filt_col*n_inp_chan, n_out_chan, scale=0.01)
     # Conv layer weights as 4D tensor
     params[pp(prefix, 'W')] = W.reshape((n_out_chan, n_inp_chan, n_filt_row, n_filt_col))
     # 1 bias per output channel
