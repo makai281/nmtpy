@@ -321,9 +321,11 @@ class Model(BaseModel):
         # embedding weights for decoder (target language)
         params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
 
+        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=128, nout=self.ctx_dim, scale=self.weight_init)
+
         params = get_new_layer('conv')[0](params, prefix='conv_enc',
                                           input_shape=(self.conv_dim, 14, 14),
-                                          output_shape=(self.conv_dim, self.conv_dim, 8, 8))
+                                          filter_shape=(128, self.conv_dim, 8, 8))
 
         #############################################
         # Source sentence encoder: bidirectional GRU
@@ -357,17 +359,17 @@ class Model(BaseModel):
         x = tensor.matrix('x', dtype=INT)
         x_mask = tensor.matrix('x_mask', dtype=FLOAT)
 
-        # Image: 196 (n_annotations) x n_samples x conv_dim
-        x_img = tensor.tensor3('x_img', dtype=FLOAT)
-        # Reshape into: 14x14xn_samplesxconv_dim
-        x_img = x_img.reshape([14, 14, x_img.shape[1], x_img.shape[2]])
-        x_img = x_img.transpose((2, 3, 0, 1))
+        # Image: n_samples x conv_dim x 14 x 14
+        x_img = tensor.tensor4('x_img', dtype=FLOAT)
         img_ctx = get_new_layer('conv')[1](self.tparams, x_img, prefix='conv_enc')
         # We now have: batch, o_chan, o_row, o_col
         img_ctx = img_ctx.reshape([img_ctx.shape[0], img_ctx.shape[1], -1])
         # We now have: batch, o_chan, o_row*o_col
-        img_ctx = x_img.dimshuffle([
+        img_ctx = img_ctx.dimshuffle(2, 0, 1)
+        # We now have: 196 x batch x o_chan
 
+        img_ctx = get_new_layer('ff')[1](self.tparams, img_ctx, prefix='ff_img_adaptor', activ='linear')
+        # -> 196 x n_samples x ctx_dim
 
         # Target sentences: n_timesteps, n_samples
         y = tensor.matrix('y', dtype=INT)
@@ -502,14 +504,18 @@ class Model(BaseModel):
         ################
         # Image features
         ################
-        # 196 x 512
-        x_img           = tensor.matrix('x_img', dtype=FLOAT)
-        # Broadcast middle dimension to make it 196 x 1 x 2000
-        img_ctx         = img_ctx[:, None, :]
-        # Take the mean over the first dimension: 1 x 2000
-        img_ctx_mean    = img_ctx.mean(0)
-        # Give the mean to compute the initial state: 1 x 1000
-        #img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx_mean, prefix='ff_img_state_init', activ='tanh')
+
+        x_img = tensor.tensor4('x_img', dtype=FLOAT)
+        img_ctx = get_new_layer('conv')[1](self.tparams, x_img, prefix='conv_enc')
+        # We now have: 1, o_chan, o_row, o_col
+        img_ctx = img_ctx.reshape([img_ctx.shape[0], img_ctx.shape[1], -1])
+        # We now have: 1, o_chan, o_row*o_col
+        img_ctx = img_ctx.dimshuffle(2, 0, 1)
+        # We now have: 49 x 1 x o_chan
+
+        img_ctx = get_new_layer('ff')[1](self.tparams, img_ctx, prefix='ff_img_adaptor', activ='linear')
+        # -> 49 x 1 x ctx_dim
+        img_ctx = tensor.addbroadcast(img_ctx.squeeze(), 1)
 
         #####################
         # Text Bi-GRU Encoder
