@@ -23,20 +23,6 @@ def listify(l):
         return [l]
     return l
 
-def fix_model_options(d):
-    """Removes old stuff to make old models work with latest code."""
-    # Remove fault theano trng object from dict
-    if "trng" in d:
-        del d["trng"]
-
-    data = d['data']
-    # Remove iterator types from data dict
-    for k, v in data.iteritems():
-        if isinstance(v, list) and v[0] in ["img_feats", "text", "bitext"]:
-            d['data'] = dict([[k, v[1]] for k,v in data.iteritems()])
-
-    return d
-
 def readable_size(n):
     sizes = ['K', 'M', 'G']
     fmt = ''
@@ -66,11 +52,9 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, pkl_path=None, out_file=None):
+def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, out_file=None):
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
            "-j", str(n_jobs), "-m", model_path, "-M", metric]
-    if pkl_path:
-        cmd.extend(["-p", pkl_path])
     if out_file:
         cmd.extend(["-o", out_file])
     # nmt-translate prints a dict of metrics

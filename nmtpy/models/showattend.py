@@ -34,7 +34,7 @@ class Model(BaseModel):
         self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
 
         # Collect options
-        self.options = dict(self.__dict__)
+        self.set_options(self.__dict__)
         self.trg_idict = trg_idict
 
         self.set_nanguard()

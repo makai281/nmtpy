@@ -163,7 +163,7 @@ if __name__ == '__main__':
     model.info(log)
 
     # Save model options
-    model.save_options()
+    model.save(args.model_path)
 
     # Initialize parameters
     log.info("Initializing parameters")
@@ -313,10 +313,10 @@ if __name__ == '__main__':
                     bad_counter = 0
 
                     # Save the best model or the current model if no best model is found so far
-                    model.save_params(args.model_path,
-                                      valid_losses=valid_losses,
-                                      metric_history=metric_history,
-                                      uidx=uidx, **unzip(model.tparams))
+                    model.save(args.model_path)
+                   #valid_losses=valid_losses,
+                   #metric_history=metric_history,
+                   #uidx=uidx, tparams=unzip(model.tparams))
 
                     # save with uidx as well
                     if args.save_iter:

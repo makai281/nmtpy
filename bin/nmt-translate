@@ -8,7 +8,6 @@ import time
 import json
 import atexit
 import inspect
-import cPickle
 import argparse
 import importlib
 from multiprocessing import Process, Queue, cpu_count
@@ -109,21 +108,19 @@ class Translator(object):
         # Create worker process pool
         self.processes = [None] * self.n_jobs
 
-    def set_model_options(self, model_options):
-        self.model_options = model_options
+    def set_model_options(self):
+        model_options = dict(np.load(self.model_file)['opts'])
 
         # Import the module
-        self.__class = importlib.import_module("nmtpy.models.%s" % self.model_options['model_type']).Model
+        self.__class = importlib.import_module("nmtpy.models.%s" % model_options['model_type']).Model
 
         # Create the model
-        self.model = self.__class(seed=self.seed, **self.model_options)
-
-        # load model parameters and set theano shared variables
-        self.tparams = self.model.load_params(np.load(self.model_file))
+        self.model = self.__class(seed=self.seed, **model_options)
+        self.model.load(self.model_file)
         self.model.set_dropout(False)
 
         # Check for post-processing filter
-        if "filter" in self.model_options:
+        if "filter" in model_options:
             log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
             self.filters.append(get_filter(model_options['filter']))
 
@@ -364,7 +361,6 @@ if __name__ == "__main__":
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
     parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (bleu or bleu,meteor)", default="bleu")
-    parser.add_argument('-p', '--pkl-file'      , type=str, help="pkl file (default: <model_file>.pkl)", default=None)
     parser.add_argument('-o', '--saveto'        , type=str, help="Output translations file (if not given, only metrics will be printed)",
                                                   default=None)
     parser.add_argument('-e', '--export'        , action='store_true', help="Export all decoding process to json for visualization")
@@ -399,16 +395,9 @@ if __name__ == "__main__":
     # Force CPU
     os.environ["THEANO_FLAGS"] = "device=cpu"
 
-    # load model options
-    if not args.pkl_file:
-        args.pkl_file = args.model + ".pkl"
-
-    with open(args.pkl_file, 'rb') as f:
-        model_options = fix_model_options(cPickle.load(f))
-
     # Create translator object
     translator = Translator(args)
-    translator.set_model_options(model_options)
+    translator.set_model_options()
     translator.start()
 
     out_file = args.saveto

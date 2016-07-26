@@ -69,16 +69,6 @@ def get_param_dict(path):
         p[k] = v
     return p
 
-# load parameters
-def load_params(path, params):
-    pp = np.load(path)
-    for kk, vv in params.iteritems():
-        if kk not in pp:
-            raise Exception('%s is not in the archive' % kk)
-        params[kk] = pp[kk]
-
-    return params
-
 # orthogonal initialization for weights
 # Saxe, Andrew M., James L. McClelland, and Surya Ganguli.
 # "Exact solutions to the nonlinear dynamics of learning in deep

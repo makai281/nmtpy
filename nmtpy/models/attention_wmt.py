@@ -41,7 +41,7 @@ class Model(BaseModel):
                 self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
 
         # Create options. This will saved as .pkl
-        self.options = dict(self.__dict__)
+        self.set_options(self.__dict__)
 
         self.trg_idict = trg_idict
         self.src_idict = src_idict

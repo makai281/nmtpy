@@ -22,8 +22,11 @@ if __name__ == "__main__":
                                                   help="Extract source word embeddings")
 
     args = parser.parse_args()
+    if not args.output.endswith(('npy', 'tsv')):
+        print "Output file should end with .npy or .tsv"
+        sys.exit(1)
 
-    params = np.load(args.model)
+    params = np.load(args.model)['tparams'].tolist()
     if args.target:
         embs = params['Wemb_dec']
     elif args.source:

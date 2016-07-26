@@ -3,7 +3,6 @@
 import os
 import sys
 import argparse
-import cPickle as pkl
 
 import numpy as np
 
@@ -27,14 +26,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    params = np.load(args.model)
-    pkl_file = args.model + ".pkl"
-    if not os.path.exists(pkl_file):
-        print "Can't find .pkl file."
-        sys.exit(1)
-
-    with open(pkl_file) as f:
-        opts = pkl.load(f)
+    npy = np.load(args.model)
+    params = npy['tparams'].tolist()
+    opts = dict(npy['opts'])
 
     if args.target:
         embs = params['Wemb_dec']

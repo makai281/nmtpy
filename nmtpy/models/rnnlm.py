@@ -27,7 +27,7 @@ class Model(BaseModel):
                 self.src_dict, src_idict = load_dictionary(dicts['src'])
                 self.n_words = min(self.n_words, len(self.src_dict)) if self.n_words > 0 else len(self.src_dict)
 
-        self.options = dict(self.__dict__)
+        self.set_options(self.__dict__)
         self.src_idict = src_idict
 
         self.set_nanguard()

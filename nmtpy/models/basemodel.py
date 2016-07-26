@@ -2,7 +2,6 @@ from six.moves import range
 from six.moves import zip
 
 import os
-import cPickle
 import inspect
 import importlib
 
@@ -47,6 +46,10 @@ class BaseModel(object):
         self.valid_iterator = None
         self.test_iterator = None
 
+    def set_options(self, optdict):
+        """Filter out None's and save option dict."""
+        self.options = [(k,v) for k,v in optdict.items() if v is not None]
+
     def set_trng(self, seed):
         """Sets the seed for Theano RNG."""
         self.trng = RandomStreams(seed)
@@ -75,26 +78,22 @@ class BaseModel(object):
             total += p.size
         return readable_size(total)
 
-    def load_params(self, params):
-        self.tparams = OrderedDict()
-        for k,v in params.iteritems():
-            # FIXME: Hack to avoid these params to appear
-            if not k.startswith(("uidx", "zipped", "valid_history", "bleu_history")):
-                self.tparams[k] = theano.shared(v, name=k)
-
     def set_shared_variables(self, updates):
         for k in self.tparams.keys():
             self.tparams[k].set_value(updates[k])
 
-    def save_params(self, fname, **kwargs):
-        np.savez(fname, **kwargs)
+    def save(self, fname):
+        if self.tparams is not None:
+            np.savez(fname, tparams=unzip(self.tparams), opts=self.options)
+        else:
+            np.savez(fname, opts=self.options)
 
-    def save_options(self, filepath=None):
-        if not filepath:
-            filepath = self.model_path + ".pkl"
+    def load(self, fname):
+        self.tparams = OrderedDict()
 
-        with open(filepath, 'wb') as f:
-            cPickle.dump(self.options, f, cPickle.HIGHEST_PROTOCOL)
+        params = np.load(fname)['tparams'].tolist()
+        for k,v in params.iteritems():
+            self.tparams[k] = theano.shared(v, name=k)
 
     def init_shared_variables(self, _from=None):
         # initialize Theano shared variables according to the _from
@@ -179,9 +178,8 @@ class BaseModel(object):
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
-            self.save_params(tmpf.name, **unzip(self.tparams))
+            self.save(tmpf.name)
             result = get_valid_evaluation(tmpf.name,
-                                          pkl_path=self.model_path + ".pkl",
                                           beam_size=beam_size,
                                           n_jobs=n_jobs,
                                           metric=metric,

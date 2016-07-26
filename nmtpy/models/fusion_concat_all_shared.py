@@ -247,7 +247,7 @@ class Model(BaseModel):
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
 
         # Collect options
-        self.options = dict(self.__dict__)
+        self.set_options(self.__dict__)
 
         # Set these here to not clutter options
         self.trg_idict = trg_idict
