@@ -49,6 +49,7 @@ TRAIN_DEFAULTS = {
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
         'njobs':              10,             # # of parallel CPU tasks to do beam-search
         'decoder_mode':       "beamsearch",
+        'beam_size':          12,             # Allow changing beam size during validation
         'model':              None,
         'stop_embedding':     0,              # Stop updating embeddings after this epoch
         }
@@ -282,7 +283,7 @@ if __name__ == '__main__':
                 if args.valid_metric != 'px':
                     t = time.time()
                     log.info("Starting translation")
-                    results = model.run_beam_search(beam_size=12,
+                    results = model.run_beam_search(beam_size=args.beam_size,
                                                     n_jobs=args.njobs,
                                                     metric=args.valid_metric,
                                                     mode=args.decoder_mode)
