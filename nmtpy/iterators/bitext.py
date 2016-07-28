@@ -18,10 +18,6 @@ class BiTextIterator(object):
                        batch_size,
                        n_words_src=0, n_words_trg=0,
                        src_name='x', trg_name='y'):
-
-        # For minibatch shuffling
-        random.seed(1234)
-
         self.src_data = src_data
         self.src_dict = src_dict
 
@@ -66,11 +62,7 @@ class BiTextIterator(object):
     def __iter__(self):
         return self
 
-    def get_idxs(self):
-        return self.__idxs
-
     def read(self):
-        #self.__max_filt = 0
         self.__seqs = []
         self.__idxs = []
         sf = fopen(self.src_data, 'r')
@@ -151,7 +143,6 @@ if __name__ == '__main__':
     iterator = BiTextIterator(os.path.expanduser(src), src_dict,
                               os.path.expanduser(trg), trg_dict, batch_size=32)
     iterator.prepare_batches()
-    idxs1 = iterator.get_idxs()
 
     d = {}
     for batch in iterator:
