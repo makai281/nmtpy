@@ -14,7 +14,7 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
-from ..nmtutils import unzip, itemlist
+from ..nmtutils import unzip
 from ..sysutils import *
 from ..typedef import *
 

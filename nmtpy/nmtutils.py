@@ -54,10 +54,6 @@ def unzip(zipped):
         new_params[kk] = vv.get_value()
     return new_params
 
-# get the list of parameters: Note that tparams must be OrderedDict
-def itemlist(tparams):
-    return [vv for kk, vv in tparams.iteritems()]
-
 # make prefix-appended name
 def pp(prefix, name):
     return '%s_%s' % (prefix, name)
