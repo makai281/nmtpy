@@ -7,8 +7,6 @@ import numpy as np
 import theano
 import theano.tensor as tensor
 
-from .nmtutils import itemlist
-
 def get_shared_grads(tparams):
     """Returns shared theano variables of 0 for each param to keep grads."""
     return [theano.shared(p.get_value() * np.float32(0.), name='%s_grad' % k) \
@@ -23,7 +21,7 @@ def sgd(lr, tparams, grads, inp, cost, profile=False, mode=None):
     f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile, mode=mode)
 
     # define the update step rule
-    pup = [(p, p - lr * g) for p, g in zip(itemlist(tparams), gshared)]
+    pup = [(p, p - lr * g) for p, g in zip(tparams.values(), gshared)]
 
     # Compile update rule
     f_update = theano.function([lr], [], updates=pup, profile=profile, mode=mode)
@@ -56,7 +54,7 @@ def rmsprop(lr, tparams, grads, inp, cost, decay=0.95, profile=False, mode=None)
     # FIXME: This seems really wrong..
     updir_new = [(ud, 0.9 * ud - 1e-4 * zg / tensor.sqrt(rg2 - rg ** 2 + 1e-4))
                     for ud, zg, rg, rg2 in zip(updir, gshared, rgrads, rgrads2)]
-    param_up = [(p, p + udn[1]) for p, udn in zip(itemlist(tparams), updir_new)]
+    param_up = [(p, p + udn[1]) for p, udn in zip(tparams.values(), updir_new)]
 
     # Compile update rule
     f_update = theano.function([lr], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile, mode=mode)
@@ -85,7 +83,7 @@ def adadelta(lr, tparams, grads, inp, cost, rho=0.95, eps=1e-6, profile=False, m
                                      rgrads2)]
     ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2))
              for ru2, ud in zip(running_up2, updir)]
-    param_up = [(p, p + ud) for p, ud in zip(itemlist(tparams), updir)]
+    param_up = [(p, p + ud) for p, ud in zip(tparams.values(), updir)]
 
     # Compile update rule
     f_update = theano.function([lr], [], updates=ru2up+param_up, on_unused_input='ignore', profile=profile, mode=mode)
