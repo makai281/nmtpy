@@ -10,13 +10,10 @@ class DotDict(dict):
         self.__dict__ = self
 
 def load_dictionary(fname):
-    ivocab = {}
     with open(fname, "rb") as f:
         vocab = cPickle.load(f)
 
-    for k,v in vocab.iteritems():
-        ivocab[v] = k
-
+    ivocab = OrderedDict([(v,k) for k,v in vocab.iteritems()])
     return vocab, ivocab
 
 # Function to convert idxs to sentence
