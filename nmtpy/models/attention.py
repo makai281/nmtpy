@@ -63,28 +63,29 @@ class Model(BaseModel):
 
         if from_translate:
             self.valid_iterator = get_iterator("text")(
-                                    self.data['valid_src'], self.src_dict,
                                     batch_size=1,
+                                    file=self.data['valid_src'], dict=self.src_dict,
                                     n_words=self.n_words_src)
         else:
             # Take the first validation item for NLL computation
             self.valid_iterator = get_iterator("bitext")(
-                                    self.data['valid_src'], self.src_dict,
-                                    self.valid_ref_files[0], self.trg_dict, batch_size=64,
+                                    batch_size=64,
+                                    srcfile=self.data['valid_src'], srcdict=self.src_dict,
+                                    trgfile=self.valid_ref_files[0], trgdict=self.trg_dict,
                                     n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
 
-        self.valid_iterator.prepare_batches()
+        self.valid_iterator.read()
 
     def load_data(self):
         self.train_iterator = get_iterator("bitext")(
-                                self.data['train_src'], self.src_dict,
-                                self.data['train_trg'], self.trg_dict,
                                 batch_size=self.batch_size,
+                                srcfile=self.data['train_src'], srcdict=self.src_dict,
+                                trgfile=self.data['train_trg'], trgdict=self.trg_dict,
                                 n_words_src=self.n_words_src,
                                 n_words_trg=self.n_words_trg)
 
         # Prepare batches
-        self.train_iterator.prepare_batches()
+        self.train_iterator.read()
         self.load_valid_data()
 
     def init_params(self):
