@@ -41,6 +41,7 @@ class Iterator(object):
         self._idxs     = []
         self._seqs     = []
         self._iter     = None
+        self._minibatches = []
 
         self.shuffle_mode = shuffle_mode
         if self.shuffle_mode:
@@ -53,11 +54,6 @@ class Iterator(object):
 
     def __iter__(self):
         return self
-
-    def set_batch_size(self, new_batch_size):
-        """Triggers a batch-size change."""
-        self.batch_size = new_batch_size
-        self.prepare_batches()
 
     def next(self):
         """Returns the next set of data from the iterator."""
