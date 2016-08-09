@@ -91,7 +91,7 @@ def adadelta(lr, tparams, grads, inp, cost, rho=0.95, eps=1e-6, profile=False, m
 
 def adam(lr, tparams, grads, inp, cost, profile=False, mode=None):
     """ADAM optimizer."""
-    lr0 = 0.0002
+    lr0 = 0.0001
     b1  = 0.9
     b2  = 0.999
     eps = 1e-8
