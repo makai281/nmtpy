@@ -14,23 +14,6 @@ from nmtpy.nmtutils import sent_to_idx
 from nmtpy.typedef  import INT, FLOAT
 from homogeneous import HomogeneousData
 
-def mask_data(seqs):
-    lengths = [len(s) for s in seqs]
-    n_samples = len(seqs)
-
-    # For ff-enc, we need fixed tsteps in the input
-    maxlen = np.max(lengths) + 1
-
-    # Shape is (t_steps, samples)
-    x = np.zeros((maxlen, n_samples)).astype(INT)
-    x_mask = np.zeros_like(x).astype(FLOAT)
-
-    for idx, s_x in enumerate(seqs):
-        x[:lengths[idx], idx] = s_x
-        x_mask[:lengths[idx] + 1, idx] = 1.
-
-    return x, x_mask
-
 # Each element of the list that is pickled is in the following format:
 # [ssplit, tsplit, imgid, imgname, swords, twords]
 
