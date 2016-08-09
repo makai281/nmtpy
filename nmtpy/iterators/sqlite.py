@@ -10,8 +10,9 @@ from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import mask_data, sent_to_idx
+from ..nmtutils import sent_to_idx
 from ..typedef  import INT, FLOAT
+from .iterator import Iterator
 
 class SQLIterator(object):
     """An efficient sqlite iterator for big parallel corpora."""
@@ -117,8 +118,8 @@ class SQLIterator(object):
             idxs = next(self.__batch_iter)
             batch = OrderedDict()
 
-            batch['x'], batch['x_mask'] = mask_data([self.samples[i][1] for i in idxs])
-            batch['y'], batch['y_mask'] = mask_data([self.samples[i][0] for i in idxs])
+            batch['x'], batch['x_mask'] = Iterator.mask_data([self.samples[i][1] for i in idxs])
+            batch['y'], batch['y_mask'] = Iterator.mask_data([self.samples[i][0] for i in idxs])
 
             return batch
         except StopIteration as si:

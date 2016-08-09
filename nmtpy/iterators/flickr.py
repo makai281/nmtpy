@@ -8,8 +8,9 @@ from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import mask_data, idx_to_sent, load_dictionary
+from ..nmtutils import idx_to_sent, load_dictionary
 from ..typedef  import INT, FLOAT
+from .iterator import Iterator
 
 class FlickrIterator(object):
     """Iterator for Karpathy's DeepSent dataset."""
@@ -107,7 +108,7 @@ class FlickrIterator(object):
 
         for idxs in batches:
             x = np.vstack(self.feats[self.__seqs[i][0]] for i in idxs)
-            y, y_mask = mask_data([self.__seqs[i][1] for i in idxs])
+            y, y_mask = Iterator.mask_data([self.__seqs[i][1] for i in idxs])
             self.__minibatches.append((x, y, y_mask))
 
         self.__iter = iter(self.__minibatches)
