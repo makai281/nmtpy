@@ -90,24 +90,3 @@ def norm_weight(nin, nout, scale=0.01, ortho=True):
     else:
         W = scale * np.random.randn(nin, nout)
     return W.astype(FLOAT)
-
-################
-def mask_data(seqs):
-    lengths = [len(s) for s in seqs]
-    n_samples = len(seqs)
-
-    # For ff-enc, we need fixed tsteps in the input
-    maxlen = np.max(lengths) + 1
-
-    # Shape is (t_steps, samples)
-    x = np.zeros((maxlen, n_samples)).astype(INT)
-    x_mask = np.zeros_like(x).astype(FLOAT)
-
-    for idx, s_x in enumerate(seqs):
-        x[:lengths[idx], idx] = s_x
-        x_mask[:lengths[idx] + 1, idx] = 1.
-
-    if n_samples == 1:
-        x_mask = None
-
-    return x, x_mask
