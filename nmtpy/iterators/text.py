@@ -8,7 +8,6 @@ import random
 import numpy as np
 
 from ..sysutils import fopen
-from ..nmtutils import mask_data
 from .iterator import Iterator
 
 """Text iterator for monolingual data."""
@@ -22,11 +21,11 @@ class TextIterator(Iterator):
         
         self.__file = kwargs['file']
         self.__dict = kwargs['dict']
-        self.__n_words = kwargs.get('nwords', 0)
+        self.__n_words = kwargs.get('n_words', 0)
         self.name = kwargs.get('name', 'x')
 
         self._keys = [self.name]
-        if self.mask:
+        if self.mask and self.batch_size > 1:
             self._keys.append('%s_mask' % self.name)
 
     def read(self):
@@ -51,6 +50,8 @@ class TextIterator(Iterator):
         self.n_samples = len(self._seqs)
         self._idxs = np.arange(self.n_samples)
 
+        if not self._minibatches:
+            self.prepare_batches()
         self.rewind()
 
     def prepare_batches(self):
