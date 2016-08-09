@@ -69,7 +69,7 @@ class Model(BaseModel):
         else:
             # Take the first validation item for NLL computation
             self.valid_iterator = get_iterator("bitext")(
-                                    batch_size=64,
+                                    batch_size=self.batch_size,
                                     srcfile=self.data['valid_src'], srcdict=self.src_dict,
                                     trgfile=self.valid_ref_files[0], trgdict=self.trg_dict,
                                     n_words_src=self.n_words_src, n_words_trg=self.n_words_trg)
