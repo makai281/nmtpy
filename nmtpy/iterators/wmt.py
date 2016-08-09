@@ -10,8 +10,9 @@ from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import mask_data, sent_to_idx
+from ..nmtutils import sent_to_idx
 from ..typedef  import INT, FLOAT
+from .iterator import Iterator
 
 # Each element of the list that is pickled is in the following format:
 # [ssplit, tsplit, imgid, imgname, swords, twords]
@@ -177,11 +178,11 @@ class WMTIterator(object):
 
             # Target sentence
             if self.trg_avail:
-                y, y_mask = mask_data([self.samples[i][5] for i in idxs])
+                y, y_mask = Iterator.mask_data([self.samples[i][5] for i in idxs])
 
             # Optional source sentences
             if self.src_avail:
-                x, x_mask = mask_data([self.samples[i][4] for i in idxs])
+                x, x_mask = Iterator.mask_data([self.samples[i][4] for i in idxs])
 
             # Source image features
             if self.img_avail:
