@@ -89,13 +89,8 @@ def adadelta(lr, tparams, grads, inp, cost, rho=0.95, eps=1e-6, profile=False, m
     f_update = theano.function([lr], [], updates=ru2up+param_up, on_unused_input='ignore', profile=profile, mode=mode)
     return f_grad_shared, f_update
 
-def adam(lr, tparams, grads, inp, cost, profile=False, mode=None):
+def adam(lr, tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, profile=False, mode=None):
     """ADAM optimizer."""
-    lr0 = 0.0001
-    b1  = 0.9
-    b2  = 0.999
-    eps = 1e-8
-
     i = theano.shared(np.float32(0.))
     i_t = i + 1.
 
