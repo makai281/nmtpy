@@ -46,6 +46,9 @@ class BaseModel(object):
         self.valid_iterator = None
         self.test_iterator = None
 
+        # Will be a theano shared variable for lrate annealing
+        self.learning_rate = None
+
     def set_options(self, optdict):
         """Filter out None's and save option dict."""
         self.options = [(k,v) for k,v in optdict.items() if v is not None]
@@ -70,6 +73,10 @@ class BaseModel(object):
             self.use_dropout = theano.shared(np.float32(0.))
         else:
             self.use_dropout.set_value(float(val))
+
+    def update_lrate(self, lrate):
+        """Update learning rate."""
+        self.learning_rate.set_value(lrate)
 
     def get_nb_params(self):
         """Returns the number of parameters of the model."""
@@ -166,13 +173,13 @@ class BaseModel(object):
         # Load optimizer
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
 
-        # learning-rate (only used in plain SGD)
-        lr = tensor.scalar(name='lr')
+        # Create theano shared variable for learning rate
+        self.learning_rate = theano.shared(np.float32(self.lrate), name='lrate')
 
         # Compile forwards and backwards pass functions
-        self.f_grad_shared, self.f_update = opt(lr, tparams,
+        self.f_grad_shared, self.f_update = opt(tparams,
                                                 grads, self.inputs.values(),
-                                                cost, profile=self.profile,
+                                                cost, lr0=self.learning_rate, profile=self.profile,
                                                 mode=self.func_mode)
 
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
