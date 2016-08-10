@@ -12,7 +12,7 @@ def get_shared_grads(tparams):
     return [theano.shared(p.get_value() * np.float32(0.), name='%s_grad' % k) \
                 for k, p in tparams.iteritems()]
 
-def sgd(lr, tparams, grads, inp, cost, profile=False, mode=None):
+def sgd(tparams, grads, inp, cost, lr0, profile=False, mode=None):
     """Stochastic Gradient Descent optimizer."""
     gshared = get_shared_grads(tparams)
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
@@ -21,13 +21,13 @@ def sgd(lr, tparams, grads, inp, cost, profile=False, mode=None):
     f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile, mode=mode)
 
     # define the update step rule
-    pup = [(p, p - lr * g) for p, g in zip(tparams.values(), gshared)]
+    pup = [(p, p - lr0 * g) for p, g in zip(tparams.values(), gshared)]
 
     # Compile update rule
-    f_update = theano.function([lr], [], updates=pup, profile=profile, mode=mode)
+    f_update = theano.function([], [], updates=pup, profile=profile, mode=mode)
     return f_grad_shared, f_update
 
-def rmsprop(lr, tparams, grads, inp, cost, decay=0.95, profile=False, mode=None):
+def rmsprop(tparams, grads, inp, cost, lr0=0.01, decay=0.95, profile=False, mode=None):
     """RMSProp optimizer."""
 
     # Theano tuples for statistics
@@ -57,10 +57,10 @@ def rmsprop(lr, tparams, grads, inp, cost, decay=0.95, profile=False, mode=None)
     param_up = [(p, p + udn[1]) for p, udn in zip(tparams.values(), updir_new)]
 
     # Compile update rule
-    f_update = theano.function([lr], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile, mode=mode)
+    f_update = theano.function([], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile, mode=mode)
     return f_grad_shared, f_update
 
-def adadelta(lr, tparams, grads, inp, cost, rho=0.95, eps=1e-6, profile=False, mode=None):
+def adadelta(tparams, grads, inp, cost, lr0=1., rho=0.95, eps=1e-6, profile=False, mode=None):
     """Adadelta optimizer."""
     gshared = get_shared_grads(tparams)
     gsup = [(zg, g) for zg, g in zip(gshared, grads)]
@@ -86,10 +86,10 @@ def adadelta(lr, tparams, grads, inp, cost, rho=0.95, eps=1e-6, profile=False, m
     param_up = [(p, p + ud) for p, ud in zip(tparams.values(), updir)]
 
     # Compile update rule
-    f_update = theano.function([lr], [], updates=ru2up+param_up, on_unused_input='ignore', profile=profile, mode=mode)
+    f_update = theano.function([], [], updates=ru2up+param_up, on_unused_input='ignore', profile=profile, mode=mode)
     return f_grad_shared, f_update
 
-def adam(lr, tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, profile=False, mode=None):
+def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, profile=False, mode=None):
     """ADAM optimizer."""
     i = theano.shared(np.float32(0.))
     i_t = i + 1.
@@ -122,5 +122,5 @@ def adam(lr, tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, 
     updates.append((i, i_t))
 
     # Compile update rule
-    f_update = theano.function([lr], [], updates=updates, on_unused_input='ignore', profile=profile, mode=mode)
+    f_update = theano.function([], [], updates=updates, on_unused_input='ignore', profile=profile, mode=mode)
     return f_grad_shared, f_update
