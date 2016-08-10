@@ -25,7 +25,7 @@ DEFAULTS = {
         'weight_init':        0.01,           # Scale of the uniform distribution for weight initialization.
                                               # Can be a float, "xavier" or "he".
         'batch_size':         32,             # Training batch size
-        'lrate':              0.0001,         # lrate for SGD
+        'lrate':              0.0001,         # Initial learning rate
         'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
         'profile':            False,          # Profile Theano
         'nanguard':           False,          #
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('-M', '--valid-metric'  , type=str  , help="Validation metric: px, bleu, meteor")
     parser.add_argument('-R', '--seed'          , type=int  , help="Random seed")
     parser.add_argument('-o', '--optimizer'     , type=str  , help="Optimizer: sgd, adadelta, rmsprop, adam")
-    parser.add_argument('-l', '--lrate'         , type=str  , help="Learning rate for SGD")
+    parser.add_argument('-l', '--lrate'         , type=str  , help="Initial learning rate")
     parser.add_argument('-j', '--njobs'         , type=str  , help="# of CPU jobs for beam-search")
     parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
     parser.add_argument('-N', '--nanguard'      , default=argparse.SUPPRESS, action='store_true', help="Debug NaN values")
@@ -198,6 +198,7 @@ if __name__ == '__main__':
     cost = model.get_regularized_cost(cost, args.decay_c, args.alpha_c)
 
     # Build optimizer
+    log.info('Initial learning rate: %.5f' % model.lrate)
     log.info('Building "%s" optimizer' % args.optimizer)
     model.build_optimizer(cost, args.clip_c)
 
@@ -208,7 +209,6 @@ if __name__ == '__main__':
     early_stop      = False
     uidx            = 0
     bad_counter     = 0
-    cur_lrate       = args.lrate
     valid_losses    = []
     metric_history  = []
     metric_results  = []
@@ -253,7 +253,7 @@ if __name__ == '__main__':
             train_losses.append(model.f_grad_shared(*batch_dict.values()))
             if np.isnan(train_losses[-1]):
                 raise Exception("NaN in cost")
-            model.f_update(cur_lrate)
+            model.f_update()
             ud = time.time() - ud_start
 
             if uidx % 10 == 0:
