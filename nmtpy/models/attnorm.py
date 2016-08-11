@@ -27,15 +27,14 @@ class Model(BaseModel):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
-        # Load vocabularies if any
-        if 'dicts' in kwargs:
-            dicts = kwargs['dicts']
-            if 'src' in dicts:
-                self.src_dict, src_idict = load_dictionary(dicts['src'])
-                self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
-            if 'trg' in dicts:
-                self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
-                self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
+        # Load dictionaries
+        dicts = kwargs['dicts']
+        self.src_dict, src_idict = load_dictionary(dicts['src'])
+        self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
+                if self.n_words_src > 0 else len(self.src_dict)
+        self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
+        self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) \
+                if self.n_words_trg > 0 else len(self.trg_dict)
 
         # Create options. This will saved as .pkl
         self.set_options(self.__dict__)
