@@ -63,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--config'        , type=str,   help="Path to model configuration file.", required=True)
     parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
     parser.add_argument('-m', '--model'         , type=str,   help="Optional pretrained model to fetch weights from.")
+    parser.add_argument('-T', '--model-type'    , type=str,   help="Override the model type given in the configuration file.")
     parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
     parser.add_argument('-a', '--alpha-c'       , type=float, help="Alpha regularization factor")
     parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
