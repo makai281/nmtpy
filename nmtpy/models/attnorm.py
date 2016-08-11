@@ -129,24 +129,21 @@ class Model(BaseModel):
         self.inputs['y'] = y
         self.inputs['y_mask'] = y_mask
 
-        # for the backward rnn, we just need to invert x and x_mask
-        xr = x[::-1]
-        xr_mask = x_mask[::-1]
-
         n_timesteps = x.shape[0]
         n_timesteps_trg = y.shape[0]
         n_samples = x.shape[1]
 
         # word embedding for forward rnn (source)
-        emb = self.tparams['Wemb_enc'][x.flatten()]
+        emb  = self.tparams['Wemb_enc'][x.flatten()]
+        embr = emb[::-1]
+
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
         proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask,
                                        profile=self.profile, mode=self.func_mode)
 
         # word embedding for backward rnn (source)
-        embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
+        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=x_mask[::-1],
                                         profile=self.profile, mode=self.func_mode)
 
         # context will be the concatenation of forward and backward rnns
@@ -232,15 +229,14 @@ class Model(BaseModel):
 
     def build_sampler(self):
         x = tensor.matrix('x', dtype=INT)
-        xr = x[::-1]
         n_timesteps = x.shape[0]
         n_samples = x.shape[1]
 
         # word embedding (source), forward and backward
         emb = self.tparams['Wemb_enc'][x.flatten()]
+        embr = emb[::-1]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
 
-        embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
 
         # encoder
