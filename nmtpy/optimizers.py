@@ -96,7 +96,7 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, prof
 
     updates = []
 
-    gshared = get_shared_grads(tparams)
+    gshared = get_zero_params(tparams, 'grad')
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
     # compile theano function to compute cost and copy gradients
