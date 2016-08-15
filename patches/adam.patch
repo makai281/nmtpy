@@ -1,0 +1,52 @@
+diff --git a/nmtpy/optimizers.py b/nmtpy/optimizers.py
+index 954987b..2745b1a 100644
+--- a/nmtpy/optimizers.py
++++ b/nmtpy/optimizers.py
+@@ -90,33 +90,30 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, prof
+     i = theano.shared(np.float32(0.))
+     i_t = i + 1.
+ 
+-    bias_cor_1 = 1. - b1**(i_t)
+-    bias_cor_2 = 1. - b2**(i_t)
+-    lr_t = lr0 * (tensor.sqrt(bias_cor_2) / bias_cor_1)
++    bias_cor_1 = b1**(i_t)
++    bias_cor_2 = b2**(i_t)
++    lr_t = lr0 * (tensor.sqrt(1 - bias_cor_2) / (1 - bias_cor_1))
+ 
+     updates = []
+ 
+-    gshared = get_shared_grads(tparams)
+-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+-
+-    # compile theano function to compute cost and copy gradients
+-    f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile, mode=mode)
+-
+-    for p, g in zip(tparams.values(), gshared):
+-        m = theano.shared(p.get_value() * 0.)
+-        v = theano.shared(p.get_value() * 0.)
++    for p, g in zip(tparams.values(), grads):
++        m = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), p.name + '_mu')
++        v = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), p.name + '_var')
+ 
+         m_t = (b1 * m) + ((1. - b1) * g)
+-        updates.append((m, m_t))
++        m_t_hat = m_t / (1 - bias_cor_1)
+ 
+         v_t = (b2 * v) + ((1. - b2) * tensor.sqr(g))
+-        updates.append((v, v_t))
++        v_t_hat = v_t / (1 - bias_cor_2)
+ 
+-        p_t = p - (lr_t * (m_t / (tensor.sqrt(v_t) + eps)))
++        p_t = p - (lr_t * (m_t_hat / (tensor.sqrt(v_t_hat) + eps)))
++        updates.append((m, m_t))
++        updates.append((v, v_t))
+         updates.append((p, p_t))
+ 
+     updates.append((i, i_t))
+ 
+     # Compile update rule
+-    f_update = theano.function([], [], updates=updates, on_unused_input='ignore', profile=profile, mode=mode)
+-    return f_grad_shared, f_update
++    f_update = theano.function(inp, cost, updates=updates,
++                    on_unused_input='ignore', profile=profile, mode=mode)
++    return None, f_update
