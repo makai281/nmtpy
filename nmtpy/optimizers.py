@@ -7,14 +7,15 @@ import numpy as np
 import theano
 import theano.tensor as tensor
 
-def get_shared_grads(tparams):
-    """Returns shared theano variables of 0 for each param to keep grads."""
-    return [theano.shared(p.get_value() * np.float32(0.), name='%s_grad' % k) \
-                for k, p in tparams.iteritems()]
+from .typedef import FLOAT
+
+def get_zero_params(tparams, suffix):
+    return [theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), name='%s_%s' % (k, suffix)) \
+            for k, p in tparams.iteritems()]
 
 def sgd(tparams, grads, inp, cost, lr0, profile=False, mode=None):
     """Stochastic Gradient Descent optimizer."""
-    gshared = get_shared_grads(tparams)
+    gshared = get_zero_params(tparams, 'grad')
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
     # compile theano function to compute cost and copy gradients
@@ -31,16 +32,13 @@ def rmsprop(tparams, grads, inp, cost, lr0=0.01, decay=0.95, profile=False, mode
     """RMSProp optimizer."""
 
     # Theano tuples for statistics
-    gshared     = get_shared_grads(tparams)
+    gshared     = get_zero_params(tparams, 'grad')
     gsup        = [(zg, g) for zg, g in zip(gshared, grads)]
     # Running sum of gradients
-    rgrads      = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad' % k)
-                    for k, p in tparams.iteritems()]
+    rgrads      = get_zero_params(tparams, 'rgrad')
     # Running sum of squared gradients
-    rgrads2     = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2' % k)
-                    for k, p in tparams.iteritems()]
-    updir       = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir' % k)
-                    for k, p in tparams.iteritems()]
+    rgrads2     = get_zero_params(tparams, 'rgrad2')
+    updir       = get_zero_params(tparams, 'updir')
 
     # don't compute this over and over
     decay_m1    = 1 - decay
@@ -62,14 +60,12 @@ def rmsprop(tparams, grads, inp, cost, lr0=0.01, decay=0.95, profile=False, mode
 
 def adadelta(tparams, grads, inp, cost, lr0=1., rho=0.95, eps=1e-6, profile=False, mode=None):
     """Adadelta optimizer."""
-    gshared = get_shared_grads(tparams)
+    gshared = get_zero_params(tparams, 'grad')
     gsup = [(zg, g) for zg, g in zip(gshared, grads)]
 
-    running_up2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rup2' % k)
-                    for k, p in tparams.iteritems()]
+    running_up2 = get_zero_params(tparams, 'rup2')
     # Running sum of squared gradients
-    rgrads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2' % k)
-                for k, p in tparams.iteritems()]
+    rgrads2 = get_zero_params(tparams, 'rgrad2')
 
     rho_m1  = 1 - rho
     rg2up   = [(rg2, rho * rg2 + rho_m1 * (g ** 2)) for rg2, g in zip(rgrads2, grads)]
