@@ -96,13 +96,7 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, prof
 
     updates = []
 
-    gshared = get_zero_params(tparams, 'grad')
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
-
-    # compile theano function to compute cost and copy gradients
-    f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile, mode=mode)
-
-    for p, g in zip(tparams.values(), gshared):
+    for p, g in zip(tparams.values(), grads):
         m = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), p.name + '_mu')
         v = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), p.name + '_var')
 
@@ -120,5 +114,5 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, prof
     updates.append((i, i_t))
 
     # Compile update rule
-    f_update = theano.function([], [], updates=updates, on_unused_input='ignore', profile=profile, mode=mode)
-    return f_grad_shared, f_update
+    f_update = theano.function(inp, cost, updates=updates, on_unused_input='ignore', profile=profile, mode=mode)
+    return None, f_update

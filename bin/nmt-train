@@ -250,12 +250,8 @@ if __name__ == '__main__':
         for batch_dict in model.train_iterator:
             uidx += 1
 
-            # compute cost, grads and copy grads to shared variables
             ud_start = time.time()
-            train_losses.append(model.f_grad_shared(*batch_dict.values()))
-            if np.isnan(train_losses[-1]):
-                raise Exception("NaN in cost")
-            model.f_update()
+            train_losses.append(model.train_batch(*batch_dict.values()))
             ud = time.time() - ud_start
 
             if uidx % 10 == 0:

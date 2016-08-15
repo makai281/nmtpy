@@ -182,6 +182,24 @@ class BaseModel(object):
                                                 cost, lr0=self.learning_rate, profile=self.profile,
                                                 mode=self.func_mode)
 
+        # v1 is the old version where we keep one function
+        # for forward and another for backward pass
+        def train_batch_v1(*data):
+            cost = self.f_grad_shared(*data)
+            self.f_update()
+            return cost
+
+        # v2 is the optimized version from dl4mt-multi
+        # where a single function does forward-backward.
+        def train_batch_v2(*data):
+            cost = self.f_update(*data)
+            return cost
+
+        if self.f_grad_shared is None:
+            self.train_batch = train_batch_v2
+        else:
+            self.train_batch = train_batch_v1
+
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
