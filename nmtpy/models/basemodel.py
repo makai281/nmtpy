@@ -35,8 +35,6 @@ class BaseModel(object):
         self.f_log_probs = None
         self.f_init = None
         self.f_next = None
-        self.f_update = None
-        self.f_grad_shared = None
 
         self.initial_params = None
         self.tparams = None
