@@ -131,7 +131,7 @@ def setup_train_args(args):
     # Append learning rate only for the SGD case
     args.lrate = float(args.lrate)
     opt_string = args.optimizer
-    if args.optimizer == "sgd" or args.optimizer == "adam":
+    if args.optimizer in ["sgd", "rmsprop", "adam"]:
         opt_string += "-lr_%.4f" % args.lrate
 
     # Set model name
