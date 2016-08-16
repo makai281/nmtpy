@@ -131,11 +131,13 @@ class BaseModel(object):
 
         return np.array(probs).mean()
 
-    def add_l2_weight_decay(self, cost, decay_c):
+    def add_l2_weight_decay(self, cost, decay_c, skip_bias=True):
         decay_c = theano.shared(np.float32(decay_c), name='decay_c')
         weight_decay = 0.
-        for _, vv in self.tparams.iteritems():
-            weight_decay += (vv ** 2).sum()
+        for kk, vv in self.tparams.iteritems():
+            # Skip biases for L2 regularization
+            if skip_bias and vv.get_value().ndim > 1:
+                weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
         cost += weight_decay
         return cost
