@@ -36,6 +36,9 @@ class Model(BaseModel):
         self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) \
                 if self.n_words_trg > 0 else len(self.trg_dict)
 
+        # Use GRU by default as encoder
+        self.enc_type = kwargs.get('enc_type', 'gru')
+
         # Create options. This will saved as .pkl
         self.set_options(self.__dict__)
 
