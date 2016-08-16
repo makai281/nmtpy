@@ -35,21 +35,22 @@ class Model(BaseModel):
 
     def load_data(self):
         self.train_iterator = get_iterator("text")(
-                                self.data['train_src'],
-                                self.src_dict,
                                 batch_size=self.batch_size,
+                                file=self.data['train_src'],
+                                dict=self.src_dict,
                                 n_words=self.n_words,
-                                do_mask=True)
-        self.train_iterator.prepare_batches()
+                                mask=True)
 
         self.valid_iterator = get_iterator("text")(
-                                self.data['valid_src'],
-                               self.src_dict,
-                               batch_size=self.batch_size,
-                               n_words=self.n_words,
-                               data_name='y', # This is important for the loss to be correctly normalized!
-                               do_mask=True)
-        self.valid_iterator.prepare_batches()
+                                batch_size=self.batch_size,
+                                file=self.data['valid_src'],
+                                dict=self.src_dict,
+                                n_words=self.n_words,
+                                name='y', # This is important for the loss to be correctly normalized!
+                                mask=True)
+
+        self.train_iterator.read()
+        self.valid_iterator.read()
 
     def init_params(self):
         params = OrderedDict()
