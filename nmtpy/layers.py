@@ -12,12 +12,22 @@ sigmoid = tensor.nnet.sigmoid
 tanh    = tensor.tanh
 relu    = tensor.nnet.relu
 
+# Slice a tensor
 def tensor_slice(_x, n, dim):
     if _x.ndim == 3:
         return _x[:, :, n*dim:(n+1)*dim]
     elif _x.ndim == 2:
         return _x[:, n*dim:(n+1)*dim]
     return _x[n*dim:(n+1)*dim]
+
+# Layer normalization
+# Lei Ba, Jimmy, Jamie Ryan Kiros, and Geoffrey E. Hinton.
+# "Layer Normalization." arXiv preprint arXiv:1607.06450 (2016).
+# https://github.com/ryankiros/layer-norm
+def layer_norm(x, b, s, eps=1e-5):
+    output = (x - x.mean(1)[:, None]) / tensor.sqrt(x.var(1)[:, None] + eps)
+    output = s[None, :] * output + b[None, :]
+    return output
 
 ##################
 # GRU layer step()
@@ -32,10 +42,10 @@ def tensor_slice(_x, n, dim):
 #   U     : shared U matrix
 #   Ux    : shared Ux matrix
 def gru_step(m_, x_, xx_, h_, U, Ux):
+    dim = Ux.shape[1]
+
     # sigmoid([U_r * h_ + (W_r * X + b_r) , U_z * h_ + (W_z * X + b_z)])
     preact = sigmoid(tensor.dot(h_, U) + x_)
-
-    dim = Ux.shape[1]
 
     # slice reset and update gates
     r = tensor_slice(preact, 0, dim)
@@ -48,11 +58,34 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     # leaky integrate and obtain next hidden state
     # According to paper, this should be [h = u * h_tilda + (1 - u) * h_]
     h = u * h_tilda + (1. - u) * h_
-    # What's the logic to invert the mask and add it after multiplying by h_?
     # -> h is new h if mask is not 0 (a word was presented), otherwise, h is the copy of previous h which is h_
     h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
     return h
+
+# GRU step with Layer Normalization
+# Same code as above but with layer_norm addition
+def gru_step_lnorm(m_, x_, xx_, h_, U, Ux, b1, b2, b3, b4, s1, s2, s3, s4):
+    dim = Ux.shape[1]
+
+    # Normalize inputs
+    x_  = layer_norm(x_, b1, s1)
+    xx_ = layer_norm(xx_, b2, s2)
+
+    # Normalize dot product
+    preact = sigmoid(layer_norm(tensor.dot(h_, U), b3, s3) + x_)
+
+    r = tensor_slice(preact, 0, dim)
+    u = tensor_slice(preact, 1, dim)
+
+    # Normalize dot product
+    h_tilda = tanh((layer_norm(tensor.dot(h_, Ux), b4, s4) * r) + xx_)
+
+    h = u * h_tilda + (1. - u) * h_
+    h = m_[:, None] * h + (1. - m_)[:, None] * h_
+
+    return h
+
 
 #########
 # dropout
@@ -71,11 +104,17 @@ def dropout_layer(state_before, use_dropout, dropout_prob, trng):
 def get_new_layer(name):
     # Layer type: (initializer, layer)
     layers = {
+                # Convolutional layer (not-tested)
                 'conv'              : ('param_init_conv'        , 'conv_layer'),
+                # Feedforward Layer
                 'ff'                : ('param_init_fflayer'     , 'fflayer'),
+                # GRU and GRU-layer_norm
                 'gru'               : ('param_init_gru'         , 'gru_layer'),
+                'lngru'             : ('param_init_lngru'       , 'lngru_layer'),
+                # Conditional GRU
                 'gru_cond'          : ('param_init_gru_cond'    , 'gru_cond_layer'),
                 'gru_cond_multi'    : ('param_init_gru_cond'    , 'gru_cond_multi_layer'),
+                # LSTM
                 'lstm'              : ('param_init_lstm'        , 'lstm_layer'),
                 'lstm_cond'         : ('param_init_lstm_cond'   , 'lstm_cond_layer'),
              }
@@ -151,8 +190,29 @@ def param_init_gru(params, nin, dim, scale=0.01, prefix='gru'):
 
     return params
 
+###########################
+# GRU + Layer Normalization
+###########################
+def param_init_lngru(params, nin, dim, scale=0.01, prefix='gru'):
+    # Initialize classical GRU
+    params = param_init_gru(params, nin, dim, scale=scale, prefix=prefix)
 
-def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode=None):
+    scale_add = 0.0
+    scale_mul = 1.0
+
+    params[pp(prefix,'b1')] = scale_add * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'b2')] = scale_add * np.ones((1*dim)).astype(FLOAT)
+    params[pp(prefix,'b3')] = scale_add * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'b4')] = scale_add * np.ones((1*dim)).astype(FLOAT)
+
+    params[pp(prefix,'s1')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'s2')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+    params[pp(prefix,'s3')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'s4')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+
+    return params
+
+def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None, profile=False, mode=None):
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
@@ -183,7 +243,16 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
     shared_vars = [tparams[pp(prefix, 'U')],
                    tparams[pp(prefix, 'Ux')]]
 
-    rval, updates = theano.scan(gru_step,
+    _step = gru_step
+    if layer_norm:
+        _step = gru_step_lnorm
+        # bias and scale
+        for i in ['b', 's']:
+            # 4 for each
+            for j in ['1','2','3','4']:
+                shared_vars.append(tparams[pp(prefix, i+j)])
+
+    rval, updates = theano.scan(_step,
                                 sequences=seqs,
                                 outputs_info=init_states,
                                 non_sequences=shared_vars,
@@ -194,6 +263,10 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode
                                 strict=True)
     rval = [rval]
     return rval
+
+def lngru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mode=None):
+    return gru_layer(tparams, state_below, prefix=prefix, layer_norm=True, mask=mask,
+                     profile=profile, mode=mode)
 
 ######################################
 # Conditional GRU layer with Attention
