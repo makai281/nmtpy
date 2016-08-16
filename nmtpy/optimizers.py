@@ -9,79 +9,54 @@ import theano.tensor as tensor
 
 from .typedef import FLOAT
 
-def get_zero_params(tparams, suffix):
-    return [theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), name='%s_%s' % (k, suffix)) \
-            for k, p in tparams.iteritems()]
-
-def sgd(tparams, grads, inp, cost, lr0, profile=False, mode=None):
+def sgd(tparams, grads, inp, cost, lr0):
     """Stochastic Gradient Descent optimizer."""
     # define the update step rule
     updates = []
     for p, g in zip(tparams.values(), grads):
         updates.append((p, p - lr0 * g))
 
-    # Compile update rule
-    f_update = theano.function(inp, cost, updates=updates, profile=profile, mode=mode)
-    return None, f_update
+    return updates
 
-def rmsprop(tparams, grads, inp, cost, lr0=0.01, decay=0.95, profile=False, mode=None):
+def rmsprop(tparams, grads, inp, cost, lr0=0.01, rho=0.95, eps=1e-6):
     """RMSProp optimizer."""
+    # define the update step rule
+    updates = []
+    one = tensor.constant(1.)
+    for p, g in zip(tparams.values(), grads):
+        # Accumulate gradient squares
+        v = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT))
+        # rho * past + (1 - rho) * current
+        v_new = (rho * v) + (one - rho) * g**2
+        updates.append((v, v_new))
+        updates.append((p, p - (lr0 * g / tensor.sqrt(v_new + eps))))
 
-    # Theano tuples for statistics
-    gshared     = get_zero_params(tparams, 'grad')
-    gsup        = [(zg, g) for zg, g in zip(gshared, grads)]
-    # Running sum of gradients
-    rgrads      = get_zero_params(tparams, 'rgrad')
-    # Running sum of squared gradients
-    rgrads2     = get_zero_params(tparams, 'rgrad2')
-    updir       = get_zero_params(tparams, 'updir')
+    return updates
 
-    # don't compute this over and over
-    decay_m1    = 1 - decay
-
-    rgup        = [(rg,  decay * rg  + decay_m1 * g)         for rg,  g in zip(rgrads, grads)]
-    rg2up       = [(rg2, decay * rg2 + decay_m1 * (g ** 2))  for rg2, g in zip(rgrads2, grads)]
-
-    # compile theano function to compute cost and copy gradients
-    f_grad_shared = theano.function(inp, cost, updates=gsup+rgup+rg2up, profile=profile, mode=mode)
-
-    # FIXME: This seems really wrong..
-    updir_new = [(ud, 0.9 * ud - 1e-4 * zg / tensor.sqrt(rg2 - rg ** 2 + 1e-4))
-                    for ud, zg, rg, rg2 in zip(updir, gshared, rgrads, rgrads2)]
-    param_up = [(p, p + udn[1]) for p, udn in zip(tparams.values(), updir_new)]
-
-    # Compile update rule
-    f_update = theano.function([], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile, mode=mode)
-    return f_grad_shared, f_update
-
-def adadelta(tparams, grads, inp, cost, lr0=1., rho=0.95, eps=1e-6, profile=False, mode=None):
+def adadelta(tparams, grads, inp, cost, lr0=1., rho=0.95, eps=1e-6):
     """Adadelta optimizer."""
-    gshared = get_zero_params(tparams, 'grad')
-    gsup = [(zg, g) for zg, g in zip(gshared, grads)]
+    # define the update step rule
+    updates = []
+    one = tensor.constant(1.)
+    for p, g in zip(tparams.values(), grads):
+        v = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT))
+        u = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT))
 
-    running_up2 = get_zero_params(tparams, 'rup2')
-    # Running sum of squared gradients
-    rgrads2 = get_zero_params(tparams, 'rgrad2')
+        # Accumulate gradient squares
+        # rho * past + (1 - rho) * current
+        v_new = (rho * v) + (one - rho) * g**2
+        updates.append((v, v_new))
 
-    rho_m1  = 1 - rho
-    rg2up   = [(rg2, rho * rg2 + rho_m1 * (g ** 2)) for rg2, g in zip(rgrads2, grads)]
+        # Update rule
+        up = (g * tensor.sqrt(u + eps) / tensor.sqrt(v_new + eps))
+        updates.append((p, p - lr0 * up))
 
-    # compile theano function to compute cost and copy gradients
-    f_grad_shared = theano.function(inp, cost, updates=gsup+rg2up, profile=profile, mode=mode)
+        # Accumulate update magnitudes
+        updates.append((u, rho * u + (one - rho) * up**2))
 
-    updir = [-tensor.sqrt(ru2 + eps) / tensor.sqrt(rg2 + eps) * zg
-             for zg, ru2, rg2 in zip(gshared,
-                                     running_up2,
-                                     rgrads2)]
-    ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2))
-             for ru2, ud in zip(running_up2, updir)]
-    param_up = [(p, p + ud) for p, ud in zip(tparams.values(), updir)]
+    return updates
 
-    # Compile update rule
-    f_update = theano.function([], [], updates=ru2up+param_up, on_unused_input='ignore', profile=profile, mode=mode)
-    return f_grad_shared, f_update
-
-def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, profile=False, mode=None):
+def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8):
     """ADAM optimizer."""
     i = theano.shared(np.float32(0.))
     i_t = i + 1.
@@ -108,7 +83,4 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8, prof
         updates.append((p, p_t))
 
     updates.append((i, i_t))
-
-    # Compile update rule
-    f_update = theano.function(inp, cost, updates=updates, on_unused_input='ignore', profile=profile, mode=mode)
-    return None, f_update
+    return updates

@@ -176,29 +176,13 @@ class BaseModel(object):
         # Create theano shared variable for learning rate
         self.learning_rate = theano.shared(np.float32(self.lrate), name='lrate')
 
-        # Compile forwards and backwards pass functions
-        self.f_grad_shared, self.f_update = opt(tparams,
-                                                grads, self.inputs.values(),
-                                                cost, lr0=self.learning_rate, profile=self.profile,
-                                                mode=self.func_mode)
+        # Get updates
+        updates = opt(tparams, grads, self.inputs.values(),
+                      cost, lr0=self.learning_rate)
 
-        # v1 is the old version where we keep one function
-        # for forward and another for backward pass
-        def train_batch_v1(*data):
-            cost = self.f_grad_shared(*data)
-            self.f_update()
-            return cost
-
-        # v2 is the optimized version from dl4mt-multi
-        # where a single function does forward-backward.
-        def train_batch_v2(*data):
-            cost = self.f_update(*data)
-            return cost
-
-        if self.f_grad_shared is None:
-            self.train_batch = train_batch_v2
-        else:
-            self.train_batch = train_batch_v1
+        # Compile forward/backward function
+        self.train_batch = theano.function(self.inputs.values(), cost, updates=updates,
+                                           profile=self.profile, mode=self.func_mode)
 
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         # Save model temporarily
