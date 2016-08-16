@@ -98,9 +98,9 @@ class Model(BaseModel):
         # encoder: bidirectional RNN
         #########
         # Forward encoder
-        params = get_new_layer('gru')[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
         # Backwards encoder
-        params = get_new_layer('gru')[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
 
         # Context is the concatenation of forward and backwards encoder
 
@@ -140,13 +140,13 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask,
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask,
                                        profile=self.profile, mode=self.func_mode)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
                                         profile=self.profile, mode=self.func_mode)
 
         # context will be the concatenation of forward and backward rnns
@@ -244,8 +244,8 @@ class Model(BaseModel):
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
 
         # encoder
-        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder')
-        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r')
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder')
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r')
 
         # concatenate forward and backward rnn hidden states
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
