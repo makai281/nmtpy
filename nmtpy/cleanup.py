@@ -25,8 +25,6 @@ def __cleanup():
             os.unlink(f)
         except:
             pass
-        else:
-            print "Cleaned up %s" % f
 
     # Send SIGTERM to subprocesses if any
     for p in subprocesses:
