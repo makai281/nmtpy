@@ -15,18 +15,14 @@ def get_zero_params(tparams, suffix):
 
 def sgd(tparams, grads, inp, cost, lr0, profile=False, mode=None):
     """Stochastic Gradient Descent optimizer."""
-    gshared = get_zero_params(tparams, 'grad')
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
-
-    # compile theano function to compute cost and copy gradients
-    f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile, mode=mode)
-
     # define the update step rule
-    pup = [(p, p - lr0 * g) for p, g in zip(tparams.values(), gshared)]
+    updates = []
+    for p, g in zip(tparams.values(), grads):
+        updates.append((p, p - lr0 * g))
 
     # Compile update rule
-    f_update = theano.function([], [], updates=pup, profile=profile, mode=mode)
-    return f_grad_shared, f_update
+    f_update = theano.function(inp, cost, updates=updates, profile=profile, mode=mode)
+    return None, f_update
 
 def rmsprop(tparams, grads, inp, cost, lr0=0.01, decay=0.95, profile=False, mode=None):
     """RMSProp optimizer."""
