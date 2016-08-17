@@ -1,14 +1,36 @@
 diff --git a/theano/sandbox/cuda/opt.py b/theano/sandbox/cuda/opt.py
-index 7a851a5..06a154a 100644
+index a534c48..8573b11 100644
 --- a/theano/sandbox/cuda/opt.py
 +++ b/theano/sandbox/cuda/opt.py
-@@ -1126,7 +1126,8 @@ def local_gpu_advanced_incsubtensor1(node):
+@@ -1132,7 +1132,8 @@ def local_gpu_advanced_incsubtensor1(node):
                  gpu_op = GpuAdvancedIncSubtensor1(
                      set_instead_of_inc=set_instead_of_inc)
              else:
 -                gpu_op = GpuAdvancedIncSubtensor1_dev20(
-+                # Avoid this opt for reproducible results
++                # Non deterministic
 +                gpu_op = GpuAdvancedIncSubtensor1(
                      set_instead_of_inc=set_instead_of_inc)
              return [gpu_op(as_cuda_ndarray_variable(x),
                             as_cuda_ndarray_variable(y), *coords)]
+diff --git a/theano/scan_module/scan_op.py b/theano/scan_module/scan_op.py
+index d614bdf..49f6144 100644
+--- a/theano/scan_module/scan_op.py
++++ b/theano/scan_module/scan_op.py
+@@ -2024,7 +2024,7 @@ class Scan(PureOp):
+             # it will be the sum of the external gradient signal and the
+             # gradient obtained by propagating Y's external gradient signal
+             # to X.
+-            known_grads = dict([(k.copy(), v) for (k, v) in known_grads.items()])
++            known_grads = OrderedDict([(k.copy(), v) for (k, v) in known_grads.items()])
+ 
+             grads = gradient.grad(
+                         cost=None,
+@@ -2094,7 +2094,7 @@ class Scan(PureOp):
+             dC_dXts.append(dC_dXt)
+ 
+ 
+-        known_grads = {}
++        known_grads = OrderedDict()
+         dc_dxts_idx = 0
+         for i in range(len(diff_outputs)):
+             if i < idx_nitsot_start or i >= idx_nitsot_end:
