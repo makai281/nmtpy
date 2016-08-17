@@ -27,15 +27,17 @@ class Model(BaseModel):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
-        # Load vocabularies if any
-        if 'dicts' in kwargs:
-            dicts = kwargs['dicts']
-            if 'src' in dicts:
-                self.src_dict, src_idict = load_dictionary(dicts['src'])
-                self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
-            if 'trg' in dicts:
-                self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
-                self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
+        # Load dictionaries
+        dicts = kwargs['dicts']
+        self.src_dict, src_idict = load_dictionary(dicts['src'])
+        self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
+                if self.n_words_src > 0 else len(self.src_dict)
+        self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
+        self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) \
+                if self.n_words_trg > 0 else len(self.trg_dict)
+
+        # Use GRU by default as encoder
+        self.enc_type = kwargs.get('enc_type', 'gru')
 
         # Create options. This will saved as .pkl
         self.set_options(self.__dict__)
@@ -97,9 +99,9 @@ class Model(BaseModel):
         # encoder: bidirectional RNN
         #########
         # Forward encoder
-        params = get_new_layer('gru')[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
         # Backwards encoder
-        params = get_new_layer('gru')[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
 
         # Context is the concatenation of forward and backwards encoder
 
@@ -139,12 +141,12 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask,
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask)
 
         # context will be the concatenation of forward and backward rnns
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -236,8 +238,8 @@ class Model(BaseModel):
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
 
         # encoder
-        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder')
-        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r')
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder')
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r')
 
         # concatenate forward and backward rnn hidden states
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
