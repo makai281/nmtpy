@@ -200,6 +200,9 @@ if __name__ == '__main__':
     log.info('Building "%s" optimizer' % args.optimizer)
     model.build_optimizer(cost, args.clip_c)
 
+    # Save graph
+    #theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
+
     # Enable dropout in training (if requested)
     model.set_dropout(True)
 
@@ -249,6 +252,8 @@ if __name__ == '__main__':
             ud_start = time.time()
             train_losses.append(model.train_batch(*batch_dict.values()))
             ud = time.time() - ud_start
+            if np.isnan(train_losses[-1]):
+                raise Exception("NaN in training loss")
 
             if uidx % 10 == 0:
                 log.info("Epoch: %4d, update: %7d, Cost: %10.5f, Time: %.3f" % (eidx, uidx, train_losses[-1], ud))
