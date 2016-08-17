@@ -47,7 +47,6 @@ class Model(BaseModel):
         self.src_idict = src_idict
 
         self.ctx_dim = 2 * self.rnn_dim
-        self.set_nanguard()
         self.set_trng(seed)
 
         # We call this once to setup dropout mechanism correctly
@@ -142,14 +141,12 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask,
-                                       profile=self.profile, mode=self.func_mode)
+        proj = get_new_layer('gru')[1](self.tparams, emb, prefix='encoder', mask=x_mask)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask,
-                                        profile=self.profile, mode=self.func_mode)
+        projr = get_new_layer('gru')[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask)
 
         # context will be the concatenation of forward and backward rnns
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -176,9 +173,7 @@ class Model(BaseModel):
                                             mask=y_mask, context=ctx,
                                             context_mask=x_mask,
                                             one_step=False,
-                                            init_state=init_state,
-                                            profile=self.profile,
-                                            mode=self.func_mode)
+                                            init_state=init_state)
         # hidden states of the decoder gru
         proj_h = proj[0]
 
@@ -212,10 +207,7 @@ class Model(BaseModel):
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(),
-                                           cost,
-                                           mode=self.func_mode,
-                                           profile=self.profile)
+        self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         # For alpha regularization
         self.x_mask = x_mask
@@ -258,7 +250,7 @@ class Model(BaseModel):
         init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
 
         outs = [init_state, ctx]
-        self.f_init = theano.function([x], outs, name='f_init', profile=self.profile)
+        self.f_init = theano.function([x], outs, name='f_init')
 
         # x: 1 x 1
         y = tensor.vector('y_sampler', dtype=INT)
@@ -304,7 +296,7 @@ class Model(BaseModel):
         # next hidden state to be used
         inputs = [y, ctx, init_state]
         outs = [next_log_probs, next_word, next_state, alphas]
-        self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
+        self.f_next = theano.function(inputs, outs, name='f_next')
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         # Final results and their scores

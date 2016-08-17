@@ -40,7 +40,6 @@ class Model(BaseModel):
         self.set_options(self.__dict__)
         self.trg_idict = trg_idict
 
-        self.set_nanguard()
         self.set_trng(seed)
         self.set_dropout(False)
 
@@ -140,10 +139,7 @@ class Model(BaseModel):
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(),
-                                           cost,
-                                           mode=self.func_mode,
-                                           profile=self.profile)
+        self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         return cost.mean()
 
@@ -161,7 +157,7 @@ class Model(BaseModel):
 
         # This receives the image from sampling related codes
         # and returns the first memory and cell state, m_0 and c_0
-        self.f_init = theano.function([x_img], [m_0, c_0], name='f_init', profile=self.profile)
+        self.f_init = theano.function([x_img], [m_0, c_0], name='f_init')
 
         # if it's the first word, emb should be all zero and it is indicated by -1
         emb = tensor.switch(y_prev[:, None] < 0,
@@ -195,7 +191,7 @@ class Model(BaseModel):
         inputs  = [y_prev, init_memory, init_state]
         outs    = [next_log_probs, next_word, m_t, c_t]
 
-        self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
+        self.f_next = theano.function(inputs, outs, name='f_next')
 
     def gen_sample(self, input_dict, maxlen=50, argmax=False):
         final_sample = []

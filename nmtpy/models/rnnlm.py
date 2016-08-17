@@ -30,7 +30,6 @@ class Model(BaseModel):
         self.set_options(self.__dict__)
         self.src_idict = src_idict
 
-        self.set_nanguard()
         self.set_trng(seed)
 
     def load_data(self):
@@ -92,8 +91,7 @@ class Model(BaseModel):
         # input word embedding
         emb = self.tparams['W_in_emb'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.in_emb_dim])
-        #proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask,
-        #                                       profile=self.profile, mode=self.func_mode)
+        #proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask)
         # prepare outputs
         emb_shifted = tensor.zeros_like(emb)
         emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
@@ -129,10 +127,7 @@ class Model(BaseModel):
         cost = cost.reshape([x.shape[0], x.shape[1]])
         cost = (cost * x_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(),
-                                           cost,
-                                           mode=self.func_mode,
-                                           profile=self.profile)
+        self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         # We may want to normalize the cost by dividing
         # to the number of target tokens but this needs
@@ -183,7 +178,7 @@ class Model(BaseModel):
         print 'Building f_next..',
         inps = [y, init_state]
         outs = [next_log_probs, next_word, next_state]
-        self.f_next = theano.function(inps, outs, name='f_next', profile=self.profile)
+        self.f_next = theano.function(inps, outs, name='f_next')
         print 'Done'
 
 

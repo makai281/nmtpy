@@ -46,7 +46,6 @@ class Model(BaseModel):
         self.src_idict = src_idict
 
         self.ctx_dim = 2 * self.rnn_dim
-        self.set_nanguard()
         self.set_trng(seed)
 
         # We call this once to setup dropout mechanism correctly

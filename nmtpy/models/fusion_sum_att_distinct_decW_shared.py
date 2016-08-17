@@ -43,8 +43,7 @@ def init_gru_decoder_multisum(params, nin, dim, dimctx,
 def gru_decoder_multisum(tparams, state_below,
                          ctx1, ctx2, prefix='gru_decoder_multisum',
                          input_mask=None, one_step=False,
-                         init_state=None, ctx1_mask=None,
-                         profile=False, mode=None):
+                         init_state=None, ctx1_mask=None):
     if one_step:
         assert init_state, 'previous state must be provided'
 
@@ -230,8 +229,6 @@ def gru_decoder_multisum(tparams, state_below,
                                     non_sequences=[pctx1_, pctx2_, ctx1, ctx2] + shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
-                                    profile=profile,
-                                    mode=mode,
                                     strict=True)
     return rval
 
@@ -260,7 +257,6 @@ class Model(BaseModel):
         self.src_idict = src_idict
 
         self.ctx_dim = 2 * self.rnn_dim
-        self.set_nanguard()
         self.set_trng(seed)
         self.set_dropout(False)
 
@@ -379,8 +375,7 @@ class Model(BaseModel):
         # -> n_timesteps x n_samples x src_emb_dim
 
         # Pass the source word vectors through the GRU RNN
-        emb_enc_rnns = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', mask=x_mask,
-                                               profile=self.profile, mode=self.func_mode)
+        emb_enc_rnns = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', mask=x_mask)
         # -> n_timesteps x n_samples x rnn_dim
 
         # word embedding for backward rnn (source)
@@ -390,8 +385,7 @@ class Model(BaseModel):
         emb_enc_r = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
         # -> n_timesteps x n_samples x src_emb_dim
         # Pass the source word vectors in reverse through the GRU RNN
-        emb_enc_rnns_r = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', mask=xr_mask,
-                                                 profile=self.profile, mode=self.func_mode)
+        emb_enc_rnns_r = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', mask=xr_mask)
         # -> n_timesteps x n_samples x rnn_dim
 
         # Source context will be the concatenation of forward and backward rnns
@@ -445,9 +439,7 @@ class Model(BaseModel):
                                         ctx1=text_ctx, ctx1_mask=x_mask,
                                         ctx2=img_ctx,
                                         one_step=False,
-                                        init_state=text_init_state, # NOTE: init_state only text
-                                        profile=self.profile,
-                                        mode=self.func_mode)
+                                        init_state=text_init_state) # NOTE: init_state only text
 
         # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
         h       = dec_mult[0]    # (n_timesteps_trg, batch_size, rnn_dim)
@@ -480,10 +472,7 @@ class Model(BaseModel):
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(),
-                                           cost,
-                                           mode=self.func_mode,
-                                           profile=self.profile)
+        self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         return cost.mean()
 
@@ -554,9 +543,7 @@ class Model(BaseModel):
                                         ctx1=text_ctx, ctx1_mask=None,
                                         ctx2=img_ctx,
                                         one_step=True,
-                                        init_state=text_init_state,
-                                        profile=self.profile,
-                                        mode=self.func_mode)
+                                        init_state=text_init_state)
         h      = dec_mult[0]
         sumctx = dec_mult[1]
         alphas = list(dec_mult[2:])

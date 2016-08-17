@@ -37,7 +37,6 @@ class Model(BaseModel):
         self.set_options(self.__dict__)
         self.trg_idict = trg_idict
 
-        self.set_nanguard()
         self.set_trng(seed)
         self.set_dropout(False)
 
@@ -161,10 +160,7 @@ class Model(BaseModel):
         cost = cost.reshape([y.shape[0], y.shape[1]])
         cost = (cost * y_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(),
-                                           cost,
-                                           mode=self.func_mode,
-                                           profile=self.profile)
+        self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         return cost.mean()
 
