@@ -4,6 +4,7 @@ import sys
 import numpy as np
 
 import seaborn as sns
+import pandas as pd
 
 from collections import OrderedDict
 
@@ -81,11 +82,11 @@ def plot(result, title):
     ax1.legend(loc='lower right')
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print 'Usage: %s model_log_1 model_log_2' % sys.argv[0]
+    if len(sys.argv) == 1:
+        print 'Usage: %s <model log files>' % sys.argv[0]
         sys.exit(1)
 
-    model1, model2 = sys.argv[1:]
+    models = sys.argv[1:]
     results = OrderedDict()
     # Parse log files
     for model in models:
