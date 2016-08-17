@@ -55,15 +55,6 @@ class BaseModel(object):
         """Sets the seed for Theano RNG."""
         self.trng = RandomStreams(seed)
 
-    def set_nanguard(self):
-        """Enables nanguard for theano functions."""
-        self.func_mode = None
-        if self.nanguard:
-            from theano.compile.nanguardmode import NanGuardMode
-            self.func_mode = NanGuardMode(nan_is_error=True,
-                                          inf_is_error=True,
-                                          big_is_error=False)
-
     def set_dropout(self, val):
         """Sets dropout indicator for activation scaling
         if dropout is available through configuration."""
@@ -181,8 +172,7 @@ class BaseModel(object):
                       cost, lr0=self.learning_rate)
 
         # Compile forward/backward function
-        self.train_batch = theano.function(self.inputs.values(), cost, updates=updates,
-                                           profile=self.profile, mode=self.func_mode)
+        self.train_batch = theano.function(self.inputs.values(), cost, updates=updates)
 
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         # Save model temporarily

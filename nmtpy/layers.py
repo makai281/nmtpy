@@ -212,7 +212,7 @@ def param_init_lngru(params, nin, dim, scale=0.01, prefix='gru'):
 
     return params
 
-def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None, profile=False):
+def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None):
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
@@ -258,14 +258,12 @@ def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None, p
                                 non_sequences=shared_vars,
                                 name=pp(prefix, '_layers'),
                                 n_steps=nsteps,
-                                profile=profile,
                                 strict=True)
     rval = [rval]
     return rval
 
-def lngru_layer(tparams, state_below, prefix='gru', mask=None, profile=False):
-    return gru_layer(tparams, state_below, prefix=prefix, layer_norm=True, mask=mask,
-                     profile=profile)
+def lngru_layer(tparams, state_below, prefix='gru', mask=None):
+    return gru_layer(tparams, state_below, prefix=prefix, layer_norm=True, mask=mask)
 
 ######################################
 # Conditional GRU layer with Attention
@@ -306,8 +304,7 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond')
 
 def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
                    mask=None, one_step=False,
-                   init_state=None, context_mask=None,
-                   profile=False):
+                   init_state=None, context_mask=None):
     if one_step:
         assert init_state, 'previous state must be provided'
 
@@ -472,7 +469,6 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
                                     non_sequences=[pctx_, context] + shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
-                                    profile=profile,
                                     strict=True)
     return rval
 
@@ -481,8 +477,7 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
 ###########################################################
 def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_multi',
                          input_mask=None, one_step=False,
-                         init_state=None, ctx1_mask=None,
-                         profile=False):
+                         init_state=None, ctx1_mask=None):
     if one_step:
         assert init_state, 'previous state must be provided'
 
@@ -665,7 +660,6 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
                                     non_sequences=[pctx1_, pctx2_, ctx1, ctx2] + shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
-                                    profile=profile,
                                     strict=True)
     return rval
 
@@ -771,7 +765,7 @@ def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step
                                     sequences=[state_below],
                                     outputs_info=[init_memory, init_state],
                                     name=pp(prefix, '_layers'),
-                                    n_steps=nsteps, profile=False)
+                                    n_steps=nsteps)
     return rval
 
 #######################################
@@ -952,5 +946,5 @@ def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
                                     outputs_info=outputs_info,
                                     non_sequences=[pctx_],
                                     name=pp(prefix, '_layers'),
-                                    n_steps=nsteps, profile=False)
+                                    n_steps=nsteps)
         return rval, updates
