@@ -179,7 +179,7 @@ class Model(BaseModel):
 
         # Takes image annotation vectors and returns
         # it with the initial state of GRU
-        self.f_init = theano.function([ctx], [init_state[None, :], ctx], name='f_init', profile=self.profile)
+        self.f_init = theano.function([ctx], [init_state[None, :], ctx], name='f_init')
 
         y = tensor.vector('y_sampler', dtype=INT)
         init_state = tensor.matrix('init_state', dtype=FLOAT)
@@ -226,7 +226,7 @@ class Model(BaseModel):
         # sampled word for the next target, next hidden state to be used
         inputs = [y, ctx, init_state]
         outs = [next_log_probs, next_word, next_state, alphas]
-        self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
+        self.f_next = theano.function(inputs, outs, name='f_next')
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         get_att = kwargs.get('get_att_alphas', False)

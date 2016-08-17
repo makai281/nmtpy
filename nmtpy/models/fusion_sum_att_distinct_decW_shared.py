@@ -524,7 +524,7 @@ class Model(BaseModel):
         ################
         inps            = [x, x_img]
         outs            = [text_ctx, img_ctx, text_init_state]
-        self.f_init     = theano.function(inps, outs, name='f_init', profile=self.profile)
+        self.f_init     = theano.function(inps, outs, name='f_init')
 
         ###################
         # Target Embeddings
@@ -573,7 +573,7 @@ class Model(BaseModel):
         ################
         inputs = [y, text_ctx, img_ctx, text_init_state]
         outs = [next_log_probs, next_word, h] + alphas
-        self.f_next = theano.function(inputs, outs, name='f_next', profile=self.profile)
+        self.f_next = theano.function(inputs, outs, name='f_next')
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         get_att = kwargs.get('get_att_alphas', False)
