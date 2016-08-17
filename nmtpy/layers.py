@@ -271,36 +271,21 @@ def lngru_layer(tparams, state_below, prefix='gru', mask=None, profile=False, mo
 ######################################
 # Conditional GRU layer with Attention
 ######################################
-def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond',
-                        nin_nonlin=None, dim_nonlin=None):
+def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond'):
     # nin:      input dim (e.g. embedding dim in the case of NMT)
     # dim:      gru_dim   (e.g. 1000)
     # dimctx:   2*gru_dim (e.g. 2000)
 
-    if nin_nonlin is None:
-        nin_nonlin = nin
-    if dim_nonlin is None:
-        dim_nonlin = dim
-
-    # Below ones area also available in gru_layer
-    params[pp(prefix, 'W')]             = np.concatenate([norm_weight(nin, dim, scale=scale),
-                                                          norm_weight(nin, dim, scale=scale)], axis=1)
-    params[pp(prefix, 'b')]             = np.zeros((2 * dim,)).astype(FLOAT)
-
-    params[pp(prefix, 'U')]             = np.concatenate([ortho_weight(dim_nonlin),
-                                                          ortho_weight(dim_nonlin)], axis=1)
-
-    params[pp(prefix, 'Wx')]            = norm_weight(nin_nonlin, dim_nonlin, scale=scale)
-    params[pp(prefix, 'Ux')]            = ortho_weight(dim_nonlin)
-    params[pp(prefix, 'bx')]            = np.zeros((dim_nonlin,)).astype(FLOAT)
+    # Parameters of the first GRU
+    params = param_init_gru(params, nin, dim, scale, prefix)
 
     # Below ones are new to this layer
-    params[pp(prefix, 'U_nl')]          = np.concatenate([ortho_weight(dim_nonlin),
-                                                          ortho_weight(dim_nonlin)], axis=1)
-    params[pp(prefix, 'b_nl')]          = np.zeros((2 * dim_nonlin,)).astype(FLOAT)
+    params[pp(prefix, 'U_nl')]          = np.concatenate([ortho_weight(dim),
+                                                          ortho_weight(dim)], axis=1)
+    params[pp(prefix, 'b_nl')]          = np.zeros((2 * dim,)).astype(FLOAT)
 
-    params[pp(prefix, 'Ux_nl')]         = ortho_weight(dim_nonlin)
-    params[pp(prefix, 'bx_nl')]         = np.zeros((dim_nonlin,)).astype(FLOAT)
+    params[pp(prefix, 'Ux_nl')]         = ortho_weight(dim)
+    params[pp(prefix, 'bx_nl')]         = np.zeros((dim,)).astype(FLOAT)
 
     # context to GRU
     params[pp(prefix, 'Wc')]            = norm_weight(dimctx, dim*2, scale=scale)
