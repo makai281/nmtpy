@@ -30,6 +30,7 @@ DEFAULTS = {
         }
 
 TRAIN_DEFAULTS = {
+        'debug':              False,          # Dump graph and print theano node input/outputs
         'decay_c':            0.0005,         # L2 penalty factor
         'clip_c':             5.,             # Clip gradients above clip_c
         'alpha_c':            0.,             # Alpha regularization for attentional models
@@ -75,6 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('-l', '--lrate'         , type=str  , help="Initial learning rate")
     parser.add_argument('-j', '--njobs'         , type=str  , help="# of CPU jobs for beam-search")
     parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
+    parser.add_argument('-d', '--debug'         , action='store_true', help="Enable debugging outputs (Warning: very verbose)")
     pargs = parser.parse_args()
 
     # First parse configuration file for arguments
@@ -198,10 +200,11 @@ if __name__ == '__main__':
     # Build optimizer
     log.info('Initial learning rate: %.5f' % model.lrate)
     log.info('Building "%s" optimizer' % args.optimizer)
-    model.build_optimizer(cost, args.clip_c)
+    model.build_optimizer(cost, args.clip_c, debug=args.debug)
 
     # Save graph
-    theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
+    if args.debug:
+        theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
 
     # Enable dropout in training (if requested)
     model.set_dropout(True)
