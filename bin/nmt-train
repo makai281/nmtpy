@@ -201,7 +201,7 @@ if __name__ == '__main__':
     model.build_optimizer(cost, args.clip_c)
 
     # Save graph
-    #theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
+    theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
 
     # Enable dropout in training (if requested)
     model.set_dropout(True)
