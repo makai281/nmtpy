@@ -147,7 +147,7 @@ class BaseModel(object):
             cost = self.add_alpha_regularizer(cost, alpha_c)
         return cost
 
-    def build_optimizer(self, cost, clip_c, dont_update=None):
+    def build_optimizer(self, cost, clip_c, dont_update=None, debug=False):
         tparams = OrderedDict(self.tparams)
 
         if dont_update is not None:
@@ -181,7 +181,13 @@ class BaseModel(object):
                       cost, lr0=self.learning_rate)
 
         # Compile forward/backward function
-        self.train_batch = theano.function(self.inputs.values(), cost, updates=updates)
+        if debug:
+            self.train_batch = theano.function(self.inputs.values(), cost, updates=updates,
+                                               mode=theano.compile.MonitorMode(
+                                                   pre_func=inspect_inputs,
+                                                   post_func=inspect_outputs))
+        else:
+            self.train_batch = theano.function(self.inputs.values(), cost, updates=updates)
 
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         # Save model temporarily
