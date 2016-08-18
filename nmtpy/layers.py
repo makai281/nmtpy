@@ -420,20 +420,20 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         # Transform the weighted context sum with Wc
         # and add it to preact
         # Wc: dimctx -> Stacked dim*2
-        preact += tensor.dot(ctx_, Wc)
+        preact2 = preact + tensor.dot(ctx_, Wc)
 
         # Apply sigmoid nonlinearity
-        preact = sigmoid(preact)
+        preact2 = sigmoid(preact2)
 
         # Slice activations: New gates r2 and u2
-        r2 = tensor_slice(preact, 0, dim)
-        u2 = tensor_slice(preact, 1, dim)
+        r2 = tensor_slice(preact2, 0, dim)
+        u2 = tensor_slice(preact2, 1, dim)
 
         preactx = (tensor.dot(h1, Ux_nl) + bx_nl) * r2
-        preactx += tensor.dot(ctx_, Wcx)
+        preactx2 = preactx + tensor.dot(ctx_, Wcx)
 
         # Candidate hidden
-        h2_tilda = tanh(preactx)
+        h2_tilda = tanh(preactx2)
 
         # Leaky integration between the new h2 and the
         # old h1 computed in line 285
