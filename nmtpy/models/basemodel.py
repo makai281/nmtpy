@@ -18,6 +18,15 @@ from ..nmtutils import unzip
 from ..sysutils import *
 from ..typedef import *
 
+#######################################
+## For debugging function input outputs
+def inspect_inputs(i, node, fn):
+    print '>> Inputs: ', i, node, [input[0] for input in fn.inputs]
+
+def inspect_outputs(i, node, fn):
+    print '>> Outputs: ', i, node, [input[0] for input in fn.outputs]
+#######################################
+
 class BaseModel(object):
     __metaclass__ = ABCMeta
     def __init__(self, **kwargs):
