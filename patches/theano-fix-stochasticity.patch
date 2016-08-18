@@ -1,17 +1,26 @@
 diff --git a/theano/sandbox/cuda/opt.py b/theano/sandbox/cuda/opt.py
-index a534c48..8573b11 100644
+index dca335e..e117d12 100644
 --- a/theano/sandbox/cuda/opt.py
 +++ b/theano/sandbox/cuda/opt.py
-@@ -1132,7 +1132,8 @@ def local_gpu_advanced_incsubtensor1(node):
+@@ -1134,7 +1134,8 @@ def local_gpu_advanced_incsubtensor1(node):
                  gpu_op = GpuAdvancedIncSubtensor1(
                      set_instead_of_inc=set_instead_of_inc)
              else:
 -                gpu_op = GpuAdvancedIncSubtensor1_dev20(
-+                # Non deterministic
++                # Avoid this opt for reproducible results
 +                gpu_op = GpuAdvancedIncSubtensor1(
                      set_instead_of_inc=set_instead_of_inc)
              return [gpu_op(as_cuda_ndarray_variable(x),
                             as_cuda_ndarray_variable(y), *coords)]
+@@ -1174,7 +1175,7 @@ def local_gpu_advanced_incsubtensor1(node):
+                 gpu_op = GpuAdvancedIncSubtensor1(
+                     set_instead_of_inc=set_instead_of_inc)
+             else:
+-                gpu_op = GpuAdvancedIncSubtensor1_dev20(
++                gpu_op = GpuAdvancedIncSubtensor1(
+                     set_instead_of_inc=set_instead_of_inc)
+             return [host_from_gpu(gpu_op(gpu_x, gpu_y, *coords))]
+     return False
 diff --git a/theano/scan_module/scan_op.py b/theano/scan_module/scan_op.py
 index d614bdf..49f6144 100644
 --- a/theano/scan_module/scan_op.py
