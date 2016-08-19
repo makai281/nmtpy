@@ -19,7 +19,8 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import get_iterator
+from ..iterators.text import TextIterator
+from ..iterators.bitext import BiTextIterator
 from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
@@ -63,13 +64,13 @@ class Model(BaseModel):
             self.valid_ref_files = list([self.valid_ref_files])
 
         if from_translate:
-            self.valid_iterator = get_iterator("text")(
+            self.valid_iterator = TextIterator(
                                     batch_size=1,
                                     file=self.data['valid_src'], dict=self.src_dict,
                                     n_words=self.n_words_src)
         else:
             # Take the first validation item for NLL computation
-            self.valid_iterator = get_iterator("bitext")(
+            self.valid_iterator = BiTextIterator(
                                     batch_size=self.batch_size,
                                     srcfile=self.data['valid_src'], srcdict=self.src_dict,
                                     trgfile=self.valid_ref_files[0], trgdict=self.trg_dict,
@@ -78,7 +79,7 @@ class Model(BaseModel):
         self.valid_iterator.read()
 
     def load_data(self):
-        self.train_iterator = get_iterator("bitext")(
+        self.train_iterator = BiTextIterator(
                                 batch_size=self.batch_size,
                                 shuffle_mode='trglen',
                                 srcfile=self.data['train_src'], srcdict=self.src_dict,

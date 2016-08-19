@@ -11,7 +11,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import get_iterator
+from ..iterators.text import TextIterator
 
 from ..models.basemodel import BaseModel
 
@@ -33,14 +33,14 @@ class Model(BaseModel):
         self.set_trng(seed)
 
     def load_data(self):
-        self.train_iterator = get_iterator("text")(
+        self.train_iterator = TextIterator(
                                 batch_size=self.batch_size,
                                 file=self.data['train_src'],
                                 dict=self.src_dict,
                                 n_words=self.n_words,
                                 mask=True)
 
-        self.valid_iterator = get_iterator("text")(
+        self.valid_iterator = TextIterator(
                                 batch_size=self.batch_size,
                                 file=self.data['valid_src'],
                                 dict=self.src_dict,

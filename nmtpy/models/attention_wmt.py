@@ -19,7 +19,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import get_iterator
+from ..iterators.wmt import WMTIterator
 
 from ..models.basemodel import BaseModel
 
@@ -64,13 +64,13 @@ class Model(BaseModel):
             if isinstance(self.valid_ref_files, str):
                 self.valid_ref_files = list([self.valid_ref_files])
 
-            self.valid_iterator = get_iterator("wmt")(
+            self.valid_iterator = WMTIterator(
                     pkl_file=self.data['valid_src'], batch_size=1,
                     src_dict=self.src_dict, n_words_src=self.n_words_src,
                     mode=data_mode)
         else:
             # Take the first validation item for NLL computation
-            self.valid_iterator = get_iterator("wmt")(
+            self.valid_iterator = WMTIterator(
                     pkl_file=self.data['valid_src'], batch_size=64,
                     trg_dict=self.trg_dict, src_dict=self.src_dict,
                     n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
@@ -79,7 +79,7 @@ class Model(BaseModel):
         self.valid_iterator.prepare_batches()
 
     def load_data(self):
-        self.train_iterator = get_iterator("wmt")(
+        self.train_iterator = WMTIterator(
                 pkl_file=self.data['train_src'],
                 batch_size=self.batch_size,
                 trg_dict=self.trg_dict, src_dict=self.src_dict,
