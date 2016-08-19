@@ -50,7 +50,7 @@ class BiTextIterator(Iterator):
 
             # Exception if empty line found
             if sline == "" or tline == "":
-                raise Exception("Empty line(s) detected in parallel corpora.")
+                continue
 
             sseq = [self.srcdict.get(w, 1) for w in sline.split(' ')]
             tseq = [self.trgdict.get(w, 1) for w in tline.split(' ')]
