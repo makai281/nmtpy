@@ -12,8 +12,7 @@ from .iterator import Iterator
 
 """Text iterator for monolingual data."""
 class TextIterator(Iterator):
-    def __init__(self, batch_size, seed=1234, mask=True,
-                 shuffle_mode=None, **kwargs):
+    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, **kwargs):
         super(TextIterator, self).__init__(batch_size, seed, mask, shuffle_mode)
 
         assert 'file'   in kwargs, "Missing argument file"
