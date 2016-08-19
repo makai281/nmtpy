@@ -112,74 +112,45 @@ class WMTIterator(Iterator):
         self.total_src_words = len(total_src_words)
         self.total_trg_words = len(total_trg_words)
 
+        self._process_batch = (lambda idxs: self.mask_seqs(idxs))
+
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length
-            self._iter = HomogeneousData(self._seqs, self.batch_size, 5)
-        elif self.shuffle_mode == 'simple':
-            # Simple shuffle
-            self._idxs = np.random.permutation(self.n_samples)
-            self.prepare_batches()
+            # Get an iterator over sample idxs
+            self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=5)
         else:
-            # Ordered
-            self._idxs = np.arange(self.n_samples)
-            self.prepare_batches()
+            self.rewind()
+
+    def mask_seqs(self, idxs):
+        """Prepares a list of padded tensors with their masks for the given sample idxs."""
+        data_and_mask = Iterator.mask_data([self._seqs[i][4] for i in idxs])
+
+        # Source image features
+        img_idxs = [self._seqs[i][2] for i in idxs]
+
+        # Do this 196 x bsize x 512
+        x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
+
+        # TODO: We should handle this in the model?
+        x_img = x_img.squeeze() if self.batch_size == 1 else x_img
+
+        data_and_mask += x_img
+
+        if self.trg_avail:
+            data_and_mask += Iterator.mask_data([self._seqs[i][5] for i in idxs])
+
+        return data_and_mask
 
     def prepare_batches(self):
-        self._minibatches = []
-
-        for i in range(0, self.n_samples, self.batch_size):
-            batch_idxs = self._idxs[i:i + self.batch_size]
-
-            # Source image features
-            img_idxs = [self._seqs[i][2] for i in batch_idxs]
-
-            # Do this 196 x bsize x 512
-            x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
-
-            data_and_mask = Iterator.mask_data([self._seqs[i][4] for i in batch_idxs])
-            data_and_mask += x_img
-            if self.trg_avail:
-                data_and_mask += Iterator.mask_data([self._seqs[i][5] for i in batch_idxs])
-
-            # TODO: We should handle this in the model
-            #if self.batch_size == 1:
-               ## Drop middle axis
-               #x_img = x_img.squeeze()
-
-            self._minibatches.append(data_and_mask)
-
-        self.rewind()
+        pass
 
     def rewind(self):
-        if self.shuffle_mode != 'trglen':
-            self._iter = iter(self._minibatches)
-
-#    def next(self):
-        #try:
-            ## Get batch idxs
-            #idxs = next(self.__batch_iter)
-            #x = x_img = x_mask = y = y_mask = None
-
-            ## Target sentence
-            #if self.trg_avail:
-                #y, y_mask = Iterator.mask_data([self._seqs[i][5] for i in idxs])
-
-            ## Optional source sentences
-            #if self.src_avail:
-                #x, x_mask = Iterator.mask_data([self._seqs[i][4] for i in idxs])
-
-            ## Source image features
-            #img_idxs = [self._seqs[i][2] for i in idxs]
-            ## Do this 196 x bsize x 512
-            #x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
-            #if self.batch_size == 1:
-                ## Drop middle axis
-                #x_img = x_img.squeeze()
-
-            #return OrderedDict([(k, locals()[k]) for k in self.__keys if locals()[k] is not None])
-        #except StopIteration as si:
-            #self.rewind()
-            #raise
+        if self.shuffle_mode == 'simple':
+            # Simple shuffle
+            self._iter = np.random.permutation(self.n_samples).tolist()
+        elif self.shuffle_mode is None:
+            # Ordered
+            self._iter = np.arange(self.n_samples).tolist()
 
 if __name__ == '__main__':
     from nmtpy.nmtutils import load_dictionary
