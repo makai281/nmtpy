@@ -22,7 +22,7 @@ from nmtpy.metrics import get_scorer
 from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
 from nmtpy.filters import get_filter
-from nmtpy.iterators import get_iterator
+from nmtpy.iterators.bitext import BiTextIterator
 from nmtpy.typedef import *
 import nmtpy.cleanup as cleanup
 
@@ -135,14 +135,14 @@ class Translator(object):
         # do the forced decoding
         if self.mode == "forced" and self.src_files and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
-            self.iterator = get_iterator('bitext')(
-                                        self.src_files[0], self.model.src_dict,
-                                        self.ref_files[0], self.model.trg_dict,
+            self.iterator = BiTextIterator(
                                         batch_size=1,
+                                        srcfile=self.src_files[0], srcdict=self.model.src_dict,
+                                        trgfile=self.ref_files[0], trgdict=self.model.trg_dict,
                                         n_words_src=self.model.n_words_src,
                                         n_words_trg=self.model.n_words_trg,
                                         trg_name='y_true')
-            self.iterator.prepare_batches()
+            self.iterator.read()
 
         else:
             # Normal translation mode
@@ -186,9 +186,6 @@ class Translator(object):
                     self.ref_files = listify(self.model.data['valid_trg_orig'])
                 else:
                     self.ref_files = listify(self.model.valid_ref_files)
-
-        # Common to each mode
-        self.iterator.prepare_batches()
 
         # Print information
         log.info("Source file(s)")
