@@ -26,10 +26,21 @@ if __name__ == "__main__":
         print "Output file should end with .npy or .tsv"
         sys.exit(1)
 
-    params = np.load(args.model)['tparams'].tolist()
+    try:
+        params = np.load(args.model)['tparams'].tolist()
+    except KeyError as ke:
+        print '%s does not contain model parameters. Did you train your model long enough?' % args.model
+        sys.exit(1)
+
     if args.target:
+        if 'Wemb_dec' not in params:
+            print 'Target embeddings must be called Wemb_dec in order for nmt-extract to work.'
+            sys.exit(1)
         embs = params['Wemb_dec']
     elif args.source:
+        if 'Wemb_enc' not in params:
+            print 'Source embeddings must be called Wemb_enc in order for nmt-extract to work.'
+            sys.exit(1)
         embs = params['Wemb_enc']
 
     print "Embedding size: %d, Vocabulary size: %d" % (embs.shape[1], embs.shape[0])
