@@ -58,7 +58,7 @@ class BaseModel(object):
 
     def set_options(self, optdict):
         """Filter out None's and save option dict."""
-        self.options = [(k,v) for k,v in optdict.items() if v is not None]
+        self.options = OrderedDict([(k,v) for k,v in optdict.items() if v is not None])
 
     def set_trng(self, seed):
         """Sets the seed for Theano RNG."""
