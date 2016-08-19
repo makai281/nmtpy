@@ -77,7 +77,7 @@ class BiTextIterator(Iterator):
 
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length
-            self._iter = HomogeneousData(self._seqs, self.batch_size, 1)
+            self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=1)
         elif self.shuffle_mode == 'simple':
             # Simple shuffle
             self._idxs = np.random.permutation(self.n_samples)
