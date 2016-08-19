@@ -10,6 +10,7 @@ import numpy as np
 from ..typedef import *
 
 class Iterator(object):
+    """Base Iterator class."""
     __metaclass__ = ABCMeta
 
     @staticmethod
@@ -18,7 +19,6 @@ class Iterator(object):
         lengths = [len(s) for s in seqs]
         n_samples = len(seqs)
 
-        # TODO: For ff-enc, we will need fixed tsteps in the input
         maxlen = np.max(lengths) + 1
 
         # Shape is (t_steps, samples)
@@ -31,8 +31,7 @@ class Iterator(object):
 
         return x, x_mask
 
-    def __init__(self, batch_size, seed=1234, mask=True,
-                 shuffle_mode=None):
+    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None):
         self.batch_size = batch_size
         self.n_samples  = 0
         self.seed       = seed
@@ -58,12 +57,16 @@ class Iterator(object):
     def next(self):
         """Returns the next set of data from the iterator."""
         try:
-            data = next(self._iter)
+            data = self.get_batch_list()
         except StopIteration as si:
             self.rewind()
             raise
         else:
+            # Lookup the keys and return an ordered dict of the current minibatch
             return OrderedDict([(k, data[i]) for i,k in enumerate(self._keys)])
+
+    def get_batch_list(self):
+        return next(self._iter)
 
     @abstractmethod
     def read(self):
