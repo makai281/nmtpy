@@ -3,7 +3,6 @@
 from text           import TextIterator
 #from flickr         import FlickrIterator
 from bitext         import BiTextIterator
-#from homogeneouswmt import WMTHomogeneousIterator
 
 def get_iterator(name):
     iters = {
