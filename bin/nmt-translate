@@ -115,7 +115,7 @@ class Translator(object):
         self.__class = importlib.import_module("nmtpy.models.%s" % model_options['model_type']).Model
 
         # Create the model
-        self.model = self.__class(seed=self.seed, logger=log, **model_options)
+        self.model = self.__class(seed=self.seed, logger=None, **model_options)
         self.model.load(self.model_file)
         self.model.set_dropout(False)
 
