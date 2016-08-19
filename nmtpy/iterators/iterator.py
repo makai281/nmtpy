@@ -57,7 +57,7 @@ class Iterator(object):
     def next(self):
         """Returns the next set of data from the iterator."""
         try:
-            data = self.get_batch_list()
+            data = self.get_batch()
         except StopIteration as si:
             self.rewind()
             raise
@@ -65,7 +65,8 @@ class Iterator(object):
             # Lookup the keys and return an ordered dict of the current minibatch
             return OrderedDict([(k, data[i]) for i,k in enumerate(self._keys)])
 
-    def get_batch_list(self):
+    def get_batch(self):
+        """This can be redefined from child classes to prepare a batch."""
         return next(self._iter)
 
     @abstractmethod
