@@ -80,13 +80,13 @@ class BiTextIterator(Iterator):
             # Get an iterator over sample idxs
             self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=1)
             self._process_batch = (lambda idxs: self.mask_seqs(idxs))
-        elif self.shuffle_mode == 'simple':
-            # Simple shuffle
-            self._idxs = np.random.permutation(self.n_samples)
-            self.prepare_batches()
         else:
-            # Ordered
-            self._idxs = np.arange(self.n_samples)
+            if self.shuffle_mode == 'simple':
+                # Simple shuffle
+                self._idxs = np.random.permutation(self.n_samples)
+            else:
+                # Ordered
+                self._idxs = np.arange(self.n_samples)
             self.prepare_batches()
 
     def mask_seqs(self, idxs):
