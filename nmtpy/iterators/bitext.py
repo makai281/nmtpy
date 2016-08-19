@@ -12,8 +12,8 @@ from .homogeneous import HomogeneousData
 
 """Parallel text iterator for translation data."""
 class BiTextIterator(Iterator):
-    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, **kwargs):
-        super(BiTextIterator, self).__init__(batch_size, seed, mask, shuffle_mode)
+    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, logger=None, **kwargs):
+        super(BiTextIterator, self).__init__(batch_size, seed, mask, shuffle_mode, logger)
 
         assert 'srcfile' in kwargs, "Missing argument srcfile"
         assert 'trgfile' in kwargs, "Missing argument trgfile"
