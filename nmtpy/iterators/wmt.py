@@ -47,6 +47,8 @@ class WMTIterator(Iterator):
         self.imgfile = kwargs.get('imgfile', None)
         self.img_avail = self.imgfile is not None
 
+        self.trg_avail = False
+
         # Source word dictionary and short-list limit
         # This may not be available if the task is image -> description (Not implemented)
         self.srcdict = kwargs['srcdict']
