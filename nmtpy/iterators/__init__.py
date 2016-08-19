@@ -1,11 +1,10 @@
-#from wmt            import WMTIterator
-#from sqlite         import SQLIterator
+from wmt            import WMTIterator
 from text           import TextIterator
-#from flickr         import FlickrIterator
 from bitext         import BiTextIterator
 
 def get_iterator(name):
     iters = {
+                "wmt"       : WMTIterator,
                 "text"      : TextIterator,
                 "bitext"    : BiTextIterator,
             }
