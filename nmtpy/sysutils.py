@@ -128,11 +128,10 @@ def setup_train_args(args):
     if len(dim_str) > 0:
         dim_str = dim_str[:-1]
 
-    # Append learning rate only for the SGD case
+    # Append learning rate
     args.lrate = float(args.lrate)
     opt_string = args.optimizer
-    if args.optimizer in ["sgd", "rmsprop", "adam"]:
-        opt_string += "-lr_%.4f" % args.lrate
+    opt_string += "-lr_%.4f" % args.lrate
 
     # Set model name
     name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
@@ -164,9 +163,6 @@ def setup_train_args(args):
 
     if 'suffix' in args:
         del args['suffix']
-
-    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
-    del args['model_path_suffix']
 
     ensure_dirs([args.model_path])
 
