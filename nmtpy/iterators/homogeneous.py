@@ -80,9 +80,8 @@ class HomogeneousData(object):
         # Decrement used sample count
         self.len_curr_counts[self.cur_len] -= curr_batch_size
 
-        src, src_mask = Iterator.mask_data([self.data[i][0] for i in curr_indices])
-        trg, trg_mask = Iterator.mask_data([self.data[i][1] for i in curr_indices])
-        return (src, src_mask, trg, trg_mask)
+        # Return batch indices from here
+        return curr_indices
 
     def __iter__(self):
         return self
