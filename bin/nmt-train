@@ -52,9 +52,6 @@ TRAIN_DEFAULTS = {
         'stop_embedding':     0,              # Stop updating embeddings after this epoch
         }
 
-all_defaults = dict(DEFAULTS)
-all_defaults.update(TRAIN_DEFAULTS)
-
 ##########
 # main() #
 ##########
@@ -79,26 +76,29 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug'         , action='store_true', help="Enable debugging outputs (Warning: very verbose)")
     pargs = parser.parse_args()
 
-    # First parse configuration file for arguments
+    # First parse configuration file for arguments as base
     args = Config(pargs.config).get()
+
+    # Remove config from pargs
     del pargs.__dict__['config']
 
-    # Update args by reading cmdline args
+    # Override .conf arguments from the ones given in cmdline
     args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
 
     # Bring default values for arguments which are not set
+    all_defaults = dict(DEFAULTS).update(TRAIN_DEFAULTS)
     for k,v in all_defaults.iteritems():
         if k not in args:
             args[k] = v
 
-    ###################
+    #################
     # Setup arguments
-    ###################
+    #################
     args, log_file = setup_train_args(args)
 
-    ######################################################
+    #####################################################
     # Start logging module (both to terminal and to file)
-    ######################################################
+    #####################################################
     Logger.set_file(log_file)
     log = Logger._logger
 
@@ -108,6 +108,7 @@ if __name__ == '__main__':
     if 'THEANO_FLAGS' not in os.environ:
         args.device_id = get_gpu(args.device_id)
         os.environ['THEANO_FLAGS'] = "device=%s" % args.device_id
+
     log.info("THEANO_FLAGS = %s" % os.environ['THEANO_FLAGS'])
 
     ###############
@@ -121,7 +122,7 @@ if __name__ == '__main__':
     # Dump parameters
     ##################
     log.info("Model options:")
-    log.info("**************")
+    log.info("--------------")
     for p in sorted(args.keys()):
         log.info(" %20s -> %s" % (p, args[p]))
 
