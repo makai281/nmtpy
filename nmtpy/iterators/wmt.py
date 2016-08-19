@@ -21,8 +21,8 @@ from .homogeneous import HomogeneousData
 # [src_split_idx, trg_split_idx, imgid, imgname, src_words, trg_words]
 
 class WMTIterator(Iterator):
-    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, **kwargs):
-        super(WMTIterator, self).__init__(batch_size, seed, mask, shuffle_mode)
+    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, logger=None, **kwargs):
+        super(WMTIterator, self).__init__(batch_size, seed, mask, shuffle_mode, logger)
 
         assert 'pklfile' in kwargs, "Missing argument pklfile"
         assert 'srcdict' in kwargs, "Missing argument srcdict"
@@ -70,11 +70,15 @@ class WMTIterator(Iterator):
     def read(self):
         # Load image features file if any
         if self.img_avail:
+            self._print('Loading image file...')
             self.img_feats = np.load(self.imgfile)
+            self._print('Done.')
 
         # Load the corpora
         with open(self.pklfile, 'rb') as f:
+            self._print('Loading pkl file...')
             self._seqs = cPickle.load(f)
+            self._print('Done.')
 
         # Check for what is available
         ss = self._seqs[0]
