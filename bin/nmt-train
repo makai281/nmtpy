@@ -151,7 +151,7 @@ if __name__ == '__main__':
     # Create model object
     # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
     model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
-    model = Model(seed=args.seed, **model_args)
+    model = Model(seed=args.seed, logger=log, **model_args)
 
     log.info("Early stopping metric is %s" % args.valid_metric)
     log.info("Preparing data")
