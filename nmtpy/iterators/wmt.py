@@ -25,7 +25,6 @@ class WMTIterator(Iterator):
         super(WMTIterator, self).__init__(batch_size, seed, mask, shuffle_mode)
 
         assert 'pklfile' in kwargs, "Missing argument pklfile"
-        assert 'imgfile' in kwargs, "Missing argument imgfile"
         assert 'srcdict' in kwargs, "Missing argument srcdict"
 
         # Short-list sizes
@@ -40,12 +39,13 @@ class WMTIterator(Iterator):
         # 'all'     : All combinations (~725K parallel)
         # 'single'  : Take only the first pair e.g., train0.en->train0.de (~29K parallel)
         # 'pairs'   : Take only one-to-one pairs e.g., train_i.en->train_i.de (~145K parallel)
-        self.mode = kwargs.get('mode', 'all')
+        self.mode = kwargs.get('mode', 'pairs')
 
         # pkl file which contains a list of samples
         self.pklfile = kwargs['pklfile']
         # Resnet-50 image features file
-        self.imgfile = kwargs['imgfile']
+        self.imgfile = kwargs.get('imgfile', None)
+        self.img_avail = self.imgfile is not None
 
         # Source word dictionary and short-list limit
         # This may not be available if the task is image -> description (Not implemented)
@@ -58,7 +58,8 @@ class WMTIterator(Iterator):
             self._keys.append("%s_mask" % self.src_name)
 
         # We have images in the middle
-        self._keys.append("%s_img" % self.src_name)
+        if self.imgfile:
+            self._keys.append("%s_img" % self.src_name)
 
         # Target may not be available during validation
         if self.trgdict:
@@ -67,8 +68,9 @@ class WMTIterator(Iterator):
                 self._keys.append("%s_mask" % self.trg_name)
 
     def read(self):
-        # Load image features file
-        self.img_feats = np.load(self.imgfile)
+        # Load image features file if any
+        if self.img_avail:
+            self.img_feats = np.load(self.imgfile)
 
         # Load the corpora
         with open(self.pklfile, 'rb') as f:
@@ -101,10 +103,10 @@ class WMTIterator(Iterator):
 
         # Let's map the sentences once to idx's
         for sample in self._seqs:
-            sample[4] = sent_to_idx(self.src_dict, sample[4], self.n_words_src)
+            sample[4] = sent_to_idx(self.srcdict, sample[4], self.n_words_src)
             total_src_words.extend(sample[4])
             if self.trg_avail:
-                sample[5] = sent_to_idx(self.trg_dict, sample[5], self.n_words_trg)
+                sample[5] = sent_to_idx(self.trgdict, sample[5], self.n_words_trg)
                 total_trg_words.extend(sample[5])
 
         self.unk_src = total_src_words.count(1)
@@ -123,21 +125,22 @@ class WMTIterator(Iterator):
 
     def mask_seqs(self, idxs):
         """Prepares a list of padded tensors with their masks for the given sample idxs."""
-        data_and_mask = Iterator.mask_data([self._seqs[i][4] for i in idxs])
+        data_and_mask = list(Iterator.mask_data([self._seqs[i][4] for i in idxs]))
 
         # Source image features
-        img_idxs = [self._seqs[i][2] for i in idxs]
+        if self.img_avail:
+            img_idxs = [self._seqs[i][2] for i in idxs]
 
-        # Do this 196 x bsize x 512
-        x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
+            # Do this 196 x bsize x 512
+            x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
 
-        # TODO: We should handle this in the model?
-        x_img = x_img.squeeze() if self.batch_size == 1 else x_img
+            # TODO: We should handle this in the model?
+            x_img = x_img.squeeze() if self.batch_size == 1 else x_img
 
-        data_and_mask += x_img
+            data_and_mask += [x_img]
 
         if self.trg_avail:
-            data_and_mask += Iterator.mask_data([self._seqs[i][5] for i in idxs])
+            data_and_mask += list(Iterator.mask_data([self._seqs[i][5] for i in idxs]))
 
         return data_and_mask
 
@@ -145,36 +148,31 @@ class WMTIterator(Iterator):
         pass
 
     def rewind(self):
-        if self.shuffle_mode == 'simple':
-            # Simple shuffle
-            self._iter = np.random.permutation(self.n_samples).tolist()
-        elif self.shuffle_mode is None:
-            # Ordered
-            self._iter = np.arange(self.n_samples).tolist()
+        if self.shuffle_mode != 'trglen':
+            # Fill in the _idxs list for sample order
+            if self.shuffle_mode == 'simple':
+                # Simple shuffle
+                self._idxs = np.random.permutation(self.n_samples).tolist()
+            elif self.shuffle_mode is None:
+                # Ordered
+                self._idxs = np.arange(self.n_samples).tolist()
+            self._iter = []
+            for i in range(0, self.n_samples, self.batch_size):
+                self._iter.append(self._idxs[i:i + self.batch_size])
+            self._iter = iter(self._iter)
 
 if __name__ == '__main__':
     from nmtpy.nmtutils import load_dictionary
     trg_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.de.pkl")
     src_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.en.pkl")
 
-    ite = WMTIterator(32,
-                    "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
-                    "/tmp/conv54_vgg_feats_hdf5-flickr30k.train.npy",
-                    trg_dict, None)
+    ite = WMTIterator(batch_size=32,
+                      pklfile="/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
+                      imgfile="/lium/trad4a/wmt/2016/data/resnet-feats/flickr30k_ResNets50_blck4_train.npy",
+                      trgdict=trg_dict, srcdict=src_dict, mode='pairs', shuffle_mode='trglen')
+    ite.read()
     for i in range(2):
-        print "Iterating..."
-        for batch in ite:
-            v = batch.keys()
-            assert v[0] == "x_img"
-            assert v[1] == "y"
-            assert v[2] == "y_mask"
-
-    ite = WMTIterator(32,
-                    "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
-                    "/tmp/conv54_vgg_feats_hdf5-flickr30k.train.npy",
-                    trg_dict, src_dict)
-    for i in range(2):
-        print "Iterating..."
+        print "Iterating...", i
         for batch in ite:
             v = batch.keys()
             assert v[0] == "x"
@@ -183,12 +181,12 @@ if __name__ == '__main__':
             assert v[3] == "y"
             assert v[4] == "y_mask"
 
-    ite = WMTIterator(32,
-                    "/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
-                    None,
-                    trg_dict, src_dict)
+    ite = WMTIterator(batch_size=32,
+                      pklfile="/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
+                      trgdict=trg_dict, srcdict=src_dict, mode='pairs')
+    ite.read()
     for i in range(2):
-        print "Iterating..."
+        print "Iterating...", i
         for batch in ite:
             v = batch.keys()
             assert v[0] == "x"
