@@ -35,7 +35,9 @@ class TextIterator(Iterator):
                 line = line.strip()
 
                 # Skip empty lines
-                if line != "":
+                if line == "":
+                    print 'Warning: empty line in %s' % self.__file
+                else:
                     line = line.split(" ")
 
                     seq = [self.__dict.get(w, 1) for w in line]
