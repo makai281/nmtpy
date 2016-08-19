@@ -47,6 +47,10 @@ class Iterator(object):
             # Set random seed
             random.seed(self.seed)
 
+        # This can be set by child classes for processing
+        # a list of idxs into the actual minibatch
+        self._process_batch = lambda x: x
+
     def __len__(self):
         """Returns number of samples."""
         return self.n_samples
@@ -57,17 +61,13 @@ class Iterator(object):
     def next(self):
         """Returns the next set of data from the iterator."""
         try:
-            data = self.get_batch()
+            data = self._process_batch(next(self._iter))
         except StopIteration as si:
             self.rewind()
             raise
         else:
             # Lookup the keys and return an ordered dict of the current minibatch
             return OrderedDict([(k, data[i]) for i,k in enumerate(self._keys)])
-
-    def get_batch(self):
-        """This can be redefined from child classes to prepare a batch."""
-        return next(self._iter)
 
     @abstractmethod
     def read(self):
