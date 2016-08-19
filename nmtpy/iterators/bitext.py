@@ -77,7 +77,9 @@ class BiTextIterator(Iterator):
 
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length
+            # Get an iterator over sample idxs
             self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=1)
+            self._process_batch = (lambda idxs: self.mask_seqs(idxs))
         elif self.shuffle_mode == 'simple':
             # Simple shuffle
             self._idxs = np.random.permutation(self.n_samples)
@@ -87,14 +89,18 @@ class BiTextIterator(Iterator):
             self._idxs = np.arange(self.n_samples)
             self.prepare_batches()
 
+    def mask_seqs(self, idxs):
+        """Prepares a list of padded tensors with their masks for the given sample idxs."""
+        src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
+        trg, trg_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
+        return (src, src_mask, trg, trg_mask)
+
     def prepare_batches(self):
         self._minibatches = []
 
         for i in range(0, self.n_samples, self.batch_size):
             batch_idxs = self._idxs[i:i + self.batch_size]
-            src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in batch_idxs])
-            trg, trg_mask = Iterator.mask_data([self._seqs[i][1] for i in batch_idxs])
-            self._minibatches.append((src, src_mask, trg, trg_mask))
+            self._minibatches.append(self.mask_seqs(batch_idxs))
 
         self.rewind()
 
