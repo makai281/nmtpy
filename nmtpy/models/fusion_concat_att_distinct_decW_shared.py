@@ -245,7 +245,6 @@ class Model(BaseModel):
 
         # We need both dictionaries
         dicts = kwargs['dicts']
-        assert 'trg' in dicts and 'src' in dicts
 
         # We'll use both dictionaries
         self.src_dict, src_idict = load_dictionary(dicts['src'])
@@ -278,12 +277,13 @@ class Model(BaseModel):
     def load_data(self):
         # Load training data
         self.train_iterator = WMTIterator(
-                self.batch_size,
-                self.data['train_src'],
-                img_feats_file=self.data['train_img'],
-                trg_dict=self.trg_dict, src_dict=self.src_dict,
+                batch_size=self.batch_size,
+                pklfile=self.data['train_src'],
+                imgfile=self.data['train_img'],
+                trgdict=self.trg_dict,
+                srcdict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                mode=self.options.get('data_mode', 'pairs'), shuffle=True)
+                mode=self.options.get('data_mode', 'pairs'), shuffle_mode='simple')
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False, data_mode='single'):
@@ -295,16 +295,18 @@ class Model(BaseModel):
                 self.valid_ref_files = list([self.valid_ref_files])
 
             self.valid_iterator = WMTIterator(
-                    batch_size, self.data['valid_src'],
-                    img_feats_file=self.data['valid_img'],
-                    src_dict=self.src_dict, n_words_src=self.n_words_src,
+                    batch_size=batch_size,
+                    pklfile=self.data['valid_src'],
+                    imgfile=self.data['valid_img'],
+                    srcdict=self.src_dict, n_words_src=self.n_words_src,
                     mode=data_mode)
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
-                    batch_size, self.data['valid_src'],
-                    img_feats_file=self.data['valid_img'],
-                    trg_dict=self.trg_dict, src_dict=self.src_dict,
+                    batch_size=self.batch_size,
+                    pklfile=self.data['valid_src'],
+                    imgfile=self.data['valid_img'],
+                    trgdict=self.trg_dict, srcdict=self.src_dict,
                     n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
                     mode='single')
 
