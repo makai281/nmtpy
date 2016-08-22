@@ -29,6 +29,18 @@ def layer_norm(x, b, s, eps=1e-5):
     output = s[None, :] * output + b[None, :]
     return output
 
+def init_layer_norm(prefix, params, dim, scale_add=0.0, scale_mul=1.0):
+    params[pp(prefix,'b1')] = scale_add * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'b2')] = scale_add * np.ones((1*dim)).astype(FLOAT)
+    params[pp(prefix,'b3')] = scale_add * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'b4')] = scale_add * np.ones((1*dim)).astype(FLOAT)
+    params[pp(prefix,'s1')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'s2')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+    params[pp(prefix,'s3')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
+    params[pp(prefix,'s4')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+
+    return params
+
 ##################
 # GRU layer step()
 ##################
@@ -86,18 +98,6 @@ def gru_step_lnorm(m_, x_, xx_, h_, U, Ux, b1, b2, b3, b4, s1, s2, s3, s4):
 
     return h
 
-
-#########
-# dropout
-#########
-def dropout_layer(state_before, use_dropout, dropout_prob, trng):
-    proj = tensor.switch(
-        use_dropout,
-        state_before * trng.binomial(state_before.shape, p=dropout_prob, n=1,
-                                     dtype=state_before.dtype),
-        state_before * dropout_prob)
-    return proj
-
 ###############################################
 # Returns the initializer and the layer itself
 ###############################################
@@ -115,7 +115,6 @@ def get_new_layer(name):
                 'gru_cond_multi'    : ('param_init_gru_cond'    , 'gru_cond_multi_layer'),
                 # LSTM
                 'lstm'              : ('param_init_lstm'        , 'lstm_layer'),
-                'lstm_cond'         : ('param_init_lstm_cond'   , 'lstm_cond_layer'),
              }
 
     init, layer = layers[name]
@@ -187,18 +186,7 @@ def param_init_gru(params, nin, dim, scale=0.01, prefix='gru', layernorm=False):
     params[pp(prefix, 'Ux')] = ortho_weight(dim)
 
     if layernorm:
-        scale_add = 0.0
-        scale_mul = 1.0
-
-        params[pp(prefix,'b1')] = scale_add * np.ones((2*dim)).astype(FLOAT)
-        params[pp(prefix,'b2')] = scale_add * np.ones((1*dim)).astype(FLOAT)
-        params[pp(prefix,'b3')] = scale_add * np.ones((2*dim)).astype(FLOAT)
-        params[pp(prefix,'b4')] = scale_add * np.ones((1*dim)).astype(FLOAT)
-
-        params[pp(prefix,'s1')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
-        params[pp(prefix,'s2')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
-        params[pp(prefix,'s3')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
-        params[pp(prefix,'s4')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+        params = init_layer_norm(prefix, params, dim)
 
     return params
 
@@ -255,13 +243,13 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, layernorm=False):
 ######################################
 # Conditional GRU layer with Attention
 ######################################
-def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond'):
+def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond', layernorm=False):
     # nin:      input dim (e.g. embedding dim in the case of NMT)
     # dim:      gru_dim   (e.g. 1000)
     # dimctx:   2*gru_dim (e.g. 2000)
 
-    # Parameters of the first GRU
-    params = param_init_gru(params, nin, dim, scale, prefix)
+    # Parameters of the first GRU (+ lnorm params if requested)
+    params = param_init_gru(params, nin, dim, scale, prefix, layernorm)
 
     # Below ones are new to this layer
     params[pp(prefix, 'U_nl')]          = np.concatenate([ortho_weight(dim),
@@ -275,6 +263,7 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond')
     params[pp(prefix, 'Wc')]            = norm_weight(dimctx, dim*2, scale=scale)
     params[pp(prefix, 'Wcx')]           = norm_weight(dimctx, dim, scale=scale)
 
+    ####### Attention
     # attention: combined -> hidden
     params[pp(prefix, 'W_comb_att')]    = norm_weight(dim, dimctx, scale=scale)
 
@@ -290,8 +279,7 @@ def param_init_gru_cond(params, nin, dim, dimctx, scale=0.01, prefix='gru_cond')
     return params
 
 def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
-                   mask=None, one_step=False,
-                   init_state=None, context_mask=None):
+                   mask=None, one_step=False, init_state=None, context_mask=None, layernorm=False):
     if one_step:
         assert init_state, 'previous state must be provided'
 
@@ -331,6 +319,29 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
     # Linearly transform the context to another space with same dimensionality
     pctx_ = tensor.dot(context, tparams[pp(prefix, 'Wc_att')]) + tparams[pp(prefix, 'b_att')]
 
+    # Prepare for step()
+    seqs = [mask, state_below_, state_belowx]
+    shared_vars = [tparams[pp(prefix, 'U')],
+                   tparams[pp(prefix, 'Wc')],
+                   tparams[pp(prefix, 'W_comb_att')],
+                   tparams[pp(prefix, 'U_att')],
+                   tparams[pp(prefix, 'c_att')],
+                   tparams[pp(prefix, 'Ux')],
+                   tparams[pp(prefix, 'Wcx')],
+                   tparams[pp(prefix, 'U_nl')],
+                   tparams[pp(prefix, 'Ux_nl')],
+                   tparams[pp(prefix, 'b_nl')],
+                   tparams[pp(prefix, 'bx_nl')]]
+
+    internal_step = gru_step
+    if layernorm:
+        internal_step = gru_step_lnorm
+        # bias and scale
+        for i in ['b', 's']:
+            # 4 for each
+            for j in ['1','2','3','4']:
+                shared_vars.append(tparams[pp(prefix, i+j)])
+
     # Step function for the recurrence/scan
     # Sequences
     # ---------
@@ -347,13 +358,13 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
     # pctx_ : pctx_
     # cc_   : context
     # and all the shared weights and biases..
-
     def _step(m_, x_, xx_,
               h_, ctx_, alpha_,
-              pctx_, cc_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl):
+              pctx_, cc_, U, Wc, W_comb_att, U_att, c_att, Ux, Wcx, U_nl, Ux_nl, b_nl, bx_nl,
+              *args):
 
         # Do a step of classical GRU
-        h1 = gru_step(m_, x_, xx_, h_, U, Ux)
+        h1 = internal_step(m_, x_, xx_, h_, U, Ux, *args)
 
         ###########
         # Attention
@@ -428,20 +439,6 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
 
         return h2, ctx_, alpha.T
-
-    seqs = [mask, state_below_, state_belowx]
-
-    shared_vars = [tparams[pp(prefix, 'U')],
-                   tparams[pp(prefix, 'Wc')],
-                   tparams[pp(prefix, 'W_comb_att')],
-                   tparams[pp(prefix, 'U_att')],
-                   tparams[pp(prefix, 'c_att')],
-                   tparams[pp(prefix, 'Ux')],
-                   tparams[pp(prefix, 'Wcx')],
-                   tparams[pp(prefix, 'U_nl')],
-                   tparams[pp(prefix, 'Ux_nl')],
-                   tparams[pp(prefix, 'b_nl')],
-                   tparams[pp(prefix, 'bx_nl')]]
 
     if one_step:
         rval = _step(*(seqs + [init_state, None, None, pctx_, context] + shared_vars))
@@ -754,184 +751,3 @@ def lstm_layer(tparams, state_below, init_state=None, init_memory=None, one_step
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps)
     return rval
-
-#######################################
-# Conditional LSTM layer with Attention
-#######################################
-def param_init_lstm_cond(params, options, nin, dim, dimctx, scale=0.01, prefix='lstm_cond'):
-    # input to LSTM, similar to the above, we stack the matrices for compactness, do one
-    # dot product, and use the slice function below to get the activations for each "gate"
-    params[pp(prefix,'W')] = np.concatenate([norm_weight(nin, dim, scale=scale),
-                                             norm_weight(nin, dim, scale=scale),
-                                             norm_weight(nin, dim, scale=scale),
-                                             norm_weight(nin, dim, scale=scale)], axis=1)
-
-    # LSTM to LSTM
-    params[pp(prefix,'U')] = np.concatenate([ortho_weight(dim),
-                                             ortho_weight(dim),
-                                             ortho_weight(dim),
-                                             ortho_weight(dim)], axis=1)
-
-    # bias to LSTM
-    params[pp(prefix,'b')] = np.zeros((4 * dim,)).astype(FLOAT)
-
-    # context to LSTM
-    params[pp(prefix,'Wc')] = norm_weight(dimctx, dim*4, scale=scale)
-
-    # attention: context -> hidden
-    params[pp(prefix,'Wc_att')] = norm_weight(dimctx, dimctx, scale=scale, ortho=False)
-
-    # attention: LSTM -> hidden
-    params[pp(prefix,'Wd_att')] = norm_weight(dim, dimctx, scale=scale)
-
-    # attention: hidden bias
-    params[pp(prefix,'b_att')] = np.zeros((dimctx,)).astype(FLOAT)
-
-    # optional "deep" attention
-    if options['n_layers_att'] > 1:
-        for lidx in xrange(1, options['n_layers_att']):
-            params[pp(prefix, 'W_att_%d' % lidx)] = ortho_weight(dimctx)
-            params[pp(prefix, 'b_att_%d' % lidx)] = np.zeros((dimctx,)).astype(FLOAT)
-
-    # attention:
-    params[pp(prefix,'U_att')] = norm_weight(dimctx, 1, scale=scale)
-    params[pp(prefix, 'c_tt')] = np.zeros((1,)).astype(FLOAT)
-
-    if options['selector']:
-        # attention: selector
-        params[pp(prefix, 'W_sel')] = norm_weight(dim, 1, scale=scale)
-        params[pp(prefix, 'b_sel')] = np.float32(0.)
-
-    return params
-
-def lstm_cond_layer(tparams, state_below, options, prefix='lstm',
-                    mask=None, context=None, one_step=False,
-                    init_memory=None, init_state=None,
-                    trng=None, use_noise=None):
-
-    assert context, 'Context must be provided'
-
-    if one_step:
-        assert init_memory, 'previous memory must be provided'
-        assert init_state, 'previous state must be provided'
-
-    nsteps = state_below.shape[0]
-    if state_below.ndim == 3:
-        n_samples = state_below.shape[1]
-    else:
-        n_samples = 1
-
-    # mask
-    if mask is None:
-        mask = tensor.alloc(1., state_below.shape[0], 1)
-
-    # infer lstm dimension
-    dim = tparams[pp(prefix, 'U')].shape[0]
-
-    # initial/previous state
-    if init_state is None:
-        init_state = tensor.alloc(0., n_samples, dim)
-    # initial/previous memory
-    if init_memory is None:
-        init_memory = tensor.alloc(0., n_samples, dim)
-
-    # projected context
-    pctx_ = tensor.dot(context, tparams[pp(prefix,'Wc_att')]) + tparams[pp(prefix, 'b_att')]
-
-    # Multiple LSTM layers in attention?
-    if options['n_layers_att'] > 1:
-        for lidx in xrange(1, options['n_layers_att']):
-            pctx_ = tensor.dot(pctx_, tparams[pp(prefix,'W_att_%d'%lidx)])+tparams[pp(prefix, 'b_att_%d'%lidx)]
-            # note to self: this used to be options['n_layers_att'] - 1, so no extra non-linearity if n_layers_att < 3
-            if lidx < options['n_layers_att']:
-                pctx_ = tanh(pctx_)
-
-    # projected x
-    # state_below is timesteps*num samples by d in training (TODO change to notation of paper)
-    # this is n * d during sampling
-    state_below = tensor.dot(state_below, tparams[pp(prefix, 'W')]) + tparams[pp(prefix, 'b')]
-
-    def _step(m_, x_, h_, c_, ct_, pctx_):
-        """ Each variable is one time slice of the LSTM
-        m_ - (mask), x_- (previous word), h_- (hidden state), c_- (lstm memory), ct_- (context),
-        pctx_ (projected context)
-        """
-        # attention computation
-        # [described in  equations (4), (5), (6) in
-        # section "3.1.2 Decoder: Long Short Term Memory Network]
-        pstate_ = tensor.dot(h_, tparams[pp(prefix,'Wd_att')])
-        pctx_ = pctx_ + pstate_[:, None, :]
-        pctx_list = []
-        pctx_list.append(pctx_)
-        pctx_ = tanh(pctx_)
-        alpha = tensor.dot(pctx_, tparams[pp(prefix,'U_att')]) + tparams[pp(prefix, 'c_tt')]
-        alpha_pre = alpha
-        alpha_shp = alpha.shape
-
-        # Soft attention
-        alpha = tensor.nnet.softmax(alpha.reshape([alpha_shp[0],alpha_shp[1]])) # softmax
-        ctx_ = (context * alpha[:,:,None]).sum(1) # current context
-        alpha_sample = alpha # you can return something else reasonable here to debug
-
-        if options['selector']:
-            sel_ = sigmoid(tensor.dot(h_, tparams[pp(prefix, 'W_sel')])+tparams[pp(prefix,'b_sel')])
-            sel_ = sel_.reshape([sel_.shape[0]])
-            ctx_ = sel_[:,None] * ctx_
-
-        preact = tensor.dot(h_, tparams[pp(prefix, 'U')])
-        preact += x_
-        preact += tensor.dot(ctx_, tparams[pp(prefix, 'Wc')])
-
-        # Recover the activations to the lstm gates
-        # [equation (1)]
-        i = tensor_slice(preact, 0, dim)
-        f = tensor_slice(preact, 1, dim)
-        o = tensor_slice(preact, 2, dim)
-        i = sigmoid(i)
-        f = sigmoid(f)
-        o = sigmoid(o)
-        c = tanh(tensor_slice(preact, 3, dim))
-
-        # compute the new memory/hidden state
-        # if the mask is 0, just copy the previous state
-        c = f * c_ + i * c
-        c = m_[:,None] * c + (1. - m_)[:,None] * c_
-
-        h = o * tanh(c)
-        h = m_[:,None] * h + (1. - m_)[:,None] * h_
-
-        rval = [h, c, alpha, alpha_sample, ctx_]
-        if options['selector']:
-            rval += [sel_]
-        rval += [pstate_, pctx_, i, f, o, preact, alpha_pre] + pctx_list
-        return rval
-
-    if options['selector']:
-        _step0 = lambda m_, x_, h_, c_, ct_, sel_, pctx_: _step(m_, x_, h_, c_, ct_, pctx_)
-    else:
-        _step0 = lambda m_, x_, h_, c_, ct_, pctx_: _step(m_, x_, h_, c_, ct_, pctx_)
-
-    if one_step:
-        if options['selector']:
-            rval = _step0(mask, state_below, init_state, init_memory, None, None, pctx_)
-        else:
-            rval = _step0(mask, state_below, init_state, init_memory, None, pctx_)
-        return rval
-    else:
-        seqs = [mask, state_below]
-        if options['selector']:
-            outputs_info += [tensor.alloc(0., n_samples)]
-        outputs_info += [None,
-                         None,
-                         None,
-                         None,
-                         None,
-                         None,
-                         None] + [None] # *options['n_layers_att']
-        rval, updates = theano.scan(_step0,
-                                    sequences=seqs,
-                                    outputs_info=outputs_info,
-                                    non_sequences=[pctx_],
-                                    name=pp(prefix, '_layers'),
-                                    n_steps=nsteps)
-        return rval, updates
