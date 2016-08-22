@@ -19,16 +19,14 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import WMTIterator
+from ..iterators.wmt import WMTIterator
 
 from ..models.basemodel import BaseModel
 
 ########## Define layers here ###########
-def init_gru_decoder_multiconcat(params, nin, dim, dimctx,
-                                 scale=0.01, prefix='gru_decoder_multiconcat',
-                                 nin_nonlin=None, dim_nonlin=None):
+def init_gru_decoder_multiconcat(params, nin, dim, dimctx, scale=0.01, prefix='gru_decoder_multiconcat'):
     # Init with usual gru_cond function
-    params = param_init_gru_cond(params, nin, dim, dimctx, scale, prefix, nin_nonlin, dim_nonlin)
+    params = param_init_gru_cond(params, nin, dim, dimctx, scale, prefix)
 
     # Add weights for concat fusion
     params[pp(prefix, 'W_fus')]     = norm_weight(2*dimctx, dimctx, scale=scale)
@@ -236,13 +234,15 @@ def gru_decoder_multiconcat(tparams, state_below,
     return rval
 
 class Model(BaseModel):
-    def __init__(self, seed, **kwargs):
+    def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
         # We need both dictionaries
         dicts = kwargs['dicts']
-        assert 'trg' in dicts and 'src' in dicts
+
+        # Should we normalize train cost or not?
+        self.norm_cost = kwargs.get('norm_cost', True)
 
         # We'll use both dictionaries
         self.src_dict, src_idict = load_dictionary(dicts['src'])
@@ -260,27 +260,32 @@ class Model(BaseModel):
         self.ctx_dim = 2 * self.rnn_dim
         self.set_trng(seed)
         self.set_dropout(False)
+        self.logger = logger
 
     def info(self, logger):
-        logger.info('Source vocabulary size: %d', self.n_words_src)
-        logger.info('Target vocabulary size: %d', self.n_words_trg)
-        logger.info('%d training samples' % self.train_iterator.n_samples)
-        logger.info('  %d/%d UNKs in source, %d/%d UNKs in target' % (self.train_iterator.unk_src,
-                                                                      self.train_iterator.total_src_words,
-                                                                      self.train_iterator.unk_trg,
-                                                                      self.train_iterator.total_trg_words))
-        logger.info('%d validation samples' % self.valid_iterator.n_samples)
-        logger.info('  %d UNKs in source' % self.valid_iterator.unk_src)
+        self.logger.info('Source vocabulary size: %d', self.n_words_src)
+        self.logger.info('Target vocabulary size: %d', self.n_words_trg)
+        self.logger.info('%d training samples' % self.train_iterator.n_samples)
+        self.logger.info('  %d/%d UNKs in source, %d/%d UNKs in target' % (self.train_iterator.unk_src,
+                                                                          self.train_iterator.total_src_words,
+                                                                          self.train_iterator.unk_trg,
+                                                                          self.train_iterator.total_trg_words))
+        self.logger.info('%d validation samples' % self.valid_iterator.n_samples)
+        self.logger.info('  %d UNKs in source' % self.valid_iterator.unk_src)
 
     def load_data(self):
         # Load training data
         self.train_iterator = WMTIterator(
-                self.batch_size,
-                self.data['train_src'],
-                img_feats_file=self.data['train_img'],
-                trg_dict=self.trg_dict, src_dict=self.src_dict,
+                batch_size=self.batch_size,
+                pklfile=self.data['train_src'],
+                imgfile=self.data['train_img'],
+                trgdict=self.trg_dict,
+                srcdict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                mode=self.options.get('data_mode', 'pairs'), shuffle=True)
+                mode=self.options.get('data_mode', 'pairs'),
+                shuffle_mode=self.options.get('shuffle_mode', 'trglen'),
+                logger=self.logger)
+        self.train_iterator.read()
         self.load_valid_data()
 
     def load_valid_data(self, from_translate=False, data_mode='single'):
@@ -292,18 +297,23 @@ class Model(BaseModel):
                 self.valid_ref_files = list([self.valid_ref_files])
 
             self.valid_iterator = WMTIterator(
-                    batch_size, self.data['valid_src'],
-                    img_feats_file=self.data['valid_img'],
-                    src_dict=self.src_dict, n_words_src=self.n_words_src,
+                    batch_size=batch_size,
+                    mask=False,
+                    pklfile=self.data['valid_src'],
+                    imgfile=self.data['valid_img'],
+                    srcdict=self.src_dict, n_words_src=self.n_words_src,
                     mode=data_mode)
         else:
             # Just for loss computation
             self.valid_iterator = WMTIterator(
-                    batch_size, self.data['valid_src'],
-                    img_feats_file=self.data['valid_img'],
-                    trg_dict=self.trg_dict, src_dict=self.src_dict,
+                    batch_size=self.batch_size,
+                    pklfile=self.data['valid_src'],
+                    imgfile=self.data['valid_img'],
+                    trgdict=self.trg_dict, srcdict=self.src_dict,
                     n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
                     mode='single')
+
+        self.valid_iterator.read()
 
     def init_params(self):
         params = OrderedDict()
@@ -475,7 +485,10 @@ class Model(BaseModel):
 
         self.f_log_probs = theano.function(self.inputs.values(), cost)
 
-        return cost.mean()
+        if self.norm_cost:
+            return (cost / y_mask.sum(0)).mean()
+        else:
+            return cost.mean()
 
     def add_alpha_regularizer(self, cost, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
