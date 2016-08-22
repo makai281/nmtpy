@@ -24,21 +24,28 @@ from ..iterators.bitext import BiTextIterator
 from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
-    def __init__(self, seed, **kwargs):
+    def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
         # Load dictionaries
         dicts = kwargs['dicts']
+
+        # Should we normalize train cost or not?
+        self.norm_cost = kwargs.get('norm_cost', False)
+
+        # Use GRU by default as encoder
+        self.enc_type = kwargs.get('enc_type', 'gru')
+
+        # Do we apply layer normalization to GRU?
+        self.lnorm = kwargs.get('layer_norm', False)
+
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
         self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
         self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) \
                 if self.n_words_trg > 0 else len(self.trg_dict)
-
-        # Use GRU by default as encoder
-        self.enc_type = kwargs.get('enc_type', 'gru')
 
         # Create options. This will saved as .pkl
         self.set_options(self.__dict__)
@@ -51,12 +58,13 @@ class Model(BaseModel):
 
         # We call this once to setup dropout mechanism correctly
         self.set_dropout(False)
+        self.logger = logger
 
     def info(self, logger):
-        logger.info('Source vocabulary size: %d', self.n_words_src)
-        logger.info('Target vocabulary size: %d', self.n_words_trg)
-        logger.info('%d training samples' % self.train_iterator.n_samples)
-        logger.info('%d validation samples' % self.valid_iterator.n_samples)
+        self.logger.info('Source vocabulary size: %d', self.n_words_src)
+        self.logger.info('Target vocabulary size: %d', self.n_words_trg)
+        self.logger.info('%d training samples' % self.train_iterator.n_samples)
+        self.logger.info('%d validation samples' % self.valid_iterator.n_samples)
 
     def load_valid_data(self, from_translate=False):
         self.valid_ref_files = self.data['valid_trg']
@@ -81,6 +89,7 @@ class Model(BaseModel):
     def load_data(self):
         self.train_iterator = BiTextIterator(
                                 batch_size=self.batch_size,
+                                shuffle_mode='trglen',
                                 srcfile=self.data['train_src'], srcdict=self.src_dict,
                                 trgfile=self.data['train_trg'], trgdict=self.trg_dict,
                                 n_words_src=self.n_words_src,
@@ -100,16 +109,16 @@ class Model(BaseModel):
         # encoder: bidirectional RNN
         #########
         # Forward encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
         # Backwards encoder
-        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
 
         # Context is the concatenation of forward and backwards encoder
 
         # init_state, init_cell
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
         # decoder
-        params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
+        params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init, layernorm=self.lnorm)
 
         # readout
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
@@ -142,12 +151,12 @@ class Model(BaseModel):
         # word embedding for forward rnn (source)
         emb = self.tparams['Wemb_enc'][x.flatten()]
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask)
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask, layernorm=self.lnorm)
 
         # word embedding for backward rnn (source)
         embr = self.tparams['Wemb_enc'][xr.flatten()]
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask)
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask, layernorm=self.lnorm)
 
         # context will be the concatenation of forward and backward rnns
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -174,7 +183,7 @@ class Model(BaseModel):
                                             mask=y_mask, context=ctx,
                                             context_mask=x_mask,
                                             one_step=False,
-                                            init_state=init_state)
+                                            init_state=init_state, layernorm=self.lnorm)
         # hidden states of the decoder gru
         proj_h = proj[0]
 
@@ -215,7 +224,10 @@ class Model(BaseModel):
         self.y_mask = y_mask
         self.alphas = alphas
 
-        return cost.mean()
+        if self.norm_cost:
+            return (cost / y_mask.sum(0)).mean()
+        else:
+            return cost.mean()
 
     def add_alpha_regularizer(self, cost, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
@@ -239,8 +251,8 @@ class Model(BaseModel):
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
 
         # encoder
-        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder')
-        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r')
+        proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', layernorm=self.lnorm)
+        projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', layernorm=self.lnorm)
 
         # concatenate forward and backward rnn hidden states
         ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -269,7 +281,7 @@ class Model(BaseModel):
                                          prefix='decoder',
                                          mask=None, context=ctx,
                                          one_step=True,
-                                         init_state=init_state)
+                                         init_state=init_state, layernorm=self.lnorm)
 
         next_state = r[0]
         ctxs = r[1]
