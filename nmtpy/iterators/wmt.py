@@ -120,7 +120,10 @@ class WMTIterator(Iterator):
         self.total_src_words = len(total_src_words)
         self.total_trg_words = len(total_trg_words)
 
-        self._process_batch = (lambda idxs: self.mask_seqs(idxs))
+        if self.batch_size == 1:
+            self._process_batch = (lambda idxs: self.process_single(idxs[0]))
+        else:
+            self._process_batch = (lambda idxs: self.mask_seqs(idxs))
 
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length
@@ -129,26 +132,32 @@ class WMTIterator(Iterator):
         else:
             self.rewind()
 
+    def process_single(self, idx):
+        data, _ = Iterator.mask_data([self._seqs[idx][4]])
+        data = [data]
+        if self.img_avail:
+            # Do this 196 x 1024
+            data += [self.img_feats[self._seqs[idx][2]]]
+        if self.trg_avail:
+            trg, _ = Iterator.mask_data([self._seqs[idx][5]])
+            data.append(trg)
+        return data
+
     def mask_seqs(self, idxs):
         """Prepares a list of padded tensors with their masks for the given sample idxs."""
-        data_and_mask = list(Iterator.mask_data([self._seqs[i][4] for i in idxs]))
-
+        data = list(Iterator.mask_data([self._seqs[i][4] for i in idxs]))
         # Source image features
         if self.img_avail:
             img_idxs = [self._seqs[i][2] for i in idxs]
 
-            # Do this 196 x bsize x 512
+            # Do this 196 x bsize x 1024
             x_img = self.img_feats[img_idxs].transpose(1, 0, 2)
-
-            # TODO: We should handle this in the model?
-            x_img = x_img.squeeze() if self.batch_size == 1 else x_img
-
-            data_and_mask += [x_img]
+            data += [x_img]
 
         if self.trg_avail:
-            data_and_mask += list(Iterator.mask_data([self._seqs[i][5] for i in idxs]))
+            data += list(Iterator.mask_data([self._seqs[i][5] for i in idxs]))
 
-        return data_and_mask
+        return data
 
     def prepare_batches(self):
         pass
@@ -171,6 +180,18 @@ if __name__ == '__main__':
     from nmtpy.nmtutils import load_dictionary
     trg_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.de.pkl")
     src_dict, _ = load_dictionary("/lium/buster1/caglayan/wmt16/data/text/task1.norm.lc.max50.ratio3.tok/train.norm.lc.tok.en.pkl")
+
+    ite = WMTIterator(batch_size=1, mask=False,
+                      pklfile="/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.valid.pkl",
+                      imgfile="/lium/trad4a/wmt/2016/data/resnet-feats/flickr30k_ResNets50_blck4_val.npy",
+                      srcdict=src_dict, mode='single')
+    ite.read()
+    for i in range(2):
+        print "Iterating...", i
+        for batch in ite:
+            v = batch.keys()
+            assert v[0] == "x"
+            assert v[1] == "x_img"
 
     ite = WMTIterator(batch_size=32,
                       pklfile="/lium/trad4a/wmt/2016/caglayan/data/task2/cross-product-min3-max50-minvocab5-train-680k/flickr_30k_align.train.pkl",
