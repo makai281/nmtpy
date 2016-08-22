@@ -108,9 +108,8 @@ def get_new_layer(name):
                 'conv'              : ('param_init_conv'        , 'conv_layer'),
                 # Feedforward Layer
                 'ff'                : ('param_init_fflayer'     , 'fflayer'),
-                # GRU and GRU-layer_norm
+                # GRU
                 'gru'               : ('param_init_gru'         , 'gru_layer'),
-                'lngru'             : ('param_init_lngru'       , 'lngru_layer'),
                 # Conditional GRU
                 'gru_cond'          : ('param_init_gru_cond'    , 'gru_cond_layer'),
                 'gru_cond_multi'    : ('param_init_gru_cond'    , 'gru_cond_multi_layer'),
@@ -125,7 +124,6 @@ def get_new_layer(name):
 #####################
 # Convolutional layer
 #####################
-
 def param_init_conv(params, input_shape, filter_shape, scale='he', prefix='conv'):
     # input_shape : (input_channels, input_rows, input_cols)
     # filter_shape: (output_channels, input_channels, filter_rows, filter_cols)
@@ -165,9 +163,9 @@ def fflayer(tparams, state_below, prefix='ff', activ='tanh'):
 ###########
 # GRU layer
 ###########
-def param_init_gru(params, nin, dim, scale=0.01, prefix='gru'):
-    # embedding to gates transformation weights, biases
-
+def param_init_gru(params, nin, dim, scale=0.01, prefix='gru', layernorm=False):
+    """Initialize parameters for a GRU layer. If layernorm is True, add additional
+    parameters for layer normalization."""
     # See the paper for variable names
     # W is stacked W_r and W_z
     params[pp(prefix, 'W')]  = np.concatenate([norm_weight(nin, dim, scale=scale),
@@ -188,31 +186,23 @@ def param_init_gru(params, nin, dim, scale=0.01, prefix='gru'):
     # recurrent transformation weights for hidden state proposal
     params[pp(prefix, 'Ux')] = ortho_weight(dim)
 
-    return params
+    if layernorm:
+        scale_add = 0.0
+        scale_mul = 1.0
 
-###########################
-# GRU + Layer Normalization
-###########################
-def param_init_lngru(params, nin, dim, scale=0.01, prefix='gru'):
-    # Initialize classical GRU
-    params = param_init_gru(params, nin, dim, scale=scale, prefix=prefix)
+        params[pp(prefix,'b1')] = scale_add * np.ones((2*dim)).astype(FLOAT)
+        params[pp(prefix,'b2')] = scale_add * np.ones((1*dim)).astype(FLOAT)
+        params[pp(prefix,'b3')] = scale_add * np.ones((2*dim)).astype(FLOAT)
+        params[pp(prefix,'b4')] = scale_add * np.ones((1*dim)).astype(FLOAT)
 
-    scale_add = 0.0
-    scale_mul = 1.0
-
-    params[pp(prefix,'b1')] = scale_add * np.ones((2*dim)).astype(FLOAT)
-    params[pp(prefix,'b2')] = scale_add * np.ones((1*dim)).astype(FLOAT)
-    params[pp(prefix,'b3')] = scale_add * np.ones((2*dim)).astype(FLOAT)
-    params[pp(prefix,'b4')] = scale_add * np.ones((1*dim)).astype(FLOAT)
-
-    params[pp(prefix,'s1')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
-    params[pp(prefix,'s2')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
-    params[pp(prefix,'s3')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
-    params[pp(prefix,'s4')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+        params[pp(prefix,'s1')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
+        params[pp(prefix,'s2')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
+        params[pp(prefix,'s3')] = scale_mul * np.ones((2*dim)).astype(FLOAT)
+        params[pp(prefix,'s4')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
 
     return params
 
-def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None):
+def gru_layer(tparams, state_below, prefix='gru', mask=None, layernorm=False):
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
@@ -244,7 +234,7 @@ def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None):
                    tparams[pp(prefix, 'Ux')]]
 
     _step = gru_step
-    if layer_norm:
+    if layernorm:
         _step = gru_step_lnorm
         # bias and scale
         for i in ['b', 's']:
@@ -261,9 +251,6 @@ def gru_layer(tparams, state_below, prefix='gru', layer_norm=False, mask=None):
                                 strict=True)
     rval = [rval]
     return rval
-
-def lngru_layer(tparams, state_below, prefix='gru', mask=None):
-    return gru_layer(tparams, state_below, prefix=prefix, layer_norm=True, mask=mask)
 
 ######################################
 # Conditional GRU layer with Attention
