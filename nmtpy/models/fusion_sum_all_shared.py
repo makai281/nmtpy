@@ -52,7 +52,7 @@ class Model(BaseModel):
         self.set_dropout(False)
         self.logger = logger
 
-    def info(self, logger):
+    def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)
         self.logger.info('Target vocabulary size: %d', self.n_words_trg)
         self.logger.info('%d training samples' % self.train_iterator.n_samples)

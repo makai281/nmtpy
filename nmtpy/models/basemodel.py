@@ -259,7 +259,7 @@ class BaseModel(object):
         # in child classes
         return None
 
-    def info(self, logger):
+    def info(self):
         pass
 
     def add_alpha_regularizer(self, cost, alpha_c):
