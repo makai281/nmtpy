@@ -55,6 +55,11 @@ class WMTIterator(Iterator):
         # This may not be available during validation
         self.trgdict = kwargs.get('trgdict', None)
 
+        # Don't use mask when batch_size == 1 which means we're doing
+        # translation with nmt-translate
+        if self.batch_size == 1:
+            self.mask = False
+
         self._keys = [self.src_name]
         if self.mask:
             self._keys.append("%s_mask" % self.src_name)
