@@ -200,9 +200,6 @@ class Model(BaseModel):
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
 
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
-
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
         logit_shp = logit.shape
 
@@ -292,9 +289,6 @@ class Model(BaseModel):
         logit_gru  = get_new_layer('ff')[1](self.tparams, next_state,   prefix='ff_logit_gru', activ='linear')
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
-
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
 
