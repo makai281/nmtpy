@@ -78,6 +78,7 @@ if __name__ == '__main__':
 
     # First parse configuration file for arguments as base
     args = Config(pargs.config).get()
+    args['model_path_suffix'] = os.path.splitext(os.path.basename(pargs.config))[0]
 
     # Remove config from pargs
     del pargs.__dict__['config']

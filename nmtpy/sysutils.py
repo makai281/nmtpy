@@ -164,6 +164,9 @@ def setup_train_args(args):
     if 'suffix' in args:
         del args['suffix']
 
+    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
+    del args['model_path_suffix']
+
     ensure_dirs([args.model_path])
 
     # Log file
