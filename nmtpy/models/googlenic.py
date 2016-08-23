@@ -125,8 +125,6 @@ class Model(BaseModel):
         # Skip m_0 as it isn't fed to the softmax for sequence generation
         logit = get_new_layer('ff')[1](self.tparams, m_t[1:], prefix='ff_lstm2softmax', activ='linear')
 
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         # Apply logsoftmax (stable version)
         log_probs = -tensor.nnet.logsoftmax(
@@ -177,8 +175,6 @@ class Model(BaseModel):
         # This prepares m(t) for softmax
         logit = get_new_layer('ff')[1](self.tparams, m_t, prefix='ff_lstm2softmax', activ='linear')
 
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         # Apply logsoftmax (stable version)
         next_log_probs = tensor.nnet.logsoftmax(logit)

@@ -142,8 +142,6 @@ class Model(BaseModel):
         # tanh over logit
         logit = tanh(logit)
 
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         # trg_emb_dim -> n_words_trg
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
@@ -210,8 +208,6 @@ class Model(BaseModel):
         logit += get_new_layer('ff')[1](self.tparams, ctxs      , prefix='ff_logit_ctx', activ='linear')
         logit  = tanh(logit)
 
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
 

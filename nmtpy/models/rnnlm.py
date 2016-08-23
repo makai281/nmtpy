@@ -110,8 +110,6 @@ class Model(BaseModel):
         logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
         logit = tanh(logit_rnn + logit_prev)
 
-        if self.dropout > 0:
-            logit = dropout_layer(logit, self.use_dropout, self.dropout, self.trng)
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
         logit_shp = logit.shape
