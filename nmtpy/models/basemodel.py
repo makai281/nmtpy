@@ -134,18 +134,30 @@ class BaseModel(object):
         weight_decay = 0.
         for kk, vv in self.tparams.iteritems():
             # Skip biases for L2 regularization
-            if skip_bias and vv.get_value().ndim > 1:
+            if not skip_bias or (skip_bias and vv.get_value().ndim > 1):
                 weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
-        cost += weight_decay
-        return cost
+        return cost + weight_decay
 
     def get_regularized_cost(self, cost, decay_c, alpha_c=None):
+        reg_cost = cost
         if decay_c > 0:
-            cost = self.add_l2_weight_decay(cost, decay_c)
+            reg_cost += self.add_l2_weight_decay(cost, decay_c)
         if alpha_c and alpha_c > 0:
-            cost = self.add_alpha_regularizer(cost, alpha_c)
-        return cost
+            reg_cost += self.add_alpha_regularizer(cost, alpha_c)
+        return reg_cost
+
+    def get_clipped_grads(self, grads, clip_c):
+        # Gradient clipping
+        g2 = 0.
+        new_grads = []
+        for g in grads:
+            g2 += (g**2).sum()
+        for g in grads:
+            new_grads.append(tensor.switch(g2 > (clip_c**2),
+                                           g / tensor.sqrt(g2) * clip_c,
+                                           g))
+        return new_grads
 
     def build_optimizer(self, cost, clip_c, dont_update=None, debug=False):
         tparams = OrderedDict(self.tparams)
@@ -158,17 +170,11 @@ class BaseModel(object):
         # Get gradients of cost with respect to variables
         grads = tensor.grad(cost, wrt=tparams.values())
 
-        # Gradient clipping
-        if clip_c > 0.:
-            g2 = 0.
-            new_grads = []
-            for g in grads:
-                g2 += (g**2).sum()
-            for g in grads:
-                new_grads.append(tensor.switch(g2 > (clip_c**2),
-                                               g / tensor.sqrt(g2) * clip_c,
-                                               g))
-            grads = new_grads
+        if clip_c > 0:
+            grads = self.get_clipped_grads(grads, clip_c)
+
+        #self.grad_norm = theano.function(self.inputs.values(), 
+        #                                 tensor.sqrt(sum([(g**2).sum() for g in grads])))
 
         # Load optimizer
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
