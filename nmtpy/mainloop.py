@@ -54,14 +54,12 @@ class MainLoop(object):
         # If f_valid == 0, do validation at end of epochs
         self.epoch_valid    = (self.f_valid == 0)
 
-    # OK
     def _print(self, msg, footer=False):
         """Pretty prints a message."""
         self.__log.info(msg)
         if footer:
             self.__log.info('-' * len(msg))
 
-    # OK
     def save_best_model(self):
         """Overwrites best on-disk model and saves it as a different file optionally."""
         if self.save_best:
@@ -81,14 +79,12 @@ class MainLoop(object):
         # Change self.model.lrate
         pass
     
-    # OK
     def _print_loss(self, loss):
         if self.uctr % self.f_verbose == 0:
             self._print("Epoch: %6d, update: %7d, cost: %10.6f" % (self.ectr,
                                                                   self.uctr,
                                                                   loss))
 
-    # OK
     def _train_epoch(self):
         """Represents a training epoch."""
         start = time.time()
@@ -100,7 +96,6 @@ class MainLoop(object):
         # Iterate over batches
         for data in self.model.train_iterator:
             self.uctr += 1
-            self.model.set_dropout(True)
 
             # Forward/backward and get loss
             loss = self.model.train_batch(*data.values())
@@ -144,7 +139,6 @@ class MainLoop(object):
         if self.epoch_valid:
             self.__do_validation()
 
-    # OK
     def dump_epoch_summary(self, losses, epoch_time, up_ctr):
         update_time = epoch_time / float(up_ctr)
         mean_loss = np.array(losses).mean()
@@ -152,7 +146,6 @@ class MainLoop(object):
         self._print("--> Epoch %d finished with mean loss %.5f (PPL: %4.5f)" % (self.ectr, mean_loss, np.exp(mean_loss)))
         self._print("--> Epoch took %d minutes, %.3f sec/update" % ((epoch_time / 60.0), update_time))
 
-    # OK
     def __do_sampling(self, data):
         """Generates samples and prints them."""
         if self.do_sampling and self.uctr % self.f_sample == 0:
@@ -164,7 +157,6 @@ class MainLoop(object):
                     self._print.info("Sample: %s" % sample)
                     self._print.info(" Truth: %s" % truth)
 
-    # OK
     def _is_best(self, loss, metric):
         """Determine whether the loss/metric is the best so far."""
         if len(self.valid_losses) == 0:
@@ -181,13 +173,13 @@ class MainLoop(object):
 
     def __do_validation(self):
         if self.ectr >= self.valid_start:
-            # Disable dropout during validation
-            self.model.set_dropout(False)
 
             self.vctr += 1
 
             # Compute validation loss
+            self.model.set_dropout(False)
             cur_loss = self.model.val_loss()
+            self.model.set_dropout(True)
 
             # Compute perplexity
             ppl = np.exp(cur_loss)
@@ -224,9 +216,9 @@ class MainLoop(object):
         best_valid_idx = np.argmin(np.array(self.valid_losses)) + 1
         best_vloss = self.valid_losses[best_valid_idx - 1]
         best_px = np.exp(best_vloss)
-        self._print('--> Current best loss %5.5f at validation %d (PX: %4.5f)' % (best_vloss,
-                                                                                  best_px,
-                                                                                  best_valid_idx))
+        self._print('--> Current best loss is %5.5f (PPL: %4.5f) at validation %d' % (best_vloss,
+                                                                                      best_px,
+                                                                                      best_valid_idx))
         if len(self.valid_metrics) > 0:
             # At least for BLEU and METEOR, higher is better
             best_metric_idx = np.argmax(np.array([m[1] for m in self.valid_metrics])) + 1
@@ -236,7 +228,8 @@ class MainLoop(object):
                                                                       best_metric_idx))
 
     def run(self):
-        # We start 1st epoch
+        self.model.set_dropout(True)
+        # We start training
         while 1:
             self.ectr += 1
             self._train_epoch()
