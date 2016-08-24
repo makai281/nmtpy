@@ -20,6 +20,7 @@ def tensor_slice(_x, n, dim):
         return _x[:, n*dim:(n+1)*dim]
     return _x[n*dim:(n+1)*dim]
 
+#############################################################################
 # Layer normalization
 # Lei Ba, Jimmy, Jamie Ryan Kiros, and Geoffrey E. Hinton.
 # "Layer Normalization." arXiv preprint arXiv:1607.06450 (2016).
@@ -40,6 +41,30 @@ def init_layer_norm(prefix, params, dim, scale_add=0.0, scale_mul=1.0):
     params[pp(prefix,'s4')] = scale_mul * np.ones((1*dim)).astype(FLOAT)
 
     return params
+
+# GRU step with Layer Normalization
+# Same code as below but with layer_norm addition
+def gru_step_lnorm(m_, x_, xx_, h_, U, Ux, b1, b2, b3, b4, s1, s2, s3, s4):
+    dim = Ux.shape[1]
+
+    # Normalize inputs
+    x_  = layer_norm(x_, b1, s1)
+    xx_ = layer_norm(xx_, b2, s2)
+
+    # Normalize dot product
+    preact = sigmoid(layer_norm(tensor.dot(h_, U), b3, s3) + x_)
+
+    r = tensor_slice(preact, 0, dim)
+    u = tensor_slice(preact, 1, dim)
+
+    # Normalize dot product
+    h_tilda = tanh((layer_norm(tensor.dot(h_, Ux), b4, s4) * r) + xx_)
+
+    h = u * h_tilda + (1. - u) * h_
+    h = m_[:, None] * h + (1. - m_)[:, None] * h_
+
+    return h
+#############################################################################
 
 ##################
 # GRU layer step()
@@ -71,29 +96,6 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     # According to paper, this should be [h = u * h_tilda + (1 - u) * h_]
     h = u * h_tilda + (1. - u) * h_
     # -> h is new h if mask is not 0 (a word was presented), otherwise, h is the copy of previous h which is h_
-    h = m_[:, None] * h + (1. - m_)[:, None] * h_
-
-    return h
-
-# GRU step with Layer Normalization
-# Same code as above but with layer_norm addition
-def gru_step_lnorm(m_, x_, xx_, h_, U, Ux, b1, b2, b3, b4, s1, s2, s3, s4):
-    dim = Ux.shape[1]
-
-    # Normalize inputs
-    x_  = layer_norm(x_, b1, s1)
-    xx_ = layer_norm(xx_, b2, s2)
-
-    # Normalize dot product
-    preact = sigmoid(layer_norm(tensor.dot(h_, U), b3, s3) + x_)
-
-    r = tensor_slice(preact, 0, dim)
-    u = tensor_slice(preact, 1, dim)
-
-    # Normalize dot product
-    h_tilda = tanh((layer_norm(tensor.dot(h_, Ux), b4, s4) * r) + xx_)
-
-    h = u * h_tilda + (1. - u) * h_
     h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
     return h
