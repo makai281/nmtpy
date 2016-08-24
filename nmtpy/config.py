@@ -43,7 +43,7 @@ def parse_config_option(k, v):
         v = ""
     # Numbers
     elif v[0].startswith(tuple(digits)) or v[0] == '-' and v[1].startswith(tuple(digits)):
-        v = float(v) if "." in v or "," in v else int(v)
+        v = float(v) if "." in v or "," in v or "e-" in v else int(v)
 
     return {k: v}
 
