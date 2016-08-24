@@ -32,8 +32,6 @@ class BaseModel(object):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
-        self.name = os.path.splitext(os.path.basename(self.model_path))[0]
-
         # Will be set when set_dropout is first called
         self.use_dropout = None
 
