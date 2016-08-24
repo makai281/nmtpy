@@ -1,28 +1,41 @@
 from shutil import copy
 
 import numpy as np
+import time
+import os
 
 class MainLoop(object):
     def __init__(self, model, logger, train_args):
-        # This is the nmtpy model and the logger
+        # model instance
         self.model          = model
-        self.model_path     = train_args.model_path
+        # logger
         self.__log          = logger
 
         # Counters
-        self.uctr = 0   # update ctr
-        self.ectr = 0   # epoch ctr
-        self.vctr = 0   # validation ctr
-
-        self.lrate          = train_args.lrate
+        self.uctr           = 0   # update ctr
+        self.ectr           = 0   # epoch ctr
+        self.vctr           = 0   # validation ctr
 
         self.early_bad      = 0
         self.early_stop     = False
+
+        # By default save best validation results
+        # can be disabled in cross-validation mode
+        self.save_best      = True
+
         self.save_iter      = train_args.save_iter
         self.max_updates    = train_args.max_iteration
         self.max_epochs     = train_args.max_epochs
         self.early_patience = train_args.patience
         self.valid_metric   = train_args.valid_metric
+        self.valid_start    = train_args.valid_start
+        self.beam_size      = train_args.beam_size
+        self.njobs          = train_args.njobs
+        self.f_valid        = train_args.valid_freq
+        self.f_sample       = train_args.sample_freq
+        self.f_verbose      = 10
+
+        self.do_sampling    = self.f_sample > 0
         self.do_beam_search = self.valid_metric != 'px'
 
         # Number of samples to produce
@@ -33,66 +46,54 @@ class MainLoop(object):
         self.valid_losses         = []
         self.valid_metrics        = []
 
-        self.batch_size     = train_args.batch_size
-        self.f_valid        = train_args.f_valid
-        self.f_sample       = train_args.f_sample
-        self.do_sampling    = self.f_sample > 0
-        # TODO: Do this an option as well
-        self.f_verbose      = 10
-
-        # TODO:
-        # After validation metric stabilizes more or less
+        # TODO: After validation metric stabilizes more or less
         # do frequent validations using perplexity and call
         # beam-search if PX is relatively better more than 10%
-        self.dynamic_validation = train_args.dynamic_validation
+        # self.dynamic_validation = train_args.dynamic_validation
 
         # If f_valid == 0, do validation at end of epochs
         self.epoch_valid    = (self.f_valid == 0)
 
-    # TODO
-    def save(self):
-        """Serializes the loop to resume training."""
-        # Save the last parameters as usual with:
-        # 1. uctr, ectr, losses, metrics, etc.
-        # 2. backward realted stuff like lrate? dunno
-        model.save(args.model_path)
-
     # OK
-    def print(self, msg, footer=False):
+    def _print(self, msg, footer=False):
         """Pretty prints a message."""
         self.__log.info(msg)
         if footer:
             self.__log.info('-' * len(msg))
 
+    # OK
     def save_best_model(self):
         """Overwrites best on-disk model and saves it as a different file optionally."""
-        self.print('Saving the best model')
-        self.early_bad = 0
-        model.save(args.model_path)
+        if self.save_best:
+            self._print('Saving the best model')
+            self.model.save(self.model.model_path + '.npz')
 
         # Save each best model as different files
         # Can be useful for ensembling
         if self.save_iter:
-            self.print('Saving best model at iteration %d' % self.uctr)
-            model_path_uidx = '%s.iter%d.npz' % (os.path.splitext(self.model_path)[0], self.uctr)
-            copy(self.model_path, model_path_uidx)
+            self._print('Saving best model at iteration %d' % self.uctr)
+            model_path_uidx = '%s.iter%d.npz' % (self.model.model_path, self.uctr)
+            copy(self.model.model_path + '.npz', model_path_uidx)
 
     # TODO
     def __update_lrate(self):
         """Update learning rate by annealing it."""
-        self.lrate = self.lrate
+        # Change self.model.lrate
+        pass
     
     # OK
-    def print_loss(self, loss):
+    def _print_loss(self, loss):
         if self.uctr % self.f_verbose == 0:
-            self.print("Epoch: %4d, update: %7d, cost: %10.6f" % (self.ectr,
+            self._print("Epoch: %6d, update: %7d, cost: %10.6f" % (self.ectr,
                                                                   self.uctr,
                                                                   loss))
 
     # OK
     def _train_epoch(self):
         """Represents a training epoch."""
-        self.print('Starting Epoch %d' % self.ectr, True)
+        start = time.time()
+        start_uctr = self.uctr
+        self._print('Starting Epoch %d' % self.ectr, True)
 
         batch_losses = []
 
@@ -106,7 +107,7 @@ class MainLoop(object):
             batch_losses.append(loss)
 
             # verbose
-            self.print_loss(loss)
+            self._print_loss(loss)
 
             # Should we stop
             if self.uctr == self.max_updates:
@@ -119,16 +120,37 @@ class MainLoop(object):
             self.__do_sampling(data)
 
             # Do validation
-            self.__do_validation()
+            if not self.epoch_valid and self.uctr % self.f_valid == 0:
+                self.__do_validation()
+
+            # Should we stop
+            if self.early_stop:
+                break
 
         if self.uctr == self.max_updates:
-            self.print("Max iteration %d reached." % self.uctr)
+            self._print("Max iteration %d reached." % self.uctr)
+            return
+
+        if self.early_stop:
+            self._print("Early stopped.")
             return
 
         # An epoch is finished
-        mean_loss = np.array(batch_losses).mean()
+        epoch_time = time.time() - start
+        up_ctr = self.uctr - start_uctr
+        self.dump_epoch_summary(batch_losses, epoch_time, up_ctr)
+
+        # Do validation
+        if self.epoch_valid:
+            self.__do_validation()
+
+    # OK
+    def dump_epoch_summary(self, losses, epoch_time, up_ctr):
+        update_time = epoch_time / float(up_ctr)
+        mean_loss = np.array(losses).mean()
         self.epoch_losses.append(mean_loss)
-        self.print("Epoch %d finished with mean loss %.5f" % (self.ectr, mean_loss))
+        self._print("--> Epoch %d finished with mean loss %.5f (PPL: %4.5f)" % (self.ectr, mean_loss, np.exp(mean_loss)))
+        self._print("--> Epoch took %d minutes, %.3f sec/update" % ((epoch_time / 60.0), update_time))
 
     # OK
     def __do_sampling(self, data):
@@ -138,43 +160,80 @@ class MainLoop(object):
             if samples is not None:
                 for src, truth, sample in samples:
                     if src:
-                        self.print("Source: %s" % src)
-                    self.print.info("Sample: %s" % sample)
-                    self.print.info(" Truth: %s" % truth)
+                        self._print("Source: %s" % src)
+                    self._print.info("Sample: %s" % sample)
+                    self._print.info(" Truth: %s" % truth)
+
+    # OK
+    def _is_best(self, loss, metric):
+        """Determine whether the loss/metric is the best so far."""
+        if len(self.valid_losses) == 0:
+            # This is the first validation so the best so far
+            return True
+
+        # Compare based on metric
+        if metric and metric > np.array([m[1] for m in self.valid_metrics]).max():
+            return True
+
+        # Compare based on loss
+        if loss < np.array(self.valid_losses).min():
+            return True
 
     def __do_validation(self):
-        # Compute validation loss
-        if self.ectr >= self.valid_start and self.uctr % self.f_valid == 0:
+        if self.ectr >= self.valid_start:
+            # Disable dropout during validation
             self.model.set_dropout(False)
-            self.__valid_losses.append(self.model.val_loss())
-            self.print("[Validation %2d] LOSS = %5.5f" % (len(self.__valid_losses), self.__valid_losses[-1]))
+
+            self.vctr += 1
+
+            # Compute validation loss
+            cur_loss = self.model.val_loss()
+
+            # Compute perplexity
+            ppl = np.exp(cur_loss)
+
+            self._print("Validation %2d - loss = %5.5f (PPL: %4.5f)" % (self.vctr, cur_loss, ppl))
+
+            metric = None
+            # Are we doing translation?
             if self.do_beam_search:
-                results = model.run_beam_search(beam_size=self.valid_beam_size,
-                                                n_jobs=self.njobs,
-                                                metric=self.valid_metric,
-                                                mode=self.decoder_mode)
+                metric_str, metric = self.model.run_beam_search(beam_size=self.beam_size,
+                                                                n_jobs=self.njobs,
+                                                                metric=self.valid_metric,
+                                                                mode='beamsearch')
 
-                # We'll receive the requested metrics in a dict
-                metric_results.append(results)
-                for _, v in sorted(results.iteritems()):
-                    log.info("[Validation %3d] %s" % (len(metric_history)+1, v[0]))
+                self._print("Validation %2d - %s" % (self.vctr, metric_str))
 
-                # Pick the one selected as valid_metric and add it to metric_history
-                metric_history.append(results[args.valid_metric][1])
+            if self._is_best(cur_loss, metric):
+                self.save_best_model()
+                self.early_bad = 0
+            else:
+                self.early_bad += 1
+                self._print("Early stopping patience: %d validation left" % (self.early_patience - self.early_bad))
 
-    def dump_val_summary():
-        if len(valid_losses) > 0:
-            best_valid_idx = np.argmin(np.array(valid_losses))
-            best_vloss = valid_losses[best_valid_idx]
-            best_px = np.exp(best_vloss)
-            log.info('[Validation %3d] Current Best Loss %5.5f (PX: %4.5f)' % (best_valid_idx + 1,
-                                                                               best_vloss, best_px))
+            # Store values
+            self.valid_losses.append(cur_loss)
+            if metric:
+                self.valid_metrics.append((metric_str, metric))
 
-        if len(metric_history) > 0:
-            best_metric_idx = np.argmax(np.array(metric_history))
-            best_valid = metric_results[best_metric_idx]
-            for _, v in sorted(best_valid.iteritems()):
-                log.info("[Validation %3d] Current Best %s" % (best_metric_idx + 1, v[0]))
+            self.early_stop = (self.early_bad == self.early_patience)
+
+            self.dump_val_summary()
+
+    def dump_val_summary(self):
+        best_valid_idx = np.argmin(np.array(self.valid_losses)) + 1
+        best_vloss = self.valid_losses[best_valid_idx - 1]
+        best_px = np.exp(best_vloss)
+        self._print('--> Current best loss %5.5f at validation %d (PX: %4.5f)' % (best_vloss,
+                                                                                  best_px,
+                                                                                  best_valid_idx))
+        if len(self.valid_metrics) > 0:
+            # At least for BLEU and METEOR, higher is better
+            best_metric_idx = np.argmax(np.array([m[1] for m in self.valid_metrics])) + 1
+            best_metric = self.valid_metrics[best_metric_idx - 1]
+            self._print('--> Current best %s: %s at validation %d' % (self.valid_metric,
+                                                                      best_metric,
+                                                                      best_metric_idx))
 
     def run(self):
         # We start 1st epoch
@@ -185,11 +244,3 @@ class MainLoop(object):
             # Should we stop?
             if self.ectr == self.max_epochs:
                 break
-
-            ##############
-            # End of epoch
-            ##############
-
-        #################
-        # End of training
-        #################
