@@ -230,7 +230,7 @@ class MainLoop(object):
         if len(self.valid_metrics) > 0:
             # At least for BLEU and METEOR, higher is better
             best_metric_idx = np.argmax(np.array([m[1] for m in self.valid_metrics])) + 1
-            best_metric = self.valid_metrics[best_metric_idx - 1]
+            best_metric = self.valid_metrics[best_metric_idx - 1][0]
             self._print('--> Current best %s: %s at validation %d' % (self.valid_metric,
                                                                       best_metric,
                                                                       best_metric_idx))
