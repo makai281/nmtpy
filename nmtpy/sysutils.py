@@ -62,7 +62,8 @@ def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, out_file=N
     cleanup.register_proc(p.pid)
     out, err = p.communicate()
     cleanup.unregister_proc(p.pid)
-    return eval(out.splitlines()[-1].strip())
+    results = eval(out.splitlines()[-1].strip())
+    return results[metric]
 
 ### GPU & PBS related functions
 def create_gpu_lock(used_gpu):
@@ -131,7 +132,7 @@ def setup_train_args(args):
     # Append learning rate
     args.lrate = float(args.lrate)
     opt_string = args.optimizer
-    opt_string += "-lr_%.4f" % args.lrate
+    opt_string += "-lr_%.e" % args.lrate
 
     # Set model name
     name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
@@ -142,18 +143,18 @@ def setup_train_args(args):
         name += "-each_epoch"
 
     if args.decay_c > 0:
-        name += "-decay_%.5f" % args.decay_c
+        name += "-decay_%.e" % args.decay_c
 
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
 
     if args.alpha_c > 0:
-        name += "-alpha_%.3f" % args.alpha_c
+        name += "-alpha_%.e" % args.alpha_c
 
     if isinstance(args.weight_init, str):
         name += "-winit_%s" % args.weight_init
     else:
-        name += "-winit_%.3f" % args.weight_init
+        name += "-winit_%.e" % args.weight_init
 
     if args.seed != 1234:
         name += "-seed_%d" % args.seed
@@ -169,14 +170,18 @@ def setup_train_args(args):
 
     ensure_dirs([args.model_path])
 
+    # Log suffix
+    logsuff = 'search' if args.hypersearch else 'log'
+
     # Log file
     i = 1
-    log_file = os.path.join(args.model_path, "%s_run%d.log" % (name, i))
+    log_file = os.path.join(args.model_path, "%s_run%d.%s" % (name, i, logsuff))
 
     while os.path.exists(log_file):
         i += 1
-        log_file = os.path.join(args.model_path, "%s_run%d.log" % (name, i))
+        log_file = os.path.join(args.model_path, "%s_run%d.%s" % (name, i, logsuff))
 
-    args.model_path = os.path.join(args.model_path, "%s_run%d.npz" % (name, i))
+    # Save prefix
+    args.model_path = os.path.join(args.model_path, "%s_run%d" % (name, i))
 
     return args, log_file
