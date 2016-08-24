@@ -481,11 +481,10 @@ class Model(BaseModel):
         else:
             return cost.mean()
 
-    def add_alpha_regularizer(self, cost, alpha_c):
+    def get_alpha_regularizer(self, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
         alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
-        cost += alpha_reg
-        return cost
+        return alpha_reg
 
     def build_sampler(self):
         x               = tensor.matrix('x', dtype=INT)

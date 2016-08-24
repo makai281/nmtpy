@@ -127,7 +127,7 @@ class BaseModel(object):
 
         return np.array(probs).mean()
 
-    def add_l2_weight_decay(self, cost, decay_c, skip_bias=True):
+    def get_l2_weight_decay(self, decay_c, skip_bias=True):
         decay_c = theano.shared(np.float32(decay_c), name='decay_c')
         weight_decay = 0.
         for kk, vv in self.tparams.iteritems():
@@ -135,14 +135,14 @@ class BaseModel(object):
             if not skip_bias or (skip_bias and vv.get_value().ndim > 1):
                 weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
-        return cost + weight_decay
+        return weight_decay
 
     def get_regularized_cost(self, cost, decay_c, alpha_c=None):
         reg_cost = cost
         if decay_c > 0:
-            reg_cost += self.add_l2_weight_decay(cost, decay_c)
+            reg_cost += self.get_l2_weight_decay(decay_c)
         if alpha_c and alpha_c > 0:
-            reg_cost += self.add_alpha_regularizer(cost, alpha_c)
+            reg_cost += self.get_alpha_regularizer(cost, alpha_c)
         return reg_cost
 
     def get_clipped_grads(self, grads, clip_c):
@@ -260,9 +260,9 @@ class BaseModel(object):
     def info(self):
         pass
 
-    def add_alpha_regularizer(self, cost, alpha_c):
+    def get_alpha_regularizer(self, alpha_c):
         # This should be implemented in attentional models if necessary.
-        return cost
+        return 0.
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         # Beam search can change a lot based on the RNN
