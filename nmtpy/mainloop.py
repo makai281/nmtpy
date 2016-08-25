@@ -87,6 +87,7 @@ class MainLoop(object):
 
     def _train_epoch(self):
         """Represents a training epoch."""
+        self.ectr += 1
         start = time.time()
         start_uctr = self.uctr
         self._print('Starting Epoch %d' % self.ectr, True)
@@ -118,26 +119,32 @@ class MainLoop(object):
             if not self.epoch_valid and self.uctr % self.f_valid == 0:
                 self.__do_validation()
 
-            # Should we stop
+            ###########################
+            # Check stopping conditions
+            ###########################
             if self.early_stop:
-                break
+                self._print("Early stopped.")
+                return False
 
-        if self.uctr == self.max_updates:
-            self._print("Max iteration %d reached." % self.uctr)
-            return
-
-        if self.early_stop:
-            self._print("Early stopped.")
-            return
+            if self.uctr == self.max_updates:
+                self._print("Max iteration %d reached." % self.uctr)
+                return False
 
         # An epoch is finished
         epoch_time = time.time() - start
+
         up_ctr = self.uctr - start_uctr
         self.dump_epoch_summary(batch_losses, epoch_time, up_ctr)
 
         # Do validation
         if self.epoch_valid:
             self.__do_validation()
+
+        if self.ectr == self.max_epochs:
+            self._print("Max epochs %d reached." % self.max_epochs)
+            return False
+
+        return True
 
     def dump_epoch_summary(self, losses, epoch_time, up_ctr):
         update_time = epoch_time / float(up_ctr)
@@ -173,7 +180,6 @@ class MainLoop(object):
 
     def __do_validation(self):
         if self.ectr >= self.valid_start:
-
             self.vctr += 1
 
             # Compute validation loss
@@ -209,7 +215,6 @@ class MainLoop(object):
                 self.valid_metrics.append((metric_str, metric))
 
             self.early_stop = (self.early_bad == self.early_patience)
-
             self.dump_val_summary()
 
     def dump_val_summary(self):
@@ -229,11 +234,7 @@ class MainLoop(object):
 
     def run(self):
         self.model.set_dropout(True)
-        # We start training
-        while 1:
-            self.ectr += 1
-            self._train_epoch()
-
-            # Should we stop?
-            if self.ectr == self.max_epochs:
-                break
+        while self._train_epoch():
+            pass
+        # Final summary
+        self.dump_val_summary()
