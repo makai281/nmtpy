@@ -386,10 +386,10 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         # Affine transformation for alpha = (pctx__ X U_att) + c_att
         # We're now down to scalar alpha's for each accumulated
         # context (0th dim) in the pctx__
-        # alpha should be n_timesteps, 1, 1
+        # alpha should be n_timesteps, n_samples, 1
         alpha = tensor.dot(pctx__, U_att) + c_att
 
-        # Drop the last dimension, e.g. (n_timesteps, 1)
+        # Drop the last dimension, e.g. (n_timesteps, n_samples)
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
 
         # Exponentiate alpha
