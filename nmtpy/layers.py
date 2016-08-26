@@ -20,6 +20,15 @@ def tensor_slice(_x, n, dim):
         return _x[:, n*dim:(n+1)*dim]
     return _x[n*dim:(n+1)*dim]
 
+#################
+# Forward dropout
+#################
+def dropout(x, p, rng, in_train):
+    success = 1. - p
+    return tensor.switch(in_train,     # If True, next one else last one
+                         x * rng.binomial(x.shape, p=success, dtype=x.dtype) / success,
+                         x)
+
 #############################################################################
 # Layer normalization
 # Lei Ba, Jimmy, Jamie Ryan Kiros, and Geoffrey E. Hinton.
