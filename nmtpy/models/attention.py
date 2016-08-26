@@ -424,5 +424,3 @@ class Model(BaseModel):
         inputs = [y, ctx, init_state]
         outs = [next_log_probs, next_word, next_state, alphas]
         self.f_next = theano.function(inputs, outs, name='f_next')
-
-
