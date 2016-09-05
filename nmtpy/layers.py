@@ -402,7 +402,7 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
 
         # Exponentiate alpha
-        alpha = tensor.exp(alpha)
+        alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
 
         # If there is a context mask, multiply with it to cancel unnecessary steps
         if context_mask:
@@ -568,8 +568,8 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
         alpha2 = alpha2.reshape([alpha2.shape[0], alpha2.shape[1]])
 
         # Exponentiate alpha1
-        alpha1 = tensor.exp(alpha1)
-        alpha2 = tensor.exp(alpha2)
+        alpha1 = tensor.exp(alpha1 - alpha1.max(0, keepdims=True))
+        alpha2 = tensor.exp(alpha2 - alpha2.max(0, keepdims=True))
 
         # If there is a context mask, multiply with it to cancel unnecessary steps
         # We won't have a ctx_mask for image vectors
