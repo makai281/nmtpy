@@ -231,6 +231,7 @@ class MainLoop(object):
             self._print('--> Current best %s: %s at validation %d' % (self.valid_metric,
                                                                       best_metric,
                                                                       best_metric_idx))
+        self._print('--> This is model: %s' % os.path.basename(self.model.model_path))
 
     def run(self):
         self.model.set_dropout(True)
