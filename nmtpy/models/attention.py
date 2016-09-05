@@ -40,6 +40,9 @@ class Model(BaseModel):
         # Do we apply layer normalization to GRU?
         self.lnorm = kwargs.get('layer_norm', False)
 
+        # Shuffle mode (default: No shuffle)
+        self.smode = kwargs.get('shuffle_mode', None)
+
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
@@ -89,7 +92,7 @@ class Model(BaseModel):
     def load_data(self):
         self.train_iterator = BiTextIterator(
                                 batch_size=self.batch_size,
-                                shuffle_mode='trglen',
+                                suffle_mode=self.smode,
                                 srcfile=self.data['train_src'], srcdict=self.src_dict,
                                 trgfile=self.data['train_trg'], trgdict=self.trg_dict,
                                 n_words_src=self.n_words_src,
