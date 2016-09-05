@@ -92,7 +92,8 @@ class Model(BaseModel):
     def load_data(self):
         self.train_iterator = BiTextIterator(
                                 batch_size=self.batch_size,
-                                suffle_mode=self.smode,
+                                shuffle_mode=self.smode,
+                                logger=self.logger,
                                 srcfile=self.data['train_src'], srcdict=self.src_dict,
                                 trgfile=self.data['train_trg'], trgdict=self.trg_dict,
                                 n_words_src=self.n_words_src,
