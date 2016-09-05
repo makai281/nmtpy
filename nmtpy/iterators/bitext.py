@@ -20,6 +20,8 @@ class BiTextIterator(Iterator):
         assert 'srcdict' in kwargs, "Missing argument srcdict"
         assert 'trgdict' in kwargs, "Missing argument trgdict"
 
+        self._print('Shuffle mode: %s' % shuffle_mode)
+
         self.srcfile = kwargs['srcfile']
         self.trgfile = kwargs['trgfile']
         self.srcdict = kwargs['srcdict']
