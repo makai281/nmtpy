@@ -8,8 +8,8 @@ class METEORScore(Metric):
     def __init__(self, score=None):
         super(METEORScore, self).__init__(score)
         self.name = "METEOR"
-        self.score = score if score else 0.
-        self.score_str = "%.3f" % self.score
+        self.score = (100*score) if score else 0.
+        self.score_str = "%.5f" % self.score
 
 class METEORScorer(object):
     def __init__(self):
