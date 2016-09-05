@@ -409,7 +409,7 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
             alpha = alpha * context_mask
 
         # Normalize so that the sum makes 1
-        alpha = alpha / (alpha.sum(0, keepdims=True) + 1e-6)
+        alpha = alpha / alpha.sum(0, keepdims=True)
 
         # Compute the current context ctx_ as the alpha-weighted sum of
         # the initial contexts: context
@@ -577,8 +577,8 @@ def gru_cond_multi_layer(tparams, state_below, ctx1, ctx2, prefix='gru_cond_mult
             alpha1 = alpha1 * ctx1_mask
 
         # Normalize so that the sum makes 1
-        alpha1 = alpha1 / (alpha1.sum(0, keepdims=True) + 1e-6)
-        alpha2 = alpha2 / (alpha2.sum(0, keepdims=True) + 1e-6)
+        alpha1 = alpha1 / alpha1.sum(0, keepdims=True)
+        alpha2 = alpha2 / alpha2.sum(0, keepdims=True)
 
         # Compute the current context ctx*_ as the alpha-weighted sum of
         # the initial contexts ctx*'s
