@@ -151,7 +151,7 @@ class MainLoop(object):
         mean_loss = np.array(losses).mean()
         self.epoch_losses.append(mean_loss)
         self._print("--> Epoch %d finished with mean loss %.5f (PPL: %4.5f)" % (self.ectr, mean_loss, np.exp(mean_loss)))
-        self._print("--> Epoch took %d minutes, %.3f sec/update" % ((epoch_time / 60.0), update_time))
+        self._print("--> Epoch took %.3f minutes, %.3f sec/update" % ((epoch_time / 60.0), update_time))
 
     def __do_sampling(self, data):
         """Generates samples and prints them."""
