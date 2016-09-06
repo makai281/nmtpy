@@ -56,9 +56,11 @@ def get_vocabulary(fobj):
     """Read text and return dictionary that encodes vocabulary
     """
     vocab = Counter()
+    sys.stderr.write('Reading file {0}\n'.format(fobj.name))
     for line in fobj:
         for word in line.split():
             vocab[word] += 1
+    sys.stderr.write('Done.\n')
     return vocab
 
 def update_pair_statistics(pair, changed, stats, indices):
