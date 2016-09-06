@@ -171,7 +171,7 @@ class MainLoop(object):
             return True
 
         # Compare based on metric
-        if metric and metric > np.array([m[1] for m in self.valid_metrics]).max():
+        if metric is not None and metric > np.array([m[1] for m in self.valid_metrics]).max():
             return True
 
         # Compare based on loss
@@ -211,7 +211,7 @@ class MainLoop(object):
 
             # Store values
             self.valid_losses.append(cur_loss)
-            if metric:
+            if metric is not None:
                 self.valid_metrics.append((metric_str, metric))
 
             self.early_stop = (self.early_bad == self.early_patience)
