@@ -35,7 +35,7 @@ class WMTIterator(Iterator):
         self.src_name = kwargs.get('src_name', 'x')
         self.trg_name = kwargs.get('trg_name', 'y')
 
-        # How do we use the multimodal data?
+        # How do we use the multimodal data? (Numbers in parens are for Task 2)
         # 'all'     : All combinations (~725K parallel)
         # 'single'  : Take only the first pair e.g., train0.en->train0.de (~29K parallel)
         # 'pairs'   : Take only one-to-one pairs e.g., train_i.en->train_i.de (~145K parallel)
@@ -89,7 +89,11 @@ class WMTIterator(Iterator):
 
         # Check for what is available
         ss = self._seqs[0]
-        if ss[1] is not None and self.trgdict:
+        # If no split idxs are found, its Task 1, set mode to 'all'
+        if not (ss[0] and ss[1]):
+            self.mode = 'all'
+
+        if ss[5] is not None and self.trgdict:
             self.trg_avail = True
 
         if self.mode == 'single':
