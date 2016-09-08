@@ -111,10 +111,10 @@ class Model(BaseModel):
         params = OrderedDict()
 
         # embedding weights for encoder (source language)
-        params['Wemb_enc'] = norm_weight(self.n_words_src, self.src_emb_dim, scale=self.weight_init)
+        params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim, scale=self.weight_init)
 
         # embedding weights for decoder (target language)
-        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.trg_emb_dim, scale=self.weight_init)
+        params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim, scale=self.weight_init)
 
         # convfeats (512) to ctx dim (2000) for image modality
         params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.conv_dim, nout=self.ctx_dim, scale=self.weight_init)
@@ -123,8 +123,8 @@ class Model(BaseModel):
         # Source sentence encoder: bidirectional GRU
         #############################################
         # Forward and backward encoder parameters
-        params = get_new_layer('gru')[0](params, prefix='text_encoder'  , nin=self.src_emb_dim, dim=self.rnn_dim, scale=self.weight_init)
-        params = get_new_layer('gru')[0](params, prefix='text_encoder_r', nin=self.src_emb_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru')[0](params, prefix='text_encoder'  , nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru')[0](params, prefix='text_encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
 
         ##########
         # Decoder
@@ -133,15 +133,15 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
 
         # GRU cond decoder
-        params = init_gru_decoder_multiconcat(params, prefix='decoder_multi', nin=self.trg_emb_dim,
+        params = init_gru_decoder_multiconcat(params, prefix='decoder_multi', nin=self.embedding_dim,
                                               dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
         # NOTE: In the text NMT, we also have logit_prev that is applied onto emb_trg
         # NOTE: ortho= changes from text NMT to SAT. Need to experiment
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru', nin=self.rnn_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.ctx_dim     , nout=self.trg_emb_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'    , nin=self.trg_emb_dim , nout=self.n_words_trg, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru', nin=self.rnn_dim     , nout=self.embedding_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.ctx_dim     , nout=self.embedding_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit'    , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
 
         # Save initial parameters for debugging purposes
         self.initial_params = params
@@ -173,9 +173,9 @@ class Model(BaseModel):
         ###################
         # Source embeddings
         ###################
-        # Fetch source embeddings. Result is: (n_timesteps x n_samples x src_emb_dim)
-        emb_enc = self.tparams['Wemb_enc'][x.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
-        # -> n_timesteps x n_samples x src_emb_dim
+        # Fetch source embeddings. Result is: (n_timesteps x n_samples x embedding_dim)
+        emb_enc = self.tparams['Wemb_enc'][x.flatten()].reshape([n_timesteps, n_samples, self.embedding_dim])
+        # -> n_timesteps x n_samples x embedding_dim
 
         # Pass the source word vectors through the GRU RNN
         emb_enc_rnns = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', mask=x_mask)
@@ -185,8 +185,8 @@ class Model(BaseModel):
         # for the backward rnn, we just need to invert x and x_mask
         xr      = x[::-1]
         xr_mask = x_mask[::-1]
-        emb_enc_r = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.src_emb_dim])
-        # -> n_timesteps x n_samples x src_emb_dim
+        emb_enc_r = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.embedding_dim])
+        # -> n_timesteps x n_samples x embedding_dim
         # Pass the source word vectors in reverse through the GRU RNN
         emb_enc_rnns_r = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', mask=xr_mask)
         # -> n_timesteps x n_samples x rnn_dim
@@ -222,8 +222,8 @@ class Model(BaseModel):
         # Target embeddings
         ####################
 
-        # Fetch target embeddings. Result is: (n_trg_timesteps x n_samples x trg_emb_dim)
-        emb_trg = self.tparams['Wemb_dec'][y.flatten()].reshape([y.shape[0], y.shape[1], self.trg_emb_dim])
+        # Fetch target embeddings. Result is: (n_trg_timesteps x n_samples x embedding_dim)
+        emb_trg = self.tparams['Wemb_dec'][y.flatten()].reshape([y.shape[0], y.shape[1], self.embedding_dim])
 
         # Shift it to right to leave place for the <bos> placeholder
         # We ignore the last word <eos> as we don't condition on it at the end
@@ -258,7 +258,7 @@ class Model(BaseModel):
         logit = tanh(logit)
 
 
-        # trg_emb_dim -> n_words_trg
+        # embedding_dim -> n_words_trg
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
         logit_shp = logit.shape
 
@@ -308,11 +308,11 @@ class Model(BaseModel):
         # Text Bi-GRU Encoder
         #####################
         emb             = self.tparams['Wemb_enc'][x.flatten()]
-        emb             = emb.reshape([n_timesteps, n_samples, self.trg_emb_dim])
+        emb             = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
         proj            = get_new_layer('gru')[1](self.tparams, emb, prefix='text_encoder')
 
         embr            = self.tparams['Wemb_enc'][x[::-1].flatten()]
-        embr            = embr.reshape([n_timesteps, n_samples, self.trg_emb_dim])
+        embr            = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
         projr           = get_new_layer('gru')[1](self.tparams, embr, prefix='text_encoder_r')
 
         # concatenate forward and backward rnn hidden states
