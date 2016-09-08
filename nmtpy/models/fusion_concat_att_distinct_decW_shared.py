@@ -60,14 +60,13 @@ class Model(ParentModel):
 
     def load_valid_data(self, from_translate=False, data_mode='single'):
         # Load validation data
-        batch_size = 1 if from_translate else 64
         if from_translate:
             self.valid_ref_files = self.data['valid_trg']
             if isinstance(self.valid_ref_files, str):
                 self.valid_ref_files = list([self.valid_ref_files])
 
             self.valid_iterator = WMTIterator(
-                    batch_size=batch_size,
+                    batch_size=1,
                     mask=False,
                     pklfile=self.data['valid_src'],
                     imgfile=self.data['valid_img'],
