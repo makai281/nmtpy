@@ -43,6 +43,9 @@ class Model(BaseModel):
         # Shuffle mode (default: No shuffle)
         self.smode = kwargs.get('shuffle_mode', None)
 
+        # Use a single embedding matrix for target words?
+        self.tied_trg_emb = kwargs.get('tied_trg_emb', False)
+
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
@@ -256,7 +259,8 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_prev' , nin=self.embedding_dim , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'      , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
+        if self.tied_trg_emb is False:
+            params = get_new_layer('ff')[0](params, prefix='ff_logit'  , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
 
         self.initial_params = params
 
@@ -332,7 +336,11 @@ class Model(BaseModel):
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
 
-        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        if self.tied_trg_emb is False:
+            logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        else:
+            logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
+
         logit_shp = logit.shape
 
         # Apply logsoftmax (stable version)
@@ -414,7 +422,10 @@ class Model(BaseModel):
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
 
-        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        if self.tied_trg_emb is False:
+            logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        else:
+            logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
 
         # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
