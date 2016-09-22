@@ -10,10 +10,9 @@ from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import sent_to_idx
-from ..typedef  import INT, FLOAT
-from .iterator import Iterator
-from .homogeneous import HomogeneousData
+from ..nmtutils     import sent_to_idx
+from .iterator      import Iterator
+from .homogeneous   import HomogeneousData
 
 # This is an iterator specifically to be used by the .pkl
 # corpora files created for WMT16 Shared Task on Multimodal Machine Translation
@@ -129,6 +128,10 @@ class WMTIterator(Iterator):
         self.total_src_words = len(total_src_words)
         self.total_trg_words = len(total_trg_words)
 
+        #########################
+        # Prepare iteration stuff
+        #########################
+        # Set batch processor function
         if self.batch_size == 1:
             self._process_batch = (lambda idxs: self.process_single(idxs[0]))
         else:
@@ -168,9 +171,6 @@ class WMTIterator(Iterator):
 
         return data
 
-    def prepare_batches(self):
-        pass
-
     def rewind(self):
         if self.shuffle_mode != 'trglen':
             # Fill in the _idxs list for sample order
@@ -180,6 +180,7 @@ class WMTIterator(Iterator):
             elif self.shuffle_mode is None:
                 # Ordered
                 self._idxs = np.arange(self.n_samples).tolist()
+
             self._iter = []
             for i in range(0, self.n_samples, self.batch_size):
                 self._iter.append(self._idxs[i:i + self.batch_size])
