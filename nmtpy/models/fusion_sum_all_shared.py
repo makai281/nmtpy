@@ -19,7 +19,7 @@ import theano.tensor as tensor
 from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
-from ..iterators import WMTIterator
+from ..iterators.wmt import WMTIterator
 
 from ..models.basemodel import BaseModel
 
