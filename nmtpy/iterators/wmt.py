@@ -26,6 +26,8 @@ class WMTIterator(Iterator):
         assert 'pklfile' in kwargs, "Missing argument pklfile"
         assert 'srcdict' in kwargs, "Missing argument srcdict"
 
+        self._print('Shuffle mode: %s' % shuffle_mode)
+
         # Short-list sizes
         self.n_words_src = kwargs.get('n_words_src', 0)
         self.n_words_trg = kwargs.get('n_words_trg', 0)
