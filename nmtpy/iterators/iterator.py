@@ -74,14 +74,14 @@ class Iterator(object):
             # Lookup the keys and return an ordered dict of the current minibatch
             return OrderedDict([(k, data[i]) for i,k in enumerate(self._keys)])
 
-    @abstractmethod
-    def read(self):
-        """Read the data and put in into self.__seqs."""
+    # May or may not be used.
+    def prepare_batches(self):
+        """Prepare self.__iter."""
         pass
 
     @abstractmethod
-    def prepare_batches(self):
-        """Prepare self.__iter."""
+    def read(self):
+        """Read the data and put in into self.__seqs."""
         pass
 
     @abstractmethod
