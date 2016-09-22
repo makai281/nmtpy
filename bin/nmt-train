@@ -135,18 +135,18 @@ if __name__ == '__main__':
     for p in sorted(args.keys()):
         log.info(" %20s -> %s" % (p, args[p]))
 
+    # Initialize parameters
+    log.info("Initializing parameters")
+    model.init_params()
+    model.init_shared_variables()
+    log.info("Number of parameters: %s" % model.get_nb_params())
+
     # Load data
     log.info("Loading data")
     model.load_data()
 
     # Dump model information
     model.info()
-
-    # Initialize parameters
-    log.info("Initializing parameters")
-    model.init_params()
-    model.init_shared_variables()
-    log.info("Number of parameters: %s" % model.get_nb_params())
 
     # Build the model
     log.info("Building model")
@@ -171,6 +171,9 @@ if __name__ == '__main__':
     if args.debug:
         theano.printing.debugprint(model.train_batch,
                                    file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
+
+    # Reseed to retain the order of shuffle operations
+    np.random.seed(args.seed)
 
     # Create mainloop
     loop = MainLoop(model, log, train_args)
