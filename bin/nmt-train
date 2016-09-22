@@ -120,6 +120,12 @@ if __name__ == '__main__':
         log.error(e)
         sys.exit(1)
 
+    # Print parameter summary
+    log.info("Model options:")
+    log.info("--------------")
+    for p in sorted(args.keys()):
+        log.info(" %20s -> %s" % (p, args[p]))
+
     # Create model object
     model = Model(seed=args.seed, logger=log, **model_args)
 
@@ -128,12 +134,6 @@ if __name__ == '__main__':
         from nmtpy.hypersearch import hypersearch
         hypersearch(model, log, train_args)
         sys.exit(0)
-
-    # Print parameter summary
-    log.info("Model options:")
-    log.info("--------------")
-    for p in sorted(args.keys()):
-        log.info(" %20s -> %s" % (p, args[p]))
 
     # Initialize parameters
     log.info("Initializing parameters")
