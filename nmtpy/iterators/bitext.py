@@ -87,7 +87,6 @@ class BiTextIterator(Iterator):
             # Homogeneous batches ordered by target sequence length
             # Get an iterator over sample idxs
             self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=1)
-            self._process_batch = (lambda idxs: self.mask_seqs(idxs))
         else:
             self.rewind()
 
