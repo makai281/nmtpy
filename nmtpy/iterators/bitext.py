@@ -6,8 +6,8 @@ import numpy as np
 
 from collections import OrderedDict
 
-from ..sysutils import fopen
-from .iterator  import Iterator
+from ..sysutils   import fopen
+from .iterator    import Iterator
 from .homogeneous import HomogeneousData
 
 """Parallel text iterator for translation data."""
@@ -77,35 +77,37 @@ class BiTextIterator(Iterator):
         # Number of training samples
         self.n_samples = len(self._seqs)
 
+        # Set batch processor function
+        if self.batch_size == 1:
+            self._process_batch = (lambda idxs: self.process_single(idxs[0]))
+        else:
+            self._process_batch = (lambda idxs: self.mask_seqs(idxs))
+
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length
             # Get an iterator over sample idxs
             self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=1)
             self._process_batch = (lambda idxs: self.mask_seqs(idxs))
         else:
+            self.rewind()
+
+    def rewind(self):
+        if self.shuffle_mode != 'trglen':
+            # Fill in the _idxs list for sample order
             if self.shuffle_mode == 'simple':
                 # Simple shuffle
-                self._idxs = np.random.permutation(self.n_samples)
-            else:
+                self._idxs = np.random.permutation(self.n_samples).tolist()
+            elif self.shuffle_mode is None:
                 # Ordered
-                self._idxs = np.arange(self.n_samples)
-            self.prepare_batches()
+                self._idxs = np.arange(self.n_samples).tolist()
+
+            self._iter = []
+            for i in range(0, self.n_samples, self.batch_size):
+                self._iter.append(self._idxs[i:i + self.batch_size])
+            self._iter = iter(self._iter)
 
     def mask_seqs(self, idxs):
         """Prepares a list of padded tensors with their masks for the given sample idxs."""
         src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
         trg, trg_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
         return (src, src_mask, trg, trg_mask)
-
-    def prepare_batches(self):
-        self._minibatches = []
-
-        for i in range(0, self.n_samples, self.batch_size):
-            batch_idxs = self._idxs[i:i + self.batch_size]
-            self._minibatches.append(self.mask_seqs(batch_idxs))
-
-        self.rewind()
-
-    def rewind(self):
-        if self.shuffle_mode != 'trglen':
-            self._iter = iter(self._minibatches)
