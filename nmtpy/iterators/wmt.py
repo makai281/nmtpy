@@ -90,7 +90,7 @@ class WMTIterator(Iterator):
         # Check for what is available
         ss = self._seqs[0]
         # If no split idxs are found, its Task 1, set mode to 'all'
-        if not (ss[0] and ss[1]):
+        if ss[0] is None and ss[1] is None:
             self.mode = 'all'
 
         if ss[5] is not None and self.trgdict:
