@@ -16,7 +16,7 @@ from ..iterators.text import TextIterator
 from ..models.basemodel import BaseModel
 
 class Model(BaseModel):
-    def __init__(self, seed, **kwargs):
+    def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
@@ -29,8 +29,8 @@ class Model(BaseModel):
 
         self.set_options(self.__dict__)
         self.src_idict = src_idict
-
         self.set_trng(seed)
+        self.logger = logger
 
     def load_data(self):
         self.train_iterator = TextIterator(
