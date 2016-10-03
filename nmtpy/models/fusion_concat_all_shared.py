@@ -20,8 +20,6 @@ from ..typedef import *
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from .basemodel import BaseModel
-
 # Import fusion-specific CGRU
 from ..layers import *
 from .fusionlayers import init_multigru_concat_ind_ind

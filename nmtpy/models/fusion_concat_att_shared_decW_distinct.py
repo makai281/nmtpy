@@ -16,41 +16,26 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from ..layers import *
 from ..typedef import *
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from ..models.basemodel import BaseModel
+# Import fusion-specific CGRU
+from ..layers import *
+from .fusionlayers import init_multigru_concat_ind_dep
+from .fusionlayers import multigru_concat_ind_dep
+from .attention import Model as ParentModel
 
-class Model(BaseModel):
+# This is the fusion model with concatenation
+# and IND-DEP attention.
+init_gru_decoder_multiconcat = init_multigru_concat_ind_dep
+gru_decoder_multiconcat      = multigru_concat_ind_dep
+
+
+class Model(ParentModel):
     def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
-        super(Model, self).__init__(**kwargs)
-
-        # We need both dictionaries
-        dicts = kwargs['dicts']
-
-        # Should we normalize train cost or not?
-        self.norm_cost = kwargs.get('norm_cost', True)
-
-        # We'll use both dictionaries
-        self.src_dict, src_idict = load_dictionary(dicts['src'])
-        self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
-        self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
-        self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
-
-        # Collect options
-        self.set_options(self.__dict__)
-
-        # Set these here to not clutter options
-        self.trg_idict = trg_idict
-        self.src_idict = src_idict
-
-        self.ctx_dim = 2 * self.rnn_dim
-        self.set_trng(seed)
-        self.set_dropout(False)
-        self.logger = logger
+        super(Model, self).__init__(seed, logger, **kwargs)
 
     def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)
@@ -67,14 +52,14 @@ class Model(BaseModel):
         # Load training data
         self.train_iterator = WMTIterator(
                 batch_size=self.batch_size,
+                shuffle_mode=self.smode,
+                logger=self.logger,
                 pklfile=self.data['train_src'],
                 imgfile=self.data['train_img'],
                 trgdict=self.trg_dict,
                 srcdict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                mode=self.options.get('data_mode', 'pairs'),
-                shuffle_mode=self.options.get('shuffle_mode', 'trglen'),
-                logger=self.logger)
+                mode=self.options.get('data_mode', 'pairs'))
         self.train_iterator.read()
         self.load_valid_data()
 
@@ -278,11 +263,6 @@ class Model(BaseModel):
         else:
             return cost.mean()
 
-    def get_alpha_regularizer(self, alpha_c):
-        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
-        alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
-        return alpha_reg
-
     def build_sampler(self):
         x               = tensor.matrix('x', dtype=INT)
         n_timesteps     = x.shape[0]
@@ -344,7 +324,7 @@ class Model(BaseModel):
                                            ctx1=text_ctx, ctx1_mask=None,
                                            ctx2=img_ctx,
                                            one_step=True,
-                                           init_state=text_init_state,)
+                                           init_state=text_init_state)
         h      = dec_mult[0]
         sumctx = dec_mult[1]
         alphas = list(dec_mult[2:])
@@ -493,3 +473,8 @@ class Model(BaseModel):
             return final_sample, final_score, final_alignments
         else:
             return final_sample, final_score
+
+    def get_alpha_regularizer(self, alpha_c):
+        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
+        alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
+        return alpha_reg
