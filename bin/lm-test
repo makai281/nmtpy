@@ -1,0 +1,424 @@
+#!/usr/bin/env python
+
+"""Translates a source file using a translation model."""
+
+import os
+import sys
+import time
+import json
+import atexit
+import inspect
+import argparse
+import importlib
+from multiprocessing import Process, Queue, cpu_count
+
+from collections import OrderedDict
+
+import numpy as np
+
+from nmtpy.logger import Logger
+from nmtpy.config import Config
+from nmtpy.metrics import get_scorer
+from nmtpy.nmtutils import idx_to_sent
+from nmtpy.sysutils import *
+from nmtpy.filters import get_filter
+from nmtpy.iterators.bitext import BiTextIterator
+from nmtpy.typedef import *
+import nmtpy.cleanup as cleanup
+
+log = Logger._logger
+
+"""Worker process which does beam search."""
+def translate_model(queue, rqueue, pid, model, beam_size, nbest,
+                    suppress_unks, get_att_alphas=False, seed=1234, mode="argmax"):
+    model.build_sampler()
+
+    # Get function call string
+
+    mode == "argmax"
+    func_call = 'model.gen_sample(data_dict, argmax=True)'
+
+    while True:
+        req = queue.get()
+
+        # We should avoid this
+        if req is None:
+            break
+
+        # Get data from queue
+        idx, data_dict = req[0], req[1]
+
+        # Do decoding
+        result = eval(func_call)
+
+        sample = result[0]
+        score = result[1]
+
+        # normalize scores according to sequence lengths
+        lengths = np.array([len(s) for s in sample])
+        score = score / lengths
+
+        sidx = np.argsort(score)[:nbest]
+        sample = np.array(sample)[sidx]
+
+        # Check for attention weights
+#        if len(result) == 3:
+#            alignments = np.array(result[2])[sidx]
+#            rqueue.put((idx, sample, score[sidx], alignments))
+#        else:
+#            rqueue.put((idx, sample, score[sidx]))
+
+
+"""Translator starts worker processes, delegates source iterator
+to them, waits for the results."""
+class Translator(object):
+    def __init__(self, args):
+
+        self.beam_size = args.beam_size
+
+        # Always lists provided by argparse (nargs:'+')
+        self.src_files = args.src_files
+        self.ref_files = args.ref_files
+
+        # Collect processed source sentences in here
+        # for further exporting to json
+        self.export = args.export
+
+        # Assume for now that a request for JSON exporting
+        # assumes fetching attentional alphas as well.
+#        self.get_att_alphas = self.export
+
+        self.nbest = args.nbest
+        self.n_jobs = args.n_jobs
+        self.seed = args.seed
+        self.mode = args.decoder
+        self.valid_mode = args.validmode
+        self.suppress_unks = args.suppress_unks
+        self.model_file = args.model
+        self.first = args.first
+
+        self.utf8 = False
+        self.filters = []
+
+        # Create worker process pool
+        self.processes = [None] * self.n_jobs
+
+    def set_model_options(self):
+        model_options = dict(np.load(self.model_file)['opts'].tolist())
+
+        # Import the module
+        self.__class = importlib.import_module("nmtpy.models.%s" % model_options['model_type']).Model
+
+        # Create the model
+        self.model = self.__class(seed=self.seed, logger=None, **model_options)
+        self.model.load(self.model_file)
+        self.model.set_dropout(False)
+
+        # Check for post-processing filter
+        if "filter" in model_options:
+            log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
+            self.filters.append(get_filter(model_options['filter']))
+
+        # invert dictionary
+#        self.ref_idict = dict([[v,k] for k,v in self.model.trg_dict.iteritems()])
+
+        # Be compatible for both utf-8 and normal dictionaries
+#        if isinstance(self.ref_idict[2], unicode):
+#            self.utf8 = True
+
+        # If forced and we got a src file and also ref file(s)
+        # do the forced decoding
+#        if self.mode == "forced" and self.src_files and self.ref_files:
+#            log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
+#            self.iterator = BiTextIterator(
+#                                        batch_size=1,
+#                                        srcfile=self.src_files[0], srcdict=self.model.src_dict,
+#                                        trgfile=self.ref_files[0], trgdict=self.model.trg_dict,
+#                                        n_words_src=self.model.n_words_src,
+#                                        n_words_trg=self.model.n_words_trg,
+#                                        trg_name='y_true')
+#            self.iterator.read()
+
+#        else:
+            # Normal translation mode
+        if self.src_files is not None:
+                # We're given source files from the commandline
+                # 1st should be textual data
+            self.model.data['valid_src'] = self.src_files[0]
+#                if 'valid_img' in self.model.data:
+#                    self.model.data['valid_img'] = self.src_files[1]
+
+#                if self.ref_files is not None:
+#                    self.model.data['valid_trg'] = self.ref_files
+
+            # Load validation data from the model
+            # Check whether load_valid_data has a param to set valid data mode
+#            if 'data_mode' in inspect.getargspec(self.model.load_valid_data).args:
+#                self.model.load_valid_data(from_translate=True, data_mode=self.valid_mode)
+#            else:
+#                self.model.load_valid_data(from_translate=True)
+	self.model.load_data()
+        self.iterator = self.model.valid_iterator
+
+            # Full or partial decoding given by -f argument
+        if self.first > 0:
+                # Only first self.first sentences
+            self.n_sentences = self.first
+        else:
+                # All sentences
+            self.n_sentences = self.iterator.n_samples
+
+        log.info('I will translate %d samples' % self.n_sentences)
+
+        if self.src_files is None:
+            self.src_files = listify(self.model.data['valid_src'])
+            log.info("No test data given, assuming validation dataset.")
+
+                # User may provide another reference set in 'valid_trg_orig' for example
+                # with compound splitting reverted so that we can compute
+                # the metrics correctly.
+#            if "valid_trg_orig" in self.model.data:
+#                self.ref_files = listify(self.model.data['valid_trg_orig'])
+#            else:
+#                self.ref_files = listify(self.model.valid_ref_files)
+
+        # Print information
+        log.info("Source file(s)")
+        for f in self.src_files:
+            log.info("  %s" % f)
+
+        # It's possible that we don't have any reference files, e.g. for test sets.
+        if self.ref_files:
+            log.info("Reference file(s)")
+            for f in self.ref_files:
+                log.info("  %s" % f)
+
+    def start(self):
+        # create input and output queues for processes
+        write_queue = Queue()
+        read_queue = Queue()
+        # Create processes
+        for idx in xrange(self.n_jobs):
+            self.processes[idx] = Process(target=translate_model,
+                                          args=(write_queue, read_queue, idx, self.model, self.beam_size,
+#                                          self.nbest, self.suppress_unks, self.get_att_alphas,
+					  self.nbest, self.suppress_unks,
+					  self.seed, self.mode))
+            self.processes[idx].start()
+            cleanup.register_proc(self.processes[idx].pid)
+
+        cleanup.register_handler()
+
+        # Send data to worker processes
+        for idx in xrange(self.n_sentences):
+            sample = next(self.iterator)
+            write_queue.put((idx, sample))
+
+        log.info("Distributed %d sentences to worker processes." % self.n_sentences)
+
+        # Receive the results
+        self.trans  = [None] * self.n_sentences
+        self.scores = [None] * self.n_sentences
+
+        # Will be filled if --export is passed
+        self.att_weights = [None] * self.n_sentences
+
+        t = time.time()
+        for i in xrange(self.n_sentences):
+            # Get response from worker
+            resp = read_queue.get()
+
+            # This is the sample id of the processed sample
+            idx = resp[0]
+
+            # Get the hypotheses and scores
+            hyps, self.scores[idx] = resp[1], resp[2]
+
+            # Did we receive attention weights from beam search?
+            if len(resp) == 4:
+                self.att_weights[idx] = resp[3][0]
+
+            outs = []
+
+            for hyp in hyps:
+                hyp = idx_to_sent(self.ref_idict, hyp)
+
+                # Apply post-processing filters like compound stitching
+                for filt in self.filters:
+                    hyp = filt(hyp)
+
+               # Append the actual hypothesis
+                outs.append(hyp)
+
+            # Place the hypotheses into their relevant places
+            self.trans[idx] = outs
+
+            # Print progress
+            if (i+1) % 100 == 0:
+                t = time.time() - t
+                log.info("%d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, t))
+                t = time.time()
+
+        # Stop workers
+        for idx in xrange(self.n_jobs):
+            write_queue.put(None)
+            self.processes[idx].terminate()
+            cleanup.unregister_proc(self.processes[idx].pid)
+
+    def write_hyps(self, filename, dump_scores=False):
+        def __encode(s):
+            return s.encode('utf-8') if self.utf8 else s
+
+        with open(filename, 'w') as f:
+            if self.mode == "forced" or dump_scores:
+                # We have a single hypothesis and a score for each sentence
+                for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
+                    f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc)))
+            elif self.nbest > 1:
+                # We have a n hypotheses and n scores for each sentence
+                for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
+                    for tr, sc in zip(trs, scs):
+                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr, sc)))
+            else:
+                self.hyps = [s[0] for s in self.trans]
+                hyps = "\n".join(self.hyps) + "\n"
+                f.write(__encode(hyps))
+
+    def compute_score(self, hyp_file, scorers):
+        results = {}
+        for scorer in scorers:
+            c = get_scorer(scorer)()
+            score = c.compute(self.ref_files, hyp_file)
+            results[scorer] = (str(score), score.score)
+        self.results = results
+        return results
+
+    def dump_json(self, filename):
+        """Export decoding data into json for further visualization."""
+        metadata = OrderedDict()
+        metadata['model'] = os.path.basename(self.model_file)
+        metadata['beam_size'] = self.beam_size
+
+        def _default(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+
+        srcs = []
+        # Reset iterator
+        self.iterator.rewind()
+        for i in range(self.n_sentences):
+            data = next(self.iterator)
+            if 'x' in data:
+                srcs.append(idx_to_sent(self.model.src_idict, data['x'].flatten()))
+
+        # Save metadata
+        data = {'metadata' : metadata}
+
+        # Open reference files
+        all_refs = [open(f).read().strip().split("\n") for f in self.ref_files]
+        n_refs = len(all_refs)
+        n_samples = len(all_refs[0])
+
+        mult_source = False
+        if len(all_refs[0]) != len(srcs):
+            # Multiple sources given
+            mult_source = True
+
+        refs = []
+        # Collect reference sentences
+        for sidx in range(self.n_sentences):
+            sidx = sidx if not mult_source else sidx % len(all_refs[0])
+            refs.append([all_refs[i][sidx] for i in range(n_refs)])
+
+        # Add sources, targets, and references
+        samples = []
+        for s, t, att in zip(srcs, self.trans, self.att_weights):
+            sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'ref' : refs.pop(0), 'att': att}
+            samples.append(sample)
+        data['data'] = samples
+
+        with open(filename, 'w') as f:
+            json.dump(data, f, default=_default)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='nmt-translate')
+    parser.add_argument('-j', '--n-jobs'        , type=int, default=8,
+                                                  help="Number of processes (default: 8, 0: Auto)")
+    parser.add_argument('-b', '--beam-size'     , type=int, default=12,
+                                                  help="Beam size (only for beam-search case)")
+    parser.add_argument('-N', '--nbest'         , type=int, default=1,
+                                                  help="Output n-best list size (only for beam-search)")
+    parser.add_argument('-r', '--seed'          , type=int, default=1234,
+                                                  help="Random number seed for sampling mode (default: 1234)")
+    parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
+
+    parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
+    parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (bleu or bleu,meteor)", default="bleu")
+    parser.add_argument('-o', '--saveto'        , type=str, help="Output translations file (if not given, only metrics will be printed)",
+                                                  default=None)
+    parser.add_argument('-e', '--export'        , action='store_true', help="Export all decoding process to json for visualization")
+
+    parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
+    parser.add_argument('-f', '--first'         , type=int, default=0, help="How many sentences should be translated, useful for debugging.")
+    parser.add_argument('-u', '--suppress-unks' , action='store_true', help="Don't produce <unk>'s in beam search")
+    parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/pairs/single")
+
+    parser.add_argument('-S', '--src-files'     , type=str, help="Source data(s) in order: text,image (default: validation set)",
+                                                  nargs='+', default=None)
+    parser.add_argument('-R', '--ref-files'     , type=str, help="One or multiple reference files (default: validation set)",
+                                                  nargs='+',
+                                                  default=None)
+
+    args = parser.parse_args()
+
+    if args.decoder == "forced" and (args.src_files is None or args.ref_files is None):
+        print "Error: Forced decoding requires that you give src and ref files explicitly."
+        sys.exit(1)
+
+    if args.n_jobs == 0:
+        # Auto infer CPU number
+        args.n_jobs = (cpu_count() / 2) - 1
+
+    if args.n_jobs > 1:
+        # This is to avoid thread explosion. Allow
+        # each process to use a single thread.
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
+
+    # Force CPU
+    os.environ["THEANO_FLAGS"] = "device=cpu"
+
+    # Create translator object
+    translator = Translator(args)
+    translator.set_model_options()
+    translator.start()
+
+    out_file = args.saveto
+    if not args.saveto:
+        # Override this if given
+        args.score = False
+        hypf = get_temp_file(suffix=".nbest_hyps")
+        out_file = hypf.name
+        hypf.close()
+
+    # If we evaluate multiple source phrases and take their best
+    # assume -s is given
+    if args.validmode != 'single':
+        args.score = True
+
+    # Dump hypotheses
+#    translator.write_hyps(out_file, args.score)
+
+    if args.export and args.saveto:
+        # Export attentional informations if -o and -e are given
+        translator.dump_json("%s.json" % out_file)
+
+    # No need to compute metrics with nbest style files
+    if args.decoder != "forced" and args.nbest == 1 \
+            and translator.ref_files and not args.score:
+        # Compute all metrics
+        results = translator.compute_score(out_file, args.metrics.split(","))
+        # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
+        print results
+
+    sys.exit(0)
