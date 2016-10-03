@@ -67,13 +67,13 @@ class Model(BaseModel):
         # Load training data
         self.train_iterator = WMTIterator(
                 batch_size=self.batch_size,
+                shuffle_mode=self.options.get('shuffle_mode', 'trglen'),
                 pklfile=self.data['train_src'],
                 imgfile=self.data['train_img'],
                 trgdict=self.trg_dict,
                 srcdict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
                 mode=self.options.get('data_mode', 'pairs'),
-                shuffle_mode=self.options.get('shuffle_mode', 'trglen'),
                 logger=self.logger)
         self.train_iterator.read()
         self.load_valid_data()
