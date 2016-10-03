@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 # 3rd party
 import numpy as np
 
@@ -20,36 +17,48 @@ class Model(BaseModel):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
-        # Load vocabularies if any
-        if 'dicts' in kwargs:
-            dicts = kwargs['dicts']
-            if 'src' in dicts:
-                self.src_dict, src_idict = load_dictionary(dicts['src'])
-                self.n_words = min(self.n_words, len(self.src_dict)) if self.n_words > 0 else len(self.src_dict)
+        # Load dictionaries
+        dicts = kwargs['dicts']
+
+        # Should we normalize train cost or not?
+        # TODO: It should be implemented in this file, look at attention.py
+        self.norm_cost = kwargs.get('norm_cost', False)
+
+        # Let's default to GRU
+        self.rnn_type = kwargs.get('rnn_type', 'gru')
+
+        self.src_dict, src_idict = load_dictionary(dicts['src'])
+        self.n_words = min(self.n_words, len(self.src_dict)) \
+                if self.n_words > 0 else len(self.src_dict)
 
         self.set_options(self.__dict__)
         self.src_idict = src_idict
         self.set_trng(seed)
+        self.set_dropout(False)
         self.logger = logger
+
+    def load_valid_data(self):
+        self.valid_iterator = TextIterator(
+                                batch_size=self.batch_size,
+                                mask=True,
+                                shuffle_mode=None,
+                                file=self.data['valid_src'],
+                                dict=self.src_dict,
+                                n_words=self.n_words,
+                                name='y') # This is important for the loss to be correctly normalized!
+        self.valid_iterator.read()
 
     def load_data(self):
         self.train_iterator = TextIterator(
                                 batch_size=self.batch_size,
+                                mask=True,
+                                shuffle_mode=None, # or simple or trglen, not tested in rnnlm.
                                 file=self.data['train_src'],
                                 dict=self.src_dict,
-                                n_words=self.n_words,
-                                mask=True)
-
-        self.valid_iterator = TextIterator(
-                                batch_size=self.batch_size,
-                                file=self.data['valid_src'],
-                                dict=self.src_dict,
-                                n_words=self.n_words,
-                                name='y', # This is important for the loss to be correctly normalized!
-                                mask=True)
+                                n_words=self.n_words)
 
         self.train_iterator.read()
-        self.valid_iterator.read()
+        self.load_valid_data()
 
     def init_params(self):
         params = OrderedDict()
@@ -75,7 +84,6 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_logit'       , nin=self.out_emb_dim, nout=self.n_words)
 
         self.initial_params = params
-
 
     def build(self):
         # description string: #words x #samples
@@ -135,17 +143,12 @@ class Model(BaseModel):
         # For alpha regularization
         self.x_mask = x_mask
 
-        return cost.mean() #, norm_cost.mean()
+        return cost.mean()
 
-################################
-# SAMPLING
-################################
-
-# build a sampler
     def build_sampler(self):
         # x: 1 x 1
-        y = tensor.vector('y_sampler', dtype='int64')
-        init_state = tensor.matrix('init_state', dtype='float32')
+        y = tensor.vector('y_sampler', dtype=INT)
+        init_state = tensor.matrix('init_state', dtype=FLOAT)
 
     # if it's the first word, emb should be all zero
         emb = tensor.switch(y[:, None] < 0,
@@ -173,22 +176,17 @@ class Model(BaseModel):
         next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
 
         # next word probability
-        print 'Building f_next..',
         inps = [y, init_state]
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inps, outs, name='f_next')
-        print 'Done'
 
-
-# generate sample
     def gen_sample(tparams, f_next, options, trng=None, maxlen=30, argmax=False):
-
         sample = []
         sample_score = 0
 
         # initial token is indicated by a -1 and initial state is zero
-        next_w = -1 * numpy.ones((1,)).astype('int64')
-        next_state = numpy.zeros((1, options['dim'])).astype('float32')
+        next_w = -1 * numpy.ones((1,)).astype(INT)
+        next_state = numpy.zeros((1, options['dim'])).astype(FLOAT)
 
         for ii in xrange(maxlen):
             inps = [next_w, next_state]
