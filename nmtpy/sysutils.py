@@ -171,7 +171,8 @@ def setup_train_args(args):
     ensure_dirs([args.model_path])
 
     # Log suffix
-    logsuff = 'search' if args.hypersearch else 'log'
+    #logsuff = 'search' if args.hypersearch else 'log'
+    logsuff = 'log'
 
     # Log file
     i = 1
