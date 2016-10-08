@@ -107,7 +107,8 @@ class MainLoop(object):
 
             # Should we stop
             if self.uctr == self.max_updates:
-                break
+                self._print("Max iteration %d reached." % self.uctr)
+                return False
 
             # Update learning rate if requested
             self.__update_lrate()
@@ -124,10 +125,6 @@ class MainLoop(object):
             ###########################
             if self.early_stop:
                 self._print("Early stopped.")
-                return False
-
-            if self.uctr == self.max_updates:
-                self._print("Max iteration %d reached." % self.uctr)
                 return False
 
         # An epoch is finished
