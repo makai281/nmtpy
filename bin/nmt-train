@@ -75,6 +75,13 @@ if __name__ == '__main__':
     # Create a folder named as conf file
     args['model_path_suffix'] = os.path.splitext(os.path.basename(pargs.config))[0]
 
+    # Override .conf arguments from the ones given in cmdline
+    args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
+
+    for k,v in all_defaults.iteritems():
+        if k not in args:
+            args[k] = v
+
     if pargs.extra is not None:
         # Extra options passed, let's override args with those
         extra = {}
@@ -86,13 +93,6 @@ if __name__ == '__main__':
     # Remove config from pargs
     del pargs.__dict__['config']
     del pargs.__dict__['extra']
-
-    # Override .conf arguments from the ones given in cmdline
-    args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
-
-    for k,v in all_defaults.iteritems():
-        if k not in args:
-            args[k] = v
 
     # Setup arguments
     args, log_file = setup_train_args(args)
