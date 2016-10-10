@@ -171,8 +171,8 @@ class MainLoop(object):
         if metric is not None and metric > np.array([m[1] for m in self.valid_metrics]).max():
             return True
 
-        # Compare based on loss
-        if loss < np.array(self.valid_losses).min():
+        # Compare based on loss if no metric available
+        if metric is None and loss < np.array(self.valid_losses).min():
             return True
 
     def __do_validation(self):
