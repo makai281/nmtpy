@@ -6,8 +6,6 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 from collections import OrderedDict
-
-from multiprocessing import Process, Queue
 from threading import Semaphore
 
 import uuid
@@ -15,29 +13,37 @@ import random
 random.seed(1234)
 
 # Will be initialized from inside main
+INTERRUPTED = False
 SEMAPHORE_GPU = None
+PROCS = OrderedDict()
+DEVNULL = open(os.devnull, 'w')
 
 ##################
 # Helper functions
 ##################
-def initial_spawn(config, params, defparams):
-    """Spawn initial instances before going into parse loop."""
-    processes = OrderedDict()
-    while True:
-        paramdict = sample_params(params, defparams)
-        uid, ps = spawn_trainer(config, paramdict)
-        if uid is None:
-            break
-        else:
-            # Spawn successful
-            print 'Launched trainer %s with PID %d' % (uid, ps.pid)
-            processes[uid] = ps
-            # It takes time for the child to take hold of the GPU
-            time.sleep(3)
-            if not SEMAPHORE_GPU.acquire(blocking=False):
-                break
+def reap_processes():
+    for k,v in PROCS.items():
+        # Check alive
+        if v.poll() is not None:
+            del PROCS[k]
+            SEMAPHORE_GPU.release()
 
-    return processes
+def spawn_single(config, params, defparams):
+    """Spawns a single instance."""
+    if not SEMAPHORE_GPU.acquire(blocking=False):
+        return False
+
+    paramdict = sample_params(params, defparams)
+    uid, ps = spawn_trainer(config, paramdict)
+    if uid is None:
+        SEMAPHORE_GPU.release()
+        return False
+
+    # Store process
+    PROCS[uid] = ps
+
+    print 'Spawned new worker PID=%d' % ps.pid
+    return True
 
 def log_parser():
     pass
@@ -78,11 +84,9 @@ def spawn_trainer(conf, params):
         for key, value in params.iteritems():
             cmd.append('%s:%s' % (key, value))
 
-        print '[Spawning (%s)]' % " ".join(cmd)
-
         env = os.environ
         env['PYTHONUNBUFFERED'] = 'YES'
-        return (uuid.uuid4(), subprocess.Popen(cmd, stderr=subprocess.PIPE, env=env))
+        return (uuid.uuid4(), subprocess.Popen(cmd, stdout=DEVNULL, stderr=DEVNULL, env=env))
     else:
         return None, None
 
@@ -101,6 +105,7 @@ if __name__ == '__main__':
 
     # Get # of GPUs and create a semaphore
     gpu_count = get_gpu_count()
+    print '# of GPUs available: %d' % gpu_count
     SEMAPHORE_GPU = Semaphore(gpu_count)
 
     default_params = {'max-epochs'  : args.max_epochs,
@@ -108,9 +113,22 @@ if __name__ == '__main__':
                      }
 
     # Spawn first instances
-    procs = initial_spawn(args.config, args.params, default_params)
+    def spawn_workers():
+        if not INTERRUPTED:
+            # Will spawn until all GPUs are used.
+            while spawn_single(args.config, args.params, default_params):
+                # It takes time for the child to take hold of the GPU
+                time.sleep(5)
 
-    time.sleep(2)
+    while True:
+        try:
+            reap_processes()
+            spawn_workers()
+            if INTERRUPTED:
+                break
+            time.sleep(60*3)
+        except KeyboardInterrupt as ke:
+            print 'Will stop once current models are finished.'
+            INTERRUPTED = True
 
-    for p in procs.values():
-        p.kill()
+    print 'Done.'
