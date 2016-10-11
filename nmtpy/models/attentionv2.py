@@ -73,6 +73,7 @@ class Model(BaseModel):
         self.logger.info('Target vocabulary size: %d', self.n_words_trg)
         self.logger.info('%d training samples' % self.train_iterator.n_samples)
         self.logger.info('%d validation samples' % self.valid_iterator.n_samples)
+        self.logger.info('dropout (emb,ctx,out): %.2f, %.2f, %.2f' % (self.emb_dropout, self.ctx_dropout, self.out_dropout))
 
     def load_valid_data(self, from_translate=False):
         self.valid_ref_files = self.data['valid_trg']
