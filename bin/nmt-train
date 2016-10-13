@@ -89,7 +89,7 @@ if __name__ == '__main__':
         for opt in extra_params:
             key, value = opt.split(":")
             key = key.replace('-', '_')
-            args[key] = type(args[key])(value)
+            args[key] = eval(value, {}, {})
 
     # Setup arguments
     args, log_file = setup_train_args(args)
