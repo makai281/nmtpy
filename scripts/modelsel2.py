@@ -15,7 +15,6 @@ import numpy as np
 
 ######################################
 # Will be initialized from inside main
-INTERRUPTED     = False
 SEMAPHORE_GPU   = None
 PROCS           = OrderedDict()
 DEVNULL         = open(os.devnull, 'w')
@@ -24,10 +23,10 @@ N_GPU           = 0
 SEEDS           = [1234]
 
 # Can try different architectures with same parameter sets
-ARCHS           = ["attentionv2", "attentionv4"]
+ARCHS           = ["attentionv2", "attentionv5"]
 
-# Try equal dims for emb and rnn [60,200] with step=10
-DIMS            = range(60, 210, 10)
+# Try equal dims for emb and rnn [x, y] with step=10
+DIMS            = [(620, 1000)]
 
 # Will be prefilled before launching jobs
 EXPERIMENTS     = []
@@ -72,12 +71,16 @@ def generate_experiments():
     """Create parameter sets for each experiment."""
     for seed in SEEDS:
         for dim in DIMS:
+            if isinstance(dim, tuple):
+                edim, rdim = dim
+            else:
+                edim = rdim = dim
             for arch in ARCHS:
                 EXPERIMENTS.append({
                     'model-type'    : arch,
                     'seed'          : seed,
-                    'embedding-dim' : dim,
-                    'rnn-dim'       : dim,
+                    'embedding-dim' : edim,
+                    'rnn-dim'       : rdim,
                     })
 
 def spawn_trainer(conf, params):
