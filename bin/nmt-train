@@ -135,12 +135,6 @@ if __name__ == '__main__':
     # Create model object
     model = Model(seed=args.seed, logger=log, **model_args)
 
-    # If hypersearch, call its own function
-    #if args.hypersearch:
-    #    from nmtpy.hypersearch import hypersearch
-    #    hypersearch(model, log, train_args)
-    #    sys.exit(0)
-
     # Initialize parameters
     log.info("Initializing parameters")
     model.init_params()
