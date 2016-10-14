@@ -23,10 +23,14 @@ N_GPU           = 0
 SEEDS           = [1234]
 
 # Can try different architectures with same parameter sets
-ARCHS           = ["attentionv2", "attentionv5"]
+ARCHS           = ["attentionv2"]
 
 # Try equal dims for emb and rnn [x, y] with step=10
-DIMS            = [(620, 1000)]
+dims            = [100, 200, 300, 400, 500]
+DIMS            = [(d, d) for d in dims] + [(d, 2*d) for d in dims] + [(2*d, d) for d in dims]
+
+# Learning rate
+LRATE           = 0.0004
 
 # Will be prefilled before launching jobs
 EXPERIMENTS     = []
@@ -138,6 +142,7 @@ if __name__ == '__main__':
 
     default_params = {'max-epochs'  : args.max_epochs,
                       'beam-size'   : 3,
+                      'lrate'       : LRATE,
                      }
 
     generate_experiments()
@@ -157,7 +162,7 @@ if __name__ == '__main__':
             if uid is not None:
                 PROCS[uid] = ps
                 # Remove the experiment
-                print '[PID=%7d] %30s %s' % (ps.pid, uid, expdict)
+                print '%20s [PID=%7d] %30s %s' % (time.asctime(), ps.pid, uid, expdict)
                 EXPERIMENTS.pop(0)
                 time.sleep(5)
             else:
