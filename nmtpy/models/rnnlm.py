@@ -3,7 +3,7 @@ import numpy as np
 
 import theano
 import theano.tensor as tensor
-
+from sys import getsizeof
 # Ours
 from ..layers import *
 from ..typedef import *
@@ -39,7 +39,7 @@ class Model(BaseModel):
 
     def load_valid_data(self):
         self.valid_iterator = TextIterator(
-                                batch_size=self.batch_size,
+                                batch_size=1,#self.batch_size,
                                 mask=True,
                                 shuffle_mode=None,
                                 file=self.data['valid_src'],
@@ -180,26 +180,51 @@ class Model(BaseModel):
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inps, outs, name='f_next')
 
-    def gen_sample(tparams, f_next, options, trng=None, maxlen=30, argmax=False):
+	
+    def gen_sample(self, input_dict, trng=None, maxlen=30, argmax=False):
         sample = []
+        sample_scores = []
         sample_score = 0
 
         # initial token is indicated by a -1 and initial state is zero
-        next_w = -1 * numpy.ones((1,)).astype(INT)
-        next_state = numpy.zeros((1, options['dim'])).astype(FLOAT)
+        next_w = -1 * np.ones((1,)).astype(INT)
+        next_state = np.zeros(self.rnn_dim).astype(FLOAT)
+        #next_state = np.zeros((1,self.rnn_dim)).astype(FLOAT)
+	#print('####################### self.rnn_dim : ',self.rnn_dim)
+	#print('################################### rnn_dim: ', self.rnn_dim, ' next_state shape: ', next_state.shape)
+	#print('################################### next_w shape: ', next_w.shape)
+        target = None
+        if "y" in input_dict:
+            # We're doing forced decoding
+            target = input_dict.pop("y")
+	    #print 'target = ', target
+            maxlen = len(target)
+	    #print 'maxlen = ', maxlen
 
         for ii in xrange(maxlen):
-            inps = [next_w, next_state]
-            ret = f_next(*inps)
+	    print "################## ITER ", ii
+	    print "next_w=", next_w
+            #print "next_w : ",next_w
+	    #print "next_state : ",next_state
+	    next_state = next_state.reshape(1, self.rnn_dim)
+	    inps = [next_w, next_state]
+	    print "next_state=", next_state[0, :10]
+	    #inps = [next_w, next_state]#[[1]]]
+	    ret = self.f_next(*inps)
             next_p, next_w, next_state = ret[0], ret[1], ret[2]
-
-            if argmax:
-                nw = next_p[0].argmax()
+            print "next_p[0]=", next_p[0]
+	    if target is not None:
+	    	next_w = target[ii]
+	    elif argmax:
+                next_w = [next_p[0].argmax()]
+		print "argmax: ", next_w[0]
             else:
-                nw = next_w[0]
-            sample.append(nw)
-            sample_score += next_p[0, nw]
-            if nw == 0:
+		print "sampling: ", next_w[0]
+            sample.append(next_w[0])
+            sample_scores.append(next_p[0, next_w[0]])
+            sample_score += next_p[0, next_w[0]]
+	    print "sample score ", next_p[0, next_w[0]]
+            if next_w[0] == 0:
                 break
 
-        return sample, sample_score
+        return sample, sample_score, sample_scores
