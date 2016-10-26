@@ -32,16 +32,21 @@ class Model(BaseModel):
         dicts = kwargs['dicts']
 
         # Should we normalize train cost or not?
-        self.norm_cost = kwargs.get('norm_cost', False)
+        self.norm_cost = kwargs.get('norm_cost', True)
 
         # Use GRU by default as encoder
         self.enc_type = kwargs.get('enc_type', 'gru')
 
         # Do we apply layer normalization to GRU?
-        self.lnorm = kwargs.get('layer_norm', False)
+        self.lnorm = kwargs.get('layer_norm', True)
 
         # Shuffle mode (default: No shuffle)
-        self.smode = kwargs.get('shuffle_mode', None)
+        self.smode = kwargs.get('shuffle_mode', 'trglen')
+
+        # Get dropout parameters
+        self.emb_dropout = kwargs.get('emb_dropout', 0.2)
+        self.ctx_dropout = kwargs.get('ctx_dropout', 0.4)
+        self.out_dropout = kwargs.get('out_dropout', 0.4)
 
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
@@ -68,6 +73,7 @@ class Model(BaseModel):
         self.logger.info('Target vocabulary size: %d', self.n_words_trg)
         self.logger.info('%d training samples' % self.train_iterator.n_samples)
         self.logger.info('%d validation samples' % self.valid_iterator.n_samples)
+        self.logger.info('dropout (emb,ctx,out): %.2f, %.2f, %.2f' % (self.emb_dropout, self.ctx_dropout, self.out_dropout))
 
     def load_valid_data(self, from_translate=False):
         self.valid_ref_files = self.data['valid_trg']
@@ -280,17 +286,20 @@ class Model(BaseModel):
         n_samples = x.shape[1]
 
         # word embedding for forward rnn (source)
-        emb = self.tparams['Wemb_enc'][x.flatten()]
+        emb = dropout(self.tparams['Wemb_enc'][x.flatten()],
+                      self.trng, self.emb_dropout, self.use_dropout)
         emb = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
         proj = get_new_layer(self.enc_type)[1](self.tparams, emb, prefix='encoder', mask=x_mask, layernorm=self.lnorm)
 
         # word embedding for backward rnn (source)
-        embr = self.tparams['Wemb_enc'][xr.flatten()]
+        embr = dropout(self.tparams['Wemb_enc'][xr.flatten()],
+                       self.trng, self.emb_dropout, self.use_dropout)
         embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
         projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask, layernorm=self.lnorm)
 
         # context will be the concatenation of forward and backward rnns
-        ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+        ctx = dropout(tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1),
+                self.trng, self.ctx_dropout, self.use_dropout)
 
         # mean of the context (across time) will be used to initialize decoder rnn
         ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
@@ -329,7 +338,7 @@ class Model(BaseModel):
         logit_ctx  = get_new_layer('ff')[1](self.tparams, ctxs, prefix='ff_logit_ctx', activ='linear')
         logit_prev = get_new_layer('ff')[1](self.tparams, emb, prefix='ff_logit_prev', activ='linear')
 
-        logit = tanh(logit_gru + logit_prev + logit_ctx)
+        logit = dropout(tanh(logit_gru + logit_prev + logit_ctx), self.trng, self.out_dropout, self.use_dropout)
 
         logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
         logit_shp = logit.shape
