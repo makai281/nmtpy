@@ -24,6 +24,10 @@ def tensor_slice(_x, n, dim):
 # Forward dropout
 #################
 def dropout(x, rng, p, in_train):
+    if p <= 0.:
+        # No dropout, return x intact
+        return x
+
     success = 1. - p
     return tensor.switch(in_train,     # If True, next one else last one
                          x * rng.binomial(x.shape, p=success, dtype=x.dtype) / success,
