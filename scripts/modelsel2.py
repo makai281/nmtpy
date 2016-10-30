@@ -6,6 +6,7 @@ import uuid
 import random
 import argparse
 import subprocess
+import itertools
 import xml.etree.ElementTree as ET
 
 from collections import OrderedDict
@@ -25,12 +26,15 @@ SEEDS           = [1234]
 # Can try different architectures with same parameter sets
 ARCHS           = ["attentionv2"]
 
-# Try equal dims for emb and rnn [x, y] with step=10
-dims            = [100, 200, 300, 400, 500]
-DIMS            = [(d, d) for d in dims] + [(d, 2*d) for d in dims] + [(2*d, d) for d in dims]
+DIMS             = [(100, 100), (200, 200), (200, 400), (400, 800), (500, 500), (620, 1000)]
+
+# Embedding, ctx and output dropout probabilities
+E_DROPOUT         = [0.5]
+C_DROPOUT         = [0.5]
+O_DROPOUT         = [0.5]
 
 # Learning rate
-LRATE           = 0.0004
+LRATE             = 0.0004
 
 # Will be prefilled before launching jobs
 EXPERIMENTS     = []
@@ -62,15 +66,6 @@ def reap_processes():
     # Return number of free GPUs
     return N_GPU - len(PROCS)
 
-def sample_dropout(vmax=8):
-    """Sample dropout probability <= vmax."""
-
-    return {
-            'emb_dropout' : (np.random.randint(1, vmax) / 10.),
-            'ctx_dropout' : (np.random.randint(1, vmax) / 10.),
-            'out_dropout' : (np.random.randint(1, vmax) / 10.),
-           }
-
 def generate_experiments():
     """Create parameter sets for each experiment."""
     for seed in SEEDS:
@@ -80,12 +75,16 @@ def generate_experiments():
             else:
                 edim = rdim = dim
             for arch in ARCHS:
-                EXPERIMENTS.append({
-                    'model-type'    : arch,
-                    'seed'          : seed,
-                    'embedding-dim' : edim,
-                    'rnn-dim'       : rdim,
-                    })
+                for edrop, cdrop, odrop in itertools.product(E_DROPOUT, C_DROPOUT, O_DROPOUT):
+                    EXPERIMENTS.append({
+                        'model-type'    : arch,
+                        'seed'          : seed,
+                        'embedding-dim' : edim,
+                        'rnn-dim'       : rdim,
+                        'emb-dropout'   : edrop,
+                        'ctx-dropout'   : cdrop,
+                        'out-dropout'   : odrop,
+                        })
 
 def spawn_trainer(conf, params):
     """Spawn GPU trainer and return the process instance."""
@@ -126,7 +125,7 @@ def spawn_single(config, expdict):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='modelsel')
     parser.add_argument('-c', '--config'    , type=str, help='Base configuration file.', required=True)
-    parser.add_argument('-m', '--max-epochs', type=int, help='Max epoch for each run.', default=30)
+    parser.add_argument('-m', '--max-epochs', type=int, help='Max epoch for each run.', default=200)
     parser.add_argument('-s', '--diffseed'  , help='Launch each system with 3 deterministic seeds', action='store_true', default=False)
 
     args = parser.parse_args()
