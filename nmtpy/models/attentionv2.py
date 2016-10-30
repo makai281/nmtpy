@@ -48,6 +48,8 @@ class Model(BaseModel):
         self.ctx_dropout = kwargs.get('ctx_dropout', 0.4)
         self.out_dropout = kwargs.get('out_dropout', 0.4)
 
+        self.n_enc_layers  = kwargs.get('n_enc_layers' , 1)
+
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
@@ -251,7 +253,11 @@ class Model(BaseModel):
         # Backwards encoder
         params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
 
-        # Context is the concatenation of forward and backwards encoder
+        # How many additional encoder layers to add?
+        for i in range(1, self.n_enc_layers):
+            params = get_new_layer(self.enc_type)[0](params, prefix='deepencoder_%d' % i,
+                                                     nin=self.ctx_dim, dim=self.ctx_dim,
+                                                     scale=self.weight_init, layernorm=self.lnorm)
 
         # init_state, init_cell
         params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
@@ -298,8 +304,17 @@ class Model(BaseModel):
         projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', mask=xr_mask, layernorm=self.lnorm)
 
         # context will be the concatenation of forward and backward rnns
-        ctx = dropout(tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1),
-                self.trng, self.ctx_dropout, self.use_dropout)
+        ctx = [tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)]
+
+        for i in range(1, self.n_enc_layers):
+            ctx = get_new_layer(self.enc_type)[1](self.tparams, ctx[0],
+                                                  prefix='deepencoder_%d' % i,
+                                                  mask=x_mask, layernorm=self.lnorm)
+
+
+
+        # Apply dropout
+        ctx = dropout(ctx[0], self.trng, self.ctx_dropout, self.use_dropout)
 
         # mean of the context (across time) will be used to initialize decoder rnn
         ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
@@ -384,8 +399,14 @@ class Model(BaseModel):
         projr = get_new_layer(self.enc_type)[1](self.tparams, embr, prefix='encoder_r', layernorm=self.lnorm)
 
         # concatenate forward and backward rnn hidden states
-        ctx = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+        ctx = [tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)]
 
+        for i in range(1, self.n_enc_layers):
+            ctx = get_new_layer(self.enc_type)[1](self.tparams, ctx[0],
+                                                  prefix='deepencoder_%d' % i,
+                                                  layernorm=self.lnorm)
+
+        ctx      = ctx[0]
         # get the input for decoder rnn initializer mlp
         ctx_mean = ctx.mean(0)
         # ctx_mean = tensor.concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
