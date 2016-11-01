@@ -205,7 +205,7 @@ def param_init_gru(params, nin, dim, scale=0.01, prefix='gru', layernorm=False):
 
     return params
 
-def gru_layer(tparams, state_below, prefix='gru', mask=None, layernorm=False):
+def gru_layer(tparams, state_below, prefix='gru', mask=None, init_states=None, layernorm=False):
     nsteps = state_below.shape[0]
 
     # if we are dealing with a mini-batch
@@ -231,7 +231,8 @@ def gru_layer(tparams, state_below, prefix='gru', mask=None, layernorm=False):
 
     # prepare scan arguments
     seqs = [mask, state_below_, state_belowx]
-    init_states = [tensor.alloc(0., n_samples, dim)]
+    if init_states is None:
+        init_states = [tensor.alloc(0., n_samples, dim)]
 
     shared_vars = [tparams[pp(prefix, 'U')],
                    tparams[pp(prefix, 'Ux')]]
