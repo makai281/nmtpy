@@ -56,11 +56,8 @@ def pp(prefix, name):
     return '%s_%s' % (prefix, name)
 
 def get_param_dict(path):
-    pp = np.load(path)
-    p = {}
-    for k,v in pp.iteritems():
-        p[k] = v
-    return p
+    """Fetch parameter dictionary from .npz file."""
+    return np.load(path)['tparams'].tolist()
 
 # orthogonal initialization for weights
 # Saxe, Andrew M., James L. McClelland, and Surya Ganguli.

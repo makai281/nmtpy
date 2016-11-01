@@ -14,7 +14,7 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
-from ..nmtutils import unzip
+from ..nmtutils import unzip, get_param_dict
 from ..sysutils import *
 from ..typedef import *
 
@@ -94,7 +94,7 @@ class BaseModel(object):
     def load(self, fname):
         self.tparams = OrderedDict()
 
-        params = np.load(fname)['tparams'].tolist()
+        params = get_param_dict(fname)
         for k,v in params.iteritems():
             self.tparams[k] = theano.shared(v, name=k)
 

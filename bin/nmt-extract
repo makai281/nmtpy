@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 
 from nmtpy.sysutils import *
-
+from nmtpy.nmtutils import get_param_dict
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-extract')
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        params = np.load(args.model)['tparams'].tolist()
+        params = get_param_dict(args.model)
     except KeyError as ke:
         print '%s does not contain model parameters. Did you train your model long enough?' % args.model
         sys.exit(1)
