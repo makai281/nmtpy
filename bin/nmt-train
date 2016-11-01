@@ -9,7 +9,7 @@ import platform
 from nmtpy.config import Config
 from nmtpy.logger import Logger
 from nmtpy.sysutils import setup_train_args, get_gpu
-from nmtpy.nmtutils import DotDict
+from nmtpy.nmtutils import DotDict, get_param_dict
 from nmtpy.mainloop import MainLoop
 
 # Ensure cleaning up temp files and processes
@@ -140,7 +140,18 @@ if __name__ == '__main__':
     # Initialize parameters
     log.info("Initializing parameters")
     model.init_params()
-    model.init_shared_variables()
+
+    # Load pre-trained model weights if requested
+    init_params = None
+    if "init" in args:
+        log.info('Overriding parameters from pre-trained model')
+        init_params = get_param_dict(args.init)
+
+    # Create theano shared variables
+    log.info('Creating shared variables')
+    model.init_shared_variables(_from=init_params)
+
+    # Print number of parameters
     log.info("Number of parameters: %s" % model.get_nb_params())
 
     # Load data
