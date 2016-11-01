@@ -100,16 +100,19 @@ class BaseModel(object):
 
     def init_shared_variables(self, _from=None):
         # initialize Theano shared variables according to the _from
-        # if _from is None, use initial_params
+        # _from can be given as a pre-trained model from nmt-train
         if _from is None:
             _from = self.initial_params
 
+        # tparams is None for the first call
         if self.tparams is None:
             self.tparams = OrderedDict()
             for kk, pp in _from.iteritems():
                 self.tparams[kk] = theano.shared(_from[kk], name=kk)
         else:
-            for kk, pp in _from.iteritems():
+            # Already initialized the params, override them
+            for kk in self.tparams.keys():
+                # Let this fail if _from doesn't match the model
                 self.tparams[kk].set_value(_from[kk])
 
     def val_loss(self):
