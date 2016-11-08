@@ -44,12 +44,16 @@ class Model(BaseModel):
         self.smode = kwargs.get('shuffle_mode', 'trglen')
 
         # Get dropout parameters
-        self.emb_dropout = kwargs.get('emb_dropout', 0.2)
-        self.ctx_dropout = kwargs.get('ctx_dropout', 0.4)
-        self.out_dropout = kwargs.get('out_dropout', 0.4)
+        # Let's keep the defaults as 0 to not use dropout
+        # You can adjust those from your conf files.
+        self.emb_dropout = kwargs.get('emb_dropout', 0.)
+        self.ctx_dropout = kwargs.get('ctx_dropout', 0.)
+        self.out_dropout = kwargs.get('out_dropout', 0.)
 
+        # Number of additional GRU encoders for source sentences
         self.n_enc_layers  = kwargs.get('n_enc_layers' , 1)
 
+        # Load dictionaries, limit shortlist size if requested
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
@@ -63,7 +67,10 @@ class Model(BaseModel):
         self.trg_idict = trg_idict
         self.src_idict = src_idict
 
+        # Context dimensionality is 2 times RNN since we use Bi-RNN
         self.ctx_dim = 2 * self.rnn_dim
+
+        # Set the seed of Theano RNG
         self.set_trng(seed)
 
         # We call this once to setup dropout mechanism correctly
