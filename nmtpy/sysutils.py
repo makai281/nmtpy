@@ -145,6 +145,9 @@ def setup_train_args(args):
     if args.decay_c > 0:
         name += "-decay_%.e" % args.decay_c
 
+    if 'emb_dropout' in args:
+        name += "-dout_%.1f_%.1f_%.1f" % (args.emb_dropout, args.ctx_dropout, args.out_dropout)
+
     if args.clip_c > 0:
         name += "-gclip_%.1f" % args.clip_c
 
