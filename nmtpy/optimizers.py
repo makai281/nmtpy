@@ -61,9 +61,8 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8):
     i = theano.shared(np.float32(0.))
     i_t = i + 1.
 
-    bias_cor_1 = b1**(i_t)
-    bias_cor_2 = b2**(i_t)
-    lr_t = lr0 * (tensor.sqrt(1 - bias_cor_2) / (1 - bias_cor_1))
+    # Running learning-rate
+    lr_t = lr0 * (tensor.sqrt(1. - b2**i_t) / (1. - b1**i_t))
 
     updates = []
 
@@ -72,12 +71,8 @@ def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8):
         v = theano.shared(np.zeros(p.get_value().shape).astype(FLOAT), p.name + '_var')
 
         m_t = (b1 * m) + ((1. - b1) * g)
-        m_t_hat = m_t / (1 - bias_cor_1)
-
-        v_t = (b2 * v) + ((1. - b2) * tensor.sqr(g))
-        v_t_hat = v_t / (1 - bias_cor_2)
-
-        p_t = p - (lr_t * (m_t_hat / (tensor.sqrt(v_t_hat) + eps)))
+        v_t = (b2 * v) + ((1. - b2) * g**2)
+        p_t = p - (lr_t * (m_t / (tensor.sqrt(v_t) + eps)))
         updates.append((m, m_t))
         updates.append((v, v_t))
         updates.append((p, p_t))
