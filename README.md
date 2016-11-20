@@ -1,6 +1,6 @@
 # nmtpy
 
-nmtpy is a suite of Python tools, primarily based on the starter code provided in [dl4mt-material](https://github.com/kyunghyuncho/dl4mt-material) for training neural machine translation networks using Theano.
+nmtpy is a suite of Python tools, primarily based on the starter code provided in [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial) for training neural machine translation networks using Theano.
 
 ## Table of Contents
 
@@ -13,29 +13,6 @@ nmtpy is a suite of Python tools, primarily based on the starter code provided i
 - [Training](#training)
 - [References](#references)
 
-## News
-
-### v0.2 -> v0.3
-
- - Removed obsolete iterators `iter_multi` and `iter_imgfeats`.
-
-### v0.1 -> v0.2
-
-A lot has been changed in this version. Notably:
-
- - A cleanup module is now used to handle temporary files so that no trace is left on the system even when you interrupt the training. The same module is also used to ensure correct interruption without seeing ugly exceptions in the terminal.
- - General code refactoring stuff. You can always look at the attention model to understand how your new model should look like.
- - A reference implementation for Google's show and tell paper [2]. This model uses the newly added LSTM layer from Kelvin Xu's arctic-captions code.
- - `sort` and `shuffle` parameters were dropped from configuration files. You can decide to shuffle your data inside your model's `load_data()` method.
- - `nmt-train` now respects your choice of early stopping metric, e.g. if you write `bleu` in your configuration file it won't try to compute meteor.
- - All layers now accepts a `scale` parameter which can be a float like `0.01` (which is the default) defining the standard deviation of the initial weights,
-   `'xavier'` for using Xavier Glorot initialization scheme [3] or `'he'` for He' initialization scheme (mostly useful with ReLU and ConvNets) [4]. You can define
-   your choice in the configuration file with `weight_init: xavier or he or a float like 0.01`.
- - New utilities: `nmt-coco-metrics` and `nmt-extract` which are detailed below in the Utilities section.
- - You can now give multiple reference files as a list in your configuration files or even as a wildcard. Look at `confs/attention-wmt16-task2-max50-ratio3-en-de.conf`
- - `valid_start: n` can be used in the configuration to start validation for early stopping in the n'th epoch. This may be useful to let the system train for at least n-1 epochs before doing validation.
- - **Important**: `nmt-translate` now uses your model's `load_valid_data()` method for being able to load the validation data exactly the same way as it's done during training. This dropped the necessity to implement model-aware iterator creation in nmt-translate which was cluttering the code. So take a look at the `attention` model for how it's done.
-
 ## Installation
 
 You need the following libraries installed in order to use nmtpy:
@@ -43,14 +20,14 @@ You need the following libraries installed in order to use nmtpy:
   - theano >= 0.8 (or a GIT checkout with `tensor.nnet.logsoftmax` available)
   - six
 
-**Note on MKL**: If you are using Anaconda, make sure that in your .theanorc you only give `-lmkl_rt` as linking flags:
+**Note on MKL**: If you are using Anaconda, make sure that in your `.theanorc` you only give `-lmkl_rt` as linking flags:
 
 ```
 [blas]
 ldflags = -lmkl_rt
 ```
 
-After fulfilling the dependencies, create a easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
+After fulfilling the dependencies, create an easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
 
 ```
 $ python setup.py develop
@@ -103,11 +80,7 @@ build to access real data have to be named `x` as well.
 
 - `BiTextIterator`: Same as above but for parallel corpora. Source side is by default `x` and target side is `y`. The relevant masks are called `x_mask` and `y_mask`.
 
-- `FlickrIterator`: This is for reading Karpathy's deepsent `pkl` file for image captioning.
-
 - `WMTIterator`: This is currently being developed for being able to read `pkl` files containing lists of samples in the following form: `[src, trg, img_id, img_name]`. We would be able to put `None`'s for unprovided modalities so this iterator will be able to work both for task1 and task2 of WMT16.
-
-`MultiIterator` and `ImageFeatsIterator` are obsolete and are not meant to be used. They will be removed in a future version.
 
 ## Models
 
@@ -165,7 +138,6 @@ a model accidentally during consecutive trials:
 
 ```
    model file: attention-embedding_dim_620-rnn_dim_1000-adadelta-bs_32-valid_bleu-decay_0.00050.npz
-model options: attention-embedding_dim_620-rnn_dim_1000-adadelta-bs_32-valid_bleu-decay_0.00050.npz.pkl
  training log: attention-embedding_dim_620-rnn_dim_1000-adadelta-bs_32-valid_bleu-decay_0.00050.log
 ```
 
