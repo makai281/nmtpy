@@ -346,32 +346,24 @@ class Translator(object):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-translate')
-    parser.add_argument('-j', '--n-jobs'        , type=int, default=8,
-                                                  help="Number of processes (default: 8, 0: Auto)")
-    parser.add_argument('-b', '--beam-size'     , type=int, default=12,
-                                                  help="Beam size (only for beam-search case)")
-    parser.add_argument('-N', '--nbest'         , type=int, default=1,
-                                                  help="Output n-best list size (only for beam-search)")
-    parser.add_argument('-r', '--seed'          , type=int, default=1234,
-                                                  help="Random number seed for sampling mode (default: 1234)")
-    parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
+    parser.add_argument('-f', '--first'         , type=int, default=0,      help="How many sentences should be translated, useful for debugging.")
+    parser.add_argument('-j', '--n-jobs'        , type=int, default=8,      help="Number of processes (default: 8, 0: Auto)")
+    parser.add_argument('-b', '--beam-size'     , type=int, default=12,     help="Beam size (only for beam-search)")
+    parser.add_argument('-N', '--nbest'         , type=int, default=1,      help="N for N-best output (only for beam-search)")
+    parser.add_argument('-r', '--seed'          , type=int, default=1234,   help="Random number seed for sampling mode (default: 1234)")
 
-    parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
-    parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (bleu or bleu,meteor)", default="bleu")
-    parser.add_argument('-o', '--saveto'        , type=str, help="Output translations file (if not given, only metrics will be printed)",
-                                                  default=None)
-    parser.add_argument('-e', '--export'        , action='store_true', help="Export all decoding process to json for visualization")
+    parser.add_argument('-v', '--validmode'     , default='single',         help="Validation mode for WMT16 MMT Task2: all/pairs/single/best")
+    parser.add_argument('-D', '--decoder'       , default='beamsearch',     choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
-    parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
-    parser.add_argument('-f', '--first'         , type=int, default=0, help="How many sentences should be translated, useful for debugging.")
-    parser.add_argument('-u', '--suppress-unks' , action='store_true', help="Don't produce <unk>'s in beam search")
-    parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/pairs/single")
+    parser.add_argument('-m', '--model'         , type=str, required=True,  help="Model file")
+    parser.add_argument('-M', '--metrics'       , type=str, default='bleu', help="Comma separated list of metrics (bleu or bleu,meteor)")
+    parser.add_argument('-o', '--saveto'        , type=str, default=None,   help="Output translations file (if not given, only metrics will be printed)")
+    parser.add_argument('-e', '--export'        , action='store_true',      help="Export all decoding process to json for visualization")
+    parser.add_argument('-s', '--score'         , action='store_true',      help="Print scores of each sentence even nbest == 1")
+    parser.add_argument('-u', '--suppress-unks' , action='store_true',      help="Don't produce <unk>'s in beam search")
 
-    parser.add_argument('-S', '--src-files'     , type=str, help="Source data(s) in order: text,image (default: validation set)",
-                                                  nargs='+', default=None)
-    parser.add_argument('-R', '--ref-files'     , type=str, help="One or multiple reference files (default: validation set)",
-                                                  nargs='+',
-                                                  default=None)
+    parser.add_argument('-S', '--src-files'     , type=str, nargs='+', default=None, help="Source data(s) in order: text,image (default: validation set)")
+    parser.add_argument('-R', '--ref-files'     , type=str, nargs='+', default=None, help="One or multiple reference files (default: validation set)")
 
     args = parser.parse_args()
 
