@@ -152,7 +152,7 @@ class BaseModel(object):
         return reg_cost
 
     def get_clipped_grads(self, grads, clip_c):
-        """Clip gradients à la Pascanu et al."""
+        """Clip gradients a la Pascanu et al."""
         g2 = 0.
         new_grads = []
         for g in grads:
