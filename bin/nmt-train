@@ -17,24 +17,24 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 DEFAULTS = {
-        'weight_init':        0.01,           # Scale of the uniform distribution for weight initialization.
+        'weight_init':        'xavier',       # Scale of the uniform distribution for weight initialization.
                                               # Can be a float, "xavier" or "he".
         'batch_size':         32,             # Training batch size
-        'lrate':              0.0001,         # Initial learning rate
-        'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
+        'lrate':              0.0004,         # Initial learning rate
+        'optimizer':          'adam',         # adadelta, sgd, rmsprop, adam
         }
 
 TRAIN_DEFAULTS = {
         'debug':              False,          # Dump graph and print theano node input/outputs
-        'decay_c':            0.0005,         # L2 penalty factor
+        'decay_c':            0.,             # L2 penalty factor
         'clip_c':             5.,             # Clip gradients above clip_c
-        'alpha_c':            0.,             # Alpha regularization for attentional models
+        'alpha_c':            0.,             # Alpha regularization for attentional models (not quite tested)
         'seed':               1234,           # RNG seed
         'suffix':             "",             # Model suffix
         'save_iter':          False,          # Save each best valid weights to separate file
         'device_id':          'auto',         #
-        'patience':           10,             # Early stopping patience
-        'max_epochs':         100,            # Max number of epochs to train
+        'patience':           30,             # Early stopping patience
+        'max_epochs':         200,            # Max number of epochs to train
         'max_iteration':      int(1e6),       # Max number of updates to train
         'valid_start':        1,              # Epoch which validation will start
         'valid_freq':         0,              # 0: End of epochs
