@@ -163,7 +163,7 @@ if __name__ == '__main__':
 
     # Build the model
     log.info("Building model")
-    cost = model.build()
+    data_loss = model.build()
 
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
@@ -172,13 +172,22 @@ if __name__ == '__main__':
         log.info('Building sampler')
         model.build_sampler()
 
-    # Get regularized training cost
-    cost = model.get_regularized_cost(cost, args.decay_c, args.alpha_c)
+    # Compute regularized loss
+    reg_loss = None
+    if args.decay_c > 0:
+        reg_loss = model.get_l2_weight_decay(args.decay_c)
+    if args.alpha_c > 0:
+        # FIXME: not tested at all
+        alpha_loss = model.get_alpha_regularizer(data_loss, args.alpha_c)
+        if reg_loss is None:
+            reg_loss = alpha_loss
+        else:
+            reg_loss += alpha_loss
 
     # Build optimizer
     log.info('Initial learning rate: %.5f' % model.lrate)
     log.info('Building optimizer %s' % args.optimizer)
-    model.build_optimizer(cost, args.clip_c, debug=args.debug)
+    model.build_optimizer(data_loss, reg_loss, args.clip_c, debug=args.debug)
 
     # Save graph
     if args.debug:

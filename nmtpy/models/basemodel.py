@@ -142,15 +142,6 @@ class BaseModel(object):
         weight_decay *= decay_c
         return weight_decay
 
-    def get_regularized_cost(self, cost, decay_c, alpha_c=None):
-        """Return the sum of data loss and regularization loss(es)."""
-        reg_cost = cost
-        if decay_c > 0:
-            reg_cost += self.get_l2_weight_decay(decay_c)
-        if alpha_c and alpha_c > 0:
-            reg_cost += self.get_alpha_regularizer(cost, alpha_c)
-        return reg_cost
-
     def get_clipped_grads(self, grads, clip_c):
         """Clip gradients a la Pascanu et al."""
         g2 = 0.
@@ -163,7 +154,7 @@ class BaseModel(object):
                                            g))
         return new_grads
 
-    def build_optimizer(self, cost, clip_c, dont_update=None, debug=False):
+    def build_optimizer(self, cost, regcost, clip_c, dont_update=None, debug=False):
         """Build optimizer by optionally disabling learning for some weights."""
         tparams = OrderedDict(self.tparams)
 
@@ -172,8 +163,16 @@ class BaseModel(object):
                 if key in dont_update:
                     del tparams[key]
 
+        final_cost = cost.mean()
+        if regcost is not None:
+            final_cost += regcost
+
+        norm_cost = (cost / self.y_mask.sum(0)).mean()
+        if regcost is not None:
+            norm_cost += regcost
+
         # Get gradients of cost with respect to variables
-        grads = tensor.grad(cost, wrt=tparams.values())
+        grads = tensor.grad(final_cost, wrt=tparams.values())
 
         if clip_c > 0:
             grads = self.get_clipped_grads(grads, clip_c)
@@ -186,7 +185,7 @@ class BaseModel(object):
         self.learning_rate = theano.shared(np.float32(self.lrate), name='lrate')
 
         # Get updates
-        updates = opt(tparams, grads, self.inputs.values(), cost, lr0=self.learning_rate)
+        updates = opt(tparams, grads, self.inputs.values(), final_cost, lr0=self.learning_rate)
 
         # Compile forward/backward function
         if debug:
@@ -195,7 +194,7 @@ class BaseModel(object):
                                                    pre_func=inspect_inputs,
                                                    post_func=inspect_outputs))
         else:
-            self.train_batch = theano.function(self.inputs.values(), cost, updates=updates)
+            self.train_batch = theano.function(self.inputs.values(), norm_cost, updates=updates)
 
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
         """Save model under /tmp for passing it to nmt-translate."""
