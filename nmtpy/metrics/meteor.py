@@ -19,7 +19,7 @@ class METEORScorer(object):
 
         self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]
 
-    def compute(self, refs, hyps, language="auto", norm=True):
+    def compute(self, refs, hyps, language="auto", norm=False):
         cmdline = self.__cmdline[:]
 
         if isinstance(hyps, list):
