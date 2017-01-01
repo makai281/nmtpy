@@ -144,7 +144,12 @@ class WMTIterator(Iterator):
             # Get an iterator over sample idxs
             self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=5)
         else:
-            self.rewind()
+            # For once keep it ordered
+            self._idxs = np.arange(self.n_samples).tolist()
+            self._iter = []
+            for i in range(0, self.n_samples, self.batch_size):
+                self._iter.append(self._idxs[i:i + self.batch_size])
+            self._iter = iter(self._iter)
 
     def process_single(self, idx):
         data, _ = Iterator.mask_data([self._seqs[idx][4]])
