@@ -29,6 +29,8 @@ class Model(ParentModel):
         # Call parent's init first
         super(Model, self).__init__(seed, logger, **kwargs)
 
+        self.data_mode = kwargs.get('data_mode', 'pairs')
+
     def load_valid_data(self, from_translate=False, data_mode='all'):
         if from_translate:
             self.valid_ref_files = self.data['valid_trg']
@@ -40,7 +42,7 @@ class Model(ParentModel):
                     mask=False,
                     pklfile=self.data['valid_src'],
                     srcdict=self.src_dict, n_words_src=self.n_words_src,
-                    mode='all') # Override the given parameter
+                    mode='single') # Override the given parameter
         else:
             # Take the first validation item for NLL computation
             self.valid_iterator = WMTIterator(
@@ -48,7 +50,7 @@ class Model(ParentModel):
                     pklfile=self.data['valid_src'],
                     trgdict=self.trg_dict, srcdict=self.src_dict,
                     n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                    mode='all') # Override the given parameter
+                    mode='single') # Override the given parameter
 
         self.valid_iterator.read()
 
@@ -60,7 +62,7 @@ class Model(ParentModel):
                 pklfile=self.data['train_src'],
                 trgdict=self.trg_dict, srcdict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                mode='all')
+                mode=self.data_mode)
         # Prepare batches
         self.train_iterator.read()
         self.load_valid_data()

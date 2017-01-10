@@ -6,7 +6,7 @@ setup(
         name='nmtpy',
         version=nmtpy.__version__,
         description='NMT framework for Python based on Theano',
-        url='http://github.com/ozancaglayan/nmtpy.git',
+        url='http://github.com/lium-lst/nmtpy.git',
         author='Ozan Çağlayan',
         author_email='ozancag@gmail.com',
         license='MIT',

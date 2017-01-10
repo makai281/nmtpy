@@ -33,7 +33,7 @@ def parse_config_option(k, v):
                 else:
                     v[key] = [check_get_path(e) for e in value]
     # Boolean
-    elif v.lower().startswith(("false", "true")):
+    elif v.lower().startswith(("false", "true", "none")):
         v = eval(v.capitalize())
     # Path
     elif is_path(v):

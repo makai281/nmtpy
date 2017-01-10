@@ -34,7 +34,6 @@ class MainLoop(object):
         self.f_valid        = train_args.valid_freq
         self.f_sample       = train_args.sample_freq
         self.f_verbose      = 10
-
         self.do_sampling    = self.f_sample > 0
         self.do_beam_search = self.valid_metric != 'px'
 
@@ -42,14 +41,9 @@ class MainLoop(object):
         self.n_samples      = 5
 
         # Losses and metrics
-        self.epoch_losses         = []
-        self.valid_losses         = []
-        self.valid_metrics        = []
-
-        # TODO: After validation metric stabilizes more or less
-        # do frequent validations using perplexity and call
-        # beam-search if PX is relatively better more than 10%
-        # self.dynamic_validation = train_args.dynamic_validation
+        self.epoch_losses   = []
+        self.valid_losses   = []
+        self.valid_metrics  = []
 
         # If f_valid == 0, do validation at end of epochs
         self.epoch_valid    = (self.f_valid == 0)
@@ -61,13 +55,12 @@ class MainLoop(object):
             self.__log.info('-' * len(msg))
 
     def save_best_model(self):
-        """Overwrites best on-disk model and saves it as a different file optionally."""
+        """Overwrite best on-disk model and saves it as a different file optionally."""
         if self.save_best:
             self._print('Saving the best model')
             self.model.save(self.model.model_path + '.npz')
 
-        # Save each best model as different files
-        # Can be useful for ensembling
+        # Save each best model as different files, can be useful for ensembling
         if self.save_iter:
             self._print('Saving best model at iteration %d' % self.uctr)
             model_path_uidx = '%s.iter%d.npz' % (self.model.model_path, self.uctr)
@@ -76,18 +69,17 @@ class MainLoop(object):
     # TODO
     def __update_lrate(self):
         """Update learning rate by annealing it."""
-        # Change self.model.lrate
+        #self.model.update_lrate(newlrate)
         pass
     
     def _print_loss(self, loss):
         if self.uctr % self.f_verbose == 0:
-            self._print("Epoch: %6d, update: %7d, cost: %10.6f" % (self.ectr,
-                                                                  self.uctr,
-                                                                  loss))
+            self._print("Epoch: %6d, update: %7d, cost: %10.6f" % (self.ectr, self.uctr, loss))
 
     def _train_epoch(self):
-        """Represents a training epoch."""
+        """Train a full epoch."""
         self.ectr += 1
+
         start = time.time()
         start_uctr = self.uctr
         self._print('Starting Epoch %d' % self.ectr, True)
@@ -120,9 +112,7 @@ class MainLoop(object):
             if not self.epoch_valid and self.uctr % self.f_valid == 0:
                 self.__do_validation()
 
-            ###########################
             # Check stopping conditions
-            ###########################
             if self.early_stop:
                 self._print("Early stopped.")
                 return False
@@ -130,6 +120,7 @@ class MainLoop(object):
         # An epoch is finished
         epoch_time = time.time() - start
 
+        # Print epoch summary
         up_ctr = self.uctr - start_uctr
         self.dump_epoch_summary(batch_losses, epoch_time, up_ctr)
 
@@ -137,6 +128,7 @@ class MainLoop(object):
         if self.epoch_valid:
             self.__do_validation()
 
+        # Check whether maximum epoch is reached
         if self.ectr == self.max_epochs:
             self._print("Max epochs %d reached." % self.max_epochs)
             return False
@@ -144,9 +136,11 @@ class MainLoop(object):
         return True
 
     def dump_epoch_summary(self, losses, epoch_time, up_ctr):
+        """Print epoch summary."""
         update_time = epoch_time / float(up_ctr)
         mean_loss = np.array(losses).mean()
         self.epoch_losses.append(mean_loss)
+
         self._print("--> Epoch %d finished with mean loss %.5f (PPL: %4.5f)" % (self.ectr, mean_loss, np.exp(mean_loss)))
         self._print("--> Epoch took %.3f minutes, %.3f sec/update" % ((epoch_time / 60.0), update_time))
 
@@ -176,6 +170,7 @@ class MainLoop(object):
             return True
 
     def __do_validation(self):
+        """Do early-stopping validation."""
         if self.ectr >= self.valid_start:
             self.vctr += 1
 
@@ -215,6 +210,7 @@ class MainLoop(object):
             self.dump_val_summary()
 
     def dump_val_summary(self):
+        """Print validation summary."""
         best_valid_idx = np.argmin(np.array(self.valid_losses)) + 1
         best_vloss = self.valid_losses[best_valid_idx - 1]
         best_px = np.exp(best_vloss)
@@ -231,6 +227,7 @@ class MainLoop(object):
         self._print('--> This is model: %s' % os.path.basename(self.model.model_path))
 
     def run(self):
+        """Run training loop."""
         self.model.set_dropout(True)
         while self._train_epoch():
             pass

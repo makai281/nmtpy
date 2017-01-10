@@ -30,41 +30,41 @@ def inspect_outputs(i, node, fn):
 class BaseModel(object):
     __metaclass__ = ABCMeta
     def __init__(self, **kwargs):
+        # Merge incoming parameters
         self.__dict__.update(kwargs)
 
         # Will be set when set_dropout is first called
-        self.use_dropout = None
+        self.use_dropout    = None
 
         # Input tensor lists
-        self.inputs = OrderedDict()
+        self.inputs         = OrderedDict()
 
         # Theano variables
-        self.f_log_probs = None
-        self.f_init = None
-        self.f_next = None
+        self.f_log_probs    = None
+        self.f_init         = None
+        self.f_next         = None
 
         self.initial_params = None
-        self.tparams = None
+        self.tparams        = None
 
         # Iterators
         self.train_iterator = None
         self.valid_iterator = None
-        self.test_iterator = None
+        self.test_iterator  = None
 
-        # Will be a theano shared variable for lrate annealing
-        self.learning_rate = None
+        # A theano shared variable for lrate annealing
+        self.learning_rate  = None
 
     def set_options(self, optdict):
         """Filter out None's and save option dict."""
         self.options = OrderedDict([(k,v) for k,v in optdict.items() if v is not None])
 
     def set_trng(self, seed):
-        """Sets the seed for Theano RNG."""
+        """Set the seed for Theano RNG."""
         self.trng = RandomStreams(seed)
 
     def set_dropout(self, val):
-        """Sets dropout indicator for activation scaling
-        if dropout is available through configuration."""
+        """Set dropout indicator for activation scaling if dropout is available through configuration."""
         if self.use_dropout is None:
             self.use_dropout = theano.shared(np.float32(0.))
         else:
@@ -72,26 +72,29 @@ class BaseModel(object):
 
     def update_lrate(self, lrate):
         """Update learning rate."""
-        self.learning_rate.set_value(lrate)
+        # Update model's value
+        self.lrate = lrate
+        # Update shared variable used withing the optimizer
+        self.learning_rate.set_value(self.lrate)
 
     def get_nb_params(self):
-        """Returns the number of parameters of the model."""
-        total = 0
-        for p in self.initial_params.values():
-            total += p.size
-        return readable_size(total)
+        """Return the number of parameters of the model."""
+        return readable_size(sum([p.size for p in self.initial_params.values()]))
 
     def set_shared_variables(self, updates):
+        """Set model parameters from updates dict."""
         for k in self.tparams.keys():
             self.tparams[k].set_value(updates[k])
 
     def save(self, fname):
+        """Save model parameters as .npz."""
         if self.tparams is not None:
             np.savez(fname, tparams=unzip(self.tparams), opts=self.options)
         else:
             np.savez(fname, opts=self.options)
 
     def load(self, fname):
+        """Restore .npz checkpoint file into model."""
         self.tparams = OrderedDict()
 
         params = get_param_dict(fname)
@@ -99,13 +102,12 @@ class BaseModel(object):
             self.tparams[k] = theano.shared(v, name=k)
 
     def init_shared_variables(self, _from=None):
-        # initialize Theano shared variables according to the _from
-        # _from can be given as a pre-trained model from nmt-train
+        """Initialize the shared variables of the model."""
         if _from is None:
             _from = self.initial_params
 
-        # tparams is None for the first call
         if self.tparams is None:
+            # tparams is None for the first call
             self.tparams = OrderedDict()
             for kk, pp in _from.iteritems():
                 self.tparams[kk] = theano.shared(_from[kk], name=kk)
@@ -116,6 +118,7 @@ class BaseModel(object):
                 self.tparams[kk].set_value(_from[kk])
 
     def val_loss(self, sentence=None):
+        """Compute validation loss."""
         probs = []
         if sentence is None:
             for data in self.valid_iterator:
@@ -133,6 +136,7 @@ class BaseModel(object):
             return np.array(probs), norm
 
     def get_l2_weight_decay(self, decay_c, skip_bias=True):
+        """Return l2 weight decay regularization term."""
         decay_c = theano.shared(np.float32(decay_c), name='decay_c')
         weight_decay = 0.
         for kk, vv in self.tparams.iteritems():
@@ -142,16 +146,8 @@ class BaseModel(object):
         weight_decay *= decay_c
         return weight_decay
 
-    def get_regularized_cost(self, cost, decay_c, alpha_c=None):
-        reg_cost = cost
-        if decay_c > 0:
-            reg_cost += self.get_l2_weight_decay(decay_c)
-        if alpha_c and alpha_c > 0:
-            reg_cost += self.get_alpha_regularizer(cost, alpha_c)
-        return reg_cost
-
     def get_clipped_grads(self, grads, clip_c):
-        # Gradient clipping
+        """Clip gradients a la Pascanu et al."""
         g2 = 0.
         new_grads = []
         for g in grads:
@@ -162,7 +158,8 @@ class BaseModel(object):
                                            g))
         return new_grads
 
-    def build_optimizer(self, cost, clip_c, dont_update=None, debug=False):
+    def build_optimizer(self, cost, regcost, clip_c, dont_update=None, debug=False):
+        """Build optimizer by optionally disabling learning for some weights."""
         tparams = OrderedDict(self.tparams)
 
         if dont_update is not None:
@@ -170,24 +167,29 @@ class BaseModel(object):
                 if key in dont_update:
                     del tparams[key]
 
+        final_cost = cost.mean()
+        if regcost is not None:
+            final_cost += regcost
+
+        norm_cost = (cost / self.y_mask.sum(0)).mean()
+        if regcost is not None:
+            norm_cost += regcost
+
         # Get gradients of cost with respect to variables
-        grads = tensor.grad(cost, wrt=tparams.values())
+        grads = tensor.grad(final_cost, wrt=tparams.values())
 
         if clip_c > 0:
             grads = self.get_clipped_grads(grads, clip_c)
-
-        #self.grad_norm = theano.function(self.inputs.values(),
-        #                                 tensor.sqrt(sum([(g**2).sum() for g in grads])))
 
         # Load optimizer
         opt = importlib.import_module("nmtpy.optimizers").__dict__[self.optimizer]
 
         # Create theano shared variable for learning rate
+        # self.lrate comes from **kwargs / nmt-train params
         self.learning_rate = theano.shared(np.float32(self.lrate), name='lrate')
 
         # Get updates
-        updates = opt(tparams, grads, self.inputs.values(),
-                      cost, lr0=self.learning_rate)
+        updates = opt(tparams, grads, self.inputs.values(), final_cost, lr0=self.learning_rate)
 
         # Compile forward/backward function
         if debug:
@@ -196,9 +198,10 @@ class BaseModel(object):
                                                    pre_func=inspect_inputs,
                                                    post_func=inspect_outputs))
         else:
-            self.train_batch = theano.function(self.inputs.values(), cost, updates=updates)
+            self.train_batch = theano.function(self.inputs.values(), norm_cost, updates=updates)
 
     def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', out_file=None):
+        """Save model under /tmp for passing it to nmt-translate."""
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save(tmpf.name)
@@ -212,6 +215,7 @@ class BaseModel(object):
         return result
 
     def gen_sample(self, input_dict, maxlen=50, argmax=False):
+        """Generate samples, do greedy (argmax) decoding or forced decoding."""
         # A method that samples or takes the max proba's or
         # does a forced decoding depending on the parameters.
         final_sample = []
@@ -245,6 +249,7 @@ class BaseModel(object):
                 # Multinomial sampling
                 nw = next_word[0]
 
+            # 0: <eos>
             if nw == 0:
                 break
 
@@ -263,6 +268,7 @@ class BaseModel(object):
         return None
 
     def info(self):
+        """Reimplement to show model specific information before training."""
         pass
 
     def get_alpha_regularizer(self, alpha_c):
@@ -274,8 +280,7 @@ class BaseModel(object):
         # layer, types of input etc. Look at the attention model
         # and copy it into your class and modify it correctly.
 
-        # nmt-translate will also used the relevant beam_search
-        # based on the model type.
+        # nmt-translate will also use the relevant beam_search() based on model type.
 
         # You can pass additional arguments to beam_search through kwargs.
         pass
@@ -289,23 +294,20 @@ class BaseModel(object):
 
     @abstractmethod
     def load_data(self):
-        # Load and prepare your training and validation data
-        # inside this function.
+        """Load and prepare your training and validation data."""
         pass
 
     @abstractmethod
     def init_params(self):
-        # Initialize the weights and biases of your network
-        # through the helper functions provided in layers.py.
+        """Initialize the weights and biases of your network."""
         pass
 
     @abstractmethod
     def build(self):
-        # This builds the computational graph of your network.
+        """Build the computational graph of your network."""
         pass
 
     @abstractmethod
     def build_sampler(self):
-        # This is quite similar to build() but works in a
-        # sequential manner for beam-search or sampling.
+        """Similar to build() but works sequentially for beam-search or sampling."""
         pass

@@ -31,9 +31,6 @@ class Model(BaseModel):
         # Load dictionaries
         dicts = kwargs['dicts']
 
-        # Should we normalize train cost or not?
-        self.norm_cost = kwargs.get('norm_cost', True)
-
         # Use GRU by default as encoder
         self.enc_type = kwargs.get('enc_type', 'gru')
 
@@ -46,12 +43,15 @@ class Model(BaseModel):
         # Get dropout parameters
         # Let's keep the defaults as 0 to not use dropout
         # You can adjust those from your conf files.
-        self.emb_dropout = kwargs.get('emb_dropout', 0.)
-        self.ctx_dropout = kwargs.get('ctx_dropout', 0.)
-        self.out_dropout = kwargs.get('out_dropout', 0.)
+        self.emb_dropout = kwargs.get('emb_dropout', 0.2)
+        self.ctx_dropout = kwargs.get('ctx_dropout', 0.4)
+        self.out_dropout = kwargs.get('out_dropout', 0.4)
 
         # Number of additional GRU encoders for source sentences
         self.n_enc_layers  = kwargs.get('n_enc_layers' , 1)
+
+        # Use a single embedding matrix for target words?
+        self.tied_trg_emb = kwargs.get('tied_trg_emb', True)
 
         # Load dictionaries, limit shortlist size if requested
         self.src_dict, src_idict = load_dictionary(dicts['src'])
@@ -275,6 +275,8 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_prev' , nin=self.embedding_dim , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
+        if self.tied_trg_emb is False:
+            params = get_new_layer('ff')[0](params, prefix='ff_logit'  , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
 
         self.initial_params = params
 
@@ -362,7 +364,11 @@ class Model(BaseModel):
 
         logit = dropout(tanh(logit_gru + logit_prev + logit_ctx), self.trng, self.out_dropout, self.use_dropout)
 
-        logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
+        if self.tied_trg_emb is False:
+            logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        else:
+            logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
+
         logit_shp = logit.shape
 
         # Apply logsoftmax (stable version)
@@ -383,10 +389,7 @@ class Model(BaseModel):
         self.y_mask = y_mask
         self.alphas = alphas
 
-        if self.norm_cost:
-            return (cost / y_mask.sum(0)).mean()
-        else:
-            return cost.mean()
+        return cost
 
     def build_sampler(self):
         x = tensor.matrix('x', dtype=INT)
@@ -449,7 +452,12 @@ class Model(BaseModel):
         logit_gru  = get_new_layer('ff')[1](self.tparams, next_state,   prefix='ff_logit_gru', activ='linear')
 
         logit = tanh(logit_gru + logit_prev + logit_ctx)
-        logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
+
+        if self.tied_trg_emb is False:
+            logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        else:
+            logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
+
         # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
 

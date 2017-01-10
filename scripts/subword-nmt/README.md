@@ -1,7 +1,7 @@
 Subword Neural Machine Translation
 ==================================
 
-This repository contains preprocessing scripts to segment text into subword
+This folder contains preprocessing scripts to segment text into subword
 units. The primary purpose is to facilitate the reproduction of our experiments
 on Neural Machine Translation with subword units (see below for reference).
 
@@ -14,11 +14,6 @@ To apply byte pair encoding to word segmentation, invoke these commands:
 
     ./learn_bpe.py -s {num_operations} < {train_file} > {codes_file}
     ./apply_bpe.py -c {codes_file} < {test_file}
-
-To segment rare words into character n-grams, do the following:
-
-    ./get_vocab.py < {train_file} > {vocab_file}
-    ./segment-char-ngrams.py --vocab {vocab_file} -n {order} --shortlist {size} < {test_file}
 
 The original segmentation can be restored with a simple replacement:
 
