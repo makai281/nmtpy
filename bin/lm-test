@@ -32,61 +32,26 @@ log = Logger._logger
 """Worker process which does calculate logprobs from data send through the model."""
 def test_model(queue, rqueue, pid, model, beam_size, nbest,
                     suppress_unks, get_att_alphas=False, seed=1234, mode="argmax"):
-    model.build_sampler()
-
-    # Get function call string
-
-    mode == "argmax"
-    func_call = 'model.gen_sample(data_dict, argmax=True)'
 
     while True:
         req = queue.get()
-
         # We should avoid this
         if req is None:
             break
 
         # Get data from queue
         idx, data_dict = req[0], req[1]
-        #print("##### model.src_dict :",model.src_dict)
-        #for i in model.src_dict.iteritems():
-	#	print ("i = ",i)
-	for vv in data_dict['y'][:]:
-            vv=vv.item()
-	    #print 'vv = ',vv
-            if vv == 0:
-                    break
-            key= [c for c,v in model.src_dict.items() if v==vv]
-	    #cherchecle = lambda d, val: [c for c,v in d.items() if v==val]
-	    if key:  #in model.src_dict.items():
-                    print(key[0], end=' ')
-                    #print "model.src_dict.items(vv) = ",model.src_dict.items(vv)
-            else:
-                    print('UNK', end=' ')	
-	#print("data_dict : ",data_dict)
-        # Do decoding
-        result = eval(func_call)
+        # Calculate validation loss
+        curr_loss, sentlen = model.val_loss(data_dict)
 
-        sample = result[0]
-        score = result[1]
-        scores = result[2]
-	print("sample = ",sample)
-	print ("score = ",score)
-	print ("scores = ",scores)
-        # normalize scores according to sequence lengths
-#        lengths = np.array([len(s) for s in sample])
-#        score = score / lengths
+        score=0
+        rqueue.put((idx, score, sentlen, curr_loss))
 
-        sidx = np.argsort(score)[:nbest]
-	sample = np.array(sample)[sidx]
 
 """Tester starts worker processes, delegates source iterator
 to them, waits for the results."""
 class Tester(object):
     def __init__(self, args):
-
-#        self.beam_size = args.beam_size
-
         # Always lists provided by argparse (nargs:'+')
         self.src_files = args.src_files
         self.ref_files = args.ref_files
@@ -95,18 +60,11 @@ class Tester(object):
         # for further exporting to json
         self.export = args.export
 
-        # Assume for now that a request for JSON exporting
-        # assumes fetching attentional alphas as well.
-#        self.get_att_alphas = self.export
-
         self.nbest = args.nbest
         self.n_jobs = args.n_jobs
         self.seed = args.seed
         self.mode = args.decoder
-        self.valid_mode = args.validmode
-        self.suppress_unks = args.suppress_unks
         self.model_file = args.model
-        self.first = args.first
 
         self.utf8 = False
         self.filters = []
@@ -133,39 +91,14 @@ class Tester(object):
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.model.src_dict.iteritems()])
 
-        # Be compatible for both utf-8 and normal dictionaries
-#        if isinstance(self.ref_idict[2], unicode):
-#            self.utf8 = True
-
             # Normal test mode
         if self.src_files is not None:
-                # We're given source files from the commandline
-                # 1st should be textual data
-	        self.model.data['valid_src'] = self.src_files[0]
-#                if 'valid_img' in self.model.data:
-#                    self.model.data['valid_img'] = self.src_files[1]
+            self.model.data['valid_src'] = self.src_files[0]
 
-#                if self.ref_files is not None:
-#                    self.model.data['valid_trg'] = self.ref_files
 
-            # Load validation data from the model
-            # Check whether load_valid_data has a param to set valid data mode
-#            if 'data_mode' in inspect.getargspec(self.model.load_valid_data).args:
-#                self.model.load_valid_data(from_translate=True, data_mode=self.valid_mode)
-#            else:
-#                self.model.load_valid_data(from_translate=True)
-	
-	self.model.load_valid_data()
+        self.model.load_valid_data()
         self.iterator = self.model.valid_iterator
-
-            # Full or partial decoding given by -f argument
-        if self.first > 0:
-                # Only first self.first sentences
-            self.n_sentences = self.first
-        else:
-                # All sentences
-            self.n_sentences = self.iterator.n_samples
-
+        self.n_sentences = self.iterator.n_samples
         log.info('I will test %d samples' % self.n_sentences)
 
         if self.src_files is None:
@@ -189,12 +122,14 @@ class Tester(object):
         write_queue = Queue()
         read_queue = Queue()
         # Create processes
+        self.model.build_sampler()
+        self.model.build()
+        self.model.set_dropout(False)
         for idx in xrange(self.n_jobs):
             self.processes[idx] = Process(target=test_model,
-                                          args=(write_queue, read_queue, idx, self.model,
-#                                          self.nbest, self.suppress_unks, self.get_att_alphas,
-					  self.nbest, self.suppress_unks,
-					  self.seed, self.mode))
+                    args=(write_queue, read_queue, idx, self.model,
+                        self.nbest,
+                        self.seed, self.mode))
             self.processes[idx].start()
             cleanup.register_proc(self.processes[idx].pid)
 
@@ -202,91 +137,62 @@ class Tester(object):
 
         # Send data to worker processes
         for idx in xrange(self.n_sentences):
-            #print ("idx : ",idx)
-	    #print "iter : ",self.iterator.__iter
-	    #print "self.iterator : ",self.iterator._minibatches
-	    sample = next(self.iterator)
+            sample = next(self.iterator)
             write_queue.put((idx, sample))
-	    print("##### write queue -> idx : ",idx," , sample : ",sample)
-	    print("##### ")
-	    for vv in sample:
-	    	print(vv)
-            	if vv == 0:
-                	break
-                if vv in self.model.src_dict:
-                	print(vv)
-			print(self.model.src_dict[vv])
-			print(self.model.src_dict.items(vv))
-                else:
-                	print('UNK') 
-	    #print("#####",self.model.src_dict[sample])
-	log.info("Distributed %d sentences to worker processes." % self.n_sentences)
+
+        log.info("Distributed %d sentences to worker processes." % self.n_sentences)
 
         # Receive the results
-        self.trans  = [None] * self.n_sentences
-        self.scores = [None] * self.n_sentences
-        # Will be filled if --export is passed
-        #self.att_weights = [None] * self.n_sentences
-
+        self.sentences = [None] * self.n_sentences
+        self.log_probs = [None] * self.n_sentences
+        self.sum_logprob = 0.0
         t = time.time()
+        logprobs=0
+        sentlens=0
+        sum_sentlen=0
+        sum_logprob=0
         for i in xrange(self.n_sentences):
             # Get response from worker
-	    resp = read_queue.get()
+            resp = read_queue.get()
+
             # This is the sample id of the processed sample
             idx = resp[0]
-	    #print ("idx : ",idx)
-            # Get the hypotheses and scores
-            hyps, self.scores[idx] = resp[1], resp[2]
-	    print('hyps:', hyps, ' scores:', scores[idx])
+            print("progress = ",idx+1,"/",self.n_sentences)
+            sentlens, logprobs = resp[2], resp[3]
+            sum_sentlen += sentlens
 
-            # Did we receive attention weights from beam search?
-            #if len(resp) == 4:
-            #    self.att_weights[idx] = resp[3][0]
+            for i in logprobs:
+                self.sum_logprob+=i
 
-            outs = []
-	    for hyp in hyps:
-		hyp = idx_to_sent(self.ref_idict, hyp)
-		print("###### hyp : ",hyp)
-                # Apply post-processing filters like compound stitching
-                #for filt in self.filters:
-                #    hyp = filt(hyp)
-
-               # Append the actual hypothesis
-                outs.append(hyp)
-
-            # Place the hypotheses into their relevant places
-            self.trans[idx] = outs
+            self.log_probs[idx] = logprobs
 
             # Print progress
             if (i+1) % 100 == 0:
                 t = time.time() - t
                 log.info("%d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, t))
                 t = time.time()
-	print("########## STOP ###########")
+        print("########## END ###########")
+        #print("sum_logprob : ",self.sum_logprob)
+        #print("sum_sentlen : ",sum_sentlen)
+        print("Test Perplexity : ", np.exp(self.sum_logprob/sum_sentlen))
+        self.model.set_dropout(True)
         # Stop workers
         for idx in xrange(self.n_jobs):
             write_queue.put(None)
             self.processes[idx].terminate()
             cleanup.unregister_proc(self.processes[idx].pid)
 
-    def write_hyps(self, filename, dump_scores=False):
+    #Write sentence and logprobs for rescoring purpose
+    def write_logprobs(self, filename, dump_scores=False):
         def __encode(s):
             return s.encode('utf-8') if self.utf8 else s
 
         with open(filename, 'w') as f:
-            if self.mode == "forced" or dump_scores:
-                # We have a single hypothesis and a score for each sentence
-                for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
-                    f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc)))
-            elif self.nbest > 1:
-                # We have a n hypotheses and n scores for each sentence
-                for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
-                    for tr, sc in zip(trs, scs):
-                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr, sc)))
-            else:
-                self.hyps = [s[0] for s in self.trans]
-                hyps = "\n".join(self.hyps) + "\n"
-                f.write(__encode(hyps))
+            print("Writing output file ...")
+            for idx, lp in enumerate(self.log_probs):
+                #print("idx = ",idx," lp = ",lp,"lp_len = ",len(lp))
+                logprobs_array=''.join(map(str,' '.join(str(i[0]) for i in lp)))
+                f.write(__encode("%d ||| %s ||| %f\n"%(idx, logprobs_array,sum(lp))))
 
     def compute_score(self, hyp_file, scorers):
         results = {}
@@ -296,53 +202,6 @@ class Tester(object):
             results[scorer] = (str(score), score.score)
         self.results = results
         return results
-
-    def dump_json(self, filename):
-        """Export decoding data into json for further visualization."""
-        metadata = OrderedDict()
-        metadata['model'] = os.path.basename(self.model_file)
-        metadata['beam_size'] = self.beam_size
-
-        def _default(obj):
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-
-        srcs = []
-        # Reset iterator
-        self.iterator.rewind()
-        for i in range(self.n_sentences):
-            data = next(self.iterator)
-            if 'x' in data:
-                srcs.append(idx_to_sent(self.model.src_idict, data['x'].flatten()))
-
-        # Save metadata
-        data = {'metadata' : metadata}
-
-        # Open reference files
-        all_refs = [open(f).read().strip().split("\n") for f in self.ref_files]
-        n_refs = len(all_refs)
-        n_samples = len(all_refs[0])
-
-        mult_source = False
-        if len(all_refs[0]) != len(srcs):
-            # Multiple sources given
-            mult_source = True
-
-        refs = []
-        # Collect reference sentences
-        for sidx in range(self.n_sentences):
-            sidx = sidx if not mult_source else sidx % len(all_refs[0])
-            refs.append([all_refs[i][sidx] for i in range(n_refs)])
-
-        # Add sources, targets, and references
-        samples = []
-        for s, t, att in zip(srcs, self.trans, self.att_weights):
-            sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'ref' : refs.pop(0), 'att': att}
-            samples.append(sample)
-        data['data'] = samples
-
-        with open(filename, 'w') as f:
-            json.dump(data, f, default=_default)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='lm-test')
@@ -357,16 +216,12 @@ if __name__ == "__main__":
     parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
-    parser.add_argument('-M', '--metrics'       , type=str, help="Comma separated list of metrics (bleu or bleu,meteor)", default="bleu")
     parser.add_argument('-o', '--saveto'        , type=str, help="Output test file (if not given, only metrics will be printed)",
                                                   default=None)
     parser.add_argument('-e', '--export'        , action='store_true', help="Export all decoding process to json for visualization")
 
     parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
-    parser.add_argument('-f', '--first'         , type=int, default=0, help="How many sentences should be tested, useful for debugging.")
-    parser.add_argument('-u', '--suppress-unks' , action='store_true', help="Don't produce <unk>'s in beam search")
-    parser.add_argument('-v', '--validmode'     , default='single', help="Validation mode for task2 and iter_wmt iterator: all/pairs/single")
-
+    
     parser.add_argument('-S', '--src-files'     , type=str, help="Source data(s) in order: text,image (default: validation set)",
                                                   nargs='+', default=None)
     parser.add_argument('-R', '--ref-files'     , type=str, help="One or multiple reference files (default: validation set)",
@@ -396,23 +251,10 @@ if __name__ == "__main__":
     tester = Tester(args)
     tester.set_model_options()
     tester.start()
-    
     out_file = args.saveto
-    if not args.saveto:
-        # Override this if given
-        args.score = False
-        hypf = get_temp_file(suffix=".nbest_hyps")
-        out_file = hypf.name
-        hypf.close()
 
-    # If we evaluate multiple source phrases and take their best
-    # assume -s is given
-    if args.validmode != 'single':
-        args.score = True
-
-    # Dump hypotheses
-#    tester.write_hyps(out_file, args.score)
-
+    tester.write_logprobs(out_file, args.score)
+    print("DONE")
     if args.export and args.saveto:
         # Export attentional informations if -o and -e are given
         tester.dump_json("%s.json" % out_file)
@@ -421,8 +263,8 @@ if __name__ == "__main__":
     if args.decoder != "forced" and args.nbest == 1 \
             and tester.ref_files and not args.score:
         # Compute all metrics
-   	results = tester.compute_score(out_file, args.metrics.split(","))
+        results = tester.compute_score(out_file, args.metrics.split(","))
         # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
-    	print(results)
+        print(results)
 
     sys.exit(0)

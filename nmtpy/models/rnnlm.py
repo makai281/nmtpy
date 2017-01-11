@@ -131,10 +131,11 @@ class Model(BaseModel):
 
         cost = log_probs.flatten()[x_flat_idx]
         cost = cost.reshape([x.shape[0], x.shape[1]])
+        cost = (cost * x_mask)#.sum(0)
+
+        #self.f_log_probs_detailled = theano.function(self.inputs.values(), cost)
         cost = (cost * x_mask).sum(0)
-
         self.f_log_probs = theano.function(self.inputs.values(), cost)
-
         # We may want to normalize the cost by dividing
         # to the number of target tokens but this needs
         # scaling the learning rate accordingly.
@@ -150,7 +151,7 @@ class Model(BaseModel):
         y = tensor.vector('y_sampler', dtype=INT)
         init_state = tensor.matrix('init_state', dtype=FLOAT)
 
-    # if it's the first word, emb should be all zero
+        # if it's the first word, emb should be all zero
         emb = tensor.switch(y[:, None] < 0,
                             tensor.alloc(0., 1, self.tparams['W_in_emb'].shape[1]),
                             self.tparams['W_in_emb'][y])
@@ -180,51 +181,53 @@ class Model(BaseModel):
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inps, outs, name='f_next')
 
-	
+
     def gen_sample(self, input_dict, trng=None, maxlen=30, argmax=False):
         sample = []
         sample_scores = []
         sample_score = 0
+    	perplexity = 0
+        curr_loss=0
 
         # initial token is indicated by a -1 and initial state is zero
         next_w = -1 * np.ones((1,)).astype(INT)
         next_state = np.zeros(self.rnn_dim).astype(FLOAT)
         #next_state = np.zeros((1,self.rnn_dim)).astype(FLOAT)
-	#print('####################### self.rnn_dim : ',self.rnn_dim)
-	#print('################################### rnn_dim: ', self.rnn_dim, ' next_state shape: ', next_state.shape)
-	#print('################################### next_w shape: ', next_w.shape)
         target = None
         if "y" in input_dict:
             # We're doing forced decoding
             target = input_dict.pop("y")
-	    #print 'target = ', target
+        #print '##-## target = ', target
             maxlen = len(target)
 	    #print 'maxlen = ', maxlen
 
         for ii in xrange(maxlen):
-	    print "################## ITER ", ii
-	    print "next_w=", next_w
-            #print "next_w : ",next_w
-	    #print "next_state : ",next_state
-	    next_state = next_state.reshape(1, self.rnn_dim)
-	    inps = [next_w, next_state]
-	    print "next_state=", next_state[0, :10]
-	    #inps = [next_w, next_state]#[[1]]]
-	    ret = self.f_next(*inps)
-            next_p, next_w, next_state = ret[0], ret[1], ret[2]
-            print "next_p[0]=", next_p[0]
-	    if target is not None:
-	    	next_w = target[ii]
-	    elif argmax:
+    	    print("################## ITER ", ii)
+    	    #print "next_w=", next_w
+    	    next_state = next_state.reshape(1, self.rnn_dim)
+    	    inps = [next_w, next_state]
+            #self.set_dropout(False)
+            #curr_loss=self.val_loss()
+            #self.set_dropout(True)
+    	    #ret = self.f_next(*inps)
+            #next_p, next_w, next_state = ret[0], ret[1], ret[2]
+            #print "next_p[0]=", next_p[0]
+    	    if target is not None:
+    	    	next_w = target[ii]
+    	    	print("target = ",next_w)
+    	    elif argmax:
                 next_w = [next_p[0].argmax()]
-		print "argmax: ", next_w[0]
+    	    	print "argmax: ", next_w[0]
             else:
-		print "sampling: ", next_w[0]
-            sample.append(next_w[0])
-            sample_scores.append(next_p[0, next_w[0]])
-            sample_score += next_p[0, next_w[0]]
-	    print "sample score ", next_p[0, next_w[0]]
+                print "sampling: ", next_w[0]
+            #sample.append(next_w[0])
+    	    #sample_scores.append(next_p[0, next_w[0]])
+            #sample_score += next_p[0, next_w[0]]
+	        #print "sample score ", next_p[0, next_w[0]]
+            #perplexity=tensor.exp(sample_score/maxlen)
+            #print("##### maxlen : ",maxlen," ## sample_score : ",sample_score)
+            #perplexity=perplexity.eval()
             if next_w[0] == 0:
                 break
 
-        return sample, sample_score, sample_scores
+        return sample, sample_score, sample_scores, curr_loss, maxlen
