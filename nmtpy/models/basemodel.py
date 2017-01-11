@@ -158,22 +158,33 @@ class BaseModel(object):
         """Build optimizer by optionally disabling learning for some weights."""
         tparams = OrderedDict(self.tparams)
 
+        # Filter out weights that we do not want to update during backprop
         if dont_update is not None:
             for key in tparams:
                 if key in dont_update:
                     del tparams[key]
 
+        # Our final cost
         final_cost = cost.mean()
+
+        # If we have a regularization cost, add it
         if regcost is not None:
             final_cost += regcost
 
-        norm_cost = (cost / self.y_mask.sum(0)).mean()
-        if regcost is not None:
-            norm_cost += regcost
+        # Normalize cost w.r.t sentence lengths to correctly compute perplexity
+        # Only active when y_mask is available
+        try:
+            norm_cost = (cost / self.y_mask.sum(0)).mean()
+            if regcost is not None:
+                norm_cost += regcost
+        except AttributeError as ae:
+            norm_cost = final_cost
 
         # Get gradients of cost with respect to variables
+        # This uses final_cost which is not normalized w.r.t sentence lengths
         grads = tensor.grad(final_cost, wrt=tparams.values())
 
+        # Clip gradients if requested
         if clip_c > 0:
             grads = self.get_clipped_grads(grads, clip_c)
 
@@ -189,7 +200,7 @@ class BaseModel(object):
 
         # Compile forward/backward function
         if debug:
-            self.train_batch = theano.function(self.inputs.values(), cost, updates=updates,
+            self.train_batch = theano.function(self.inputs.values(), norm_cost, updates=updates,
                                                mode=theano.compile.MonitorMode(
                                                    pre_func=inspect_inputs,
                                                    post_func=inspect_outputs))
