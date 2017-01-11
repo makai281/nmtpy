@@ -16,7 +16,7 @@ def ensure_dirs(dirs):
         pass
 
 def real_path(p):
-    return os.path.abspath(os.path.expanduser(p))
+    return os.path.realpath(os.path.expanduser(p))
 
 def listify(l):
     if not isinstance(l, list):
