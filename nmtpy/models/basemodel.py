@@ -117,23 +117,19 @@ class BaseModel(object):
                 # Let this fail if _from doesn't match the model
                 self.tparams[kk].set_value(_from[kk])
 
-    def val_loss(self, sentence=None):
+    def val_loss(self):
         """Compute validation loss."""
         probs = []
-        if sentence is None:
-            for data in self.valid_iterator:
+
+        # dict of x, x_mask, y, y_mask
+        for data in self.valid_iterator:
             # Don't fail if data doesn't contain y_mask. The loss won't
             # be normalized but the training will continue
-            #NOTE: y_mask is now mandatory even if batch size is 1
-                norm = data['y_mask'].sum(0)
-                log_probs = sum(self.f_log_probs(*data.values())) / norm
-                probs.extend(log_probs)
-            return np.array(probs).mean()
-        else:
-            norm = sentence['y_mask'].sum(0)
-            log_probs = self.f_log_probs_detailled(*sentence.values())
+            norm = data['y_mask'].sum(0) if 'y_mask' in data else 1
+            log_probs = self.f_log_probs(*data.values()) / norm
             probs.extend(log_probs)
-            return np.array(probs), norm
+
+        return np.array(probs).mean()
 
     def get_l2_weight_decay(self, decay_c, skip_bias=True):
         """Return l2 weight decay regularization term."""
