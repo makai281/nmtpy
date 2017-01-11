@@ -17,7 +17,7 @@ import argparse
 # [ssplit, tsplit, imgid, imgname, swords, twords]
 
 puncs = list(string.punctuation)
-puncs += ["..", "...", "&amp;", "&apos;", "&gt;", "&lt;", "&quot;"]
+#puncs += ["..", "...", "&amp;", "&apos;", "&gt;", "&lt;", "&quot;"]
 
 _ = os.path.expanduser
 
@@ -106,6 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--validsrc'   , nargs='+', help="Validation source sentence file(s).", required=True)
     parser.add_argument('-V', '--validtrg'   , nargs='+', help="Validation target sentence file(s).", required=True)
     parser.add_argument('-e', '--testsrc'    , nargs='+', help="Test source sentence file(s).", required=False)
+    parser.add_argument('-E', '--testtrg'    , nargs='+', help="Test target sentence file(s).", required=False)
 
     args = parser.parse_args()
 
@@ -126,6 +127,7 @@ if __name__ == '__main__':
     test_src_files  = []
     if args.testsrc:
         test_src_files = sorted(args.testsrc)
+        test_trg_files = sorted(args.testtrg)
 
     srclang = train_src_files[0].split(".")[-1]
     trglang = train_trg_files[0].split(".")[-1]
@@ -154,6 +156,7 @@ if __name__ == '__main__':
     valid_src_sents = []
     valid_trg_sents = []
     test_src_sents  = []
+    test_trg_sents  = []
 
     # Read all sentences once, do lowercasing and strip punctuations if requested
     for f in train_src_files:
@@ -176,6 +179,15 @@ if __name__ == '__main__':
         print f
         test_src_sents.append(process_file(f, args.lowercase, args.strippunc))
 
+    for f in test_trg_files:
+        print f
+        test_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
+
+    sent_sets = {'train' : (train_src_sents, train_trg_sents),
+                 'valid' : (valid_src_sents, valid_trg_sents),
+                 'test'  : (test_src_sents, test_trg_sents)
+                }
+
     if args.lowercase or args.strippunc:
         print "Rewriting processed validation sentences"
         # Rewrite validation files as they are now processed
@@ -184,15 +196,18 @@ if __name__ == '__main__':
             suffix += ".lc"
         if args.strippunc:
             suffix += ".nopunct"
-        for idx, split in enumerate(valid_src_sents, 1):
-            with open(os.path.join(args.output, 'valid.%d.tok%s.%s' % (idx, suffix, srclang)), 'wb') as f:
-                for sent in split:
-                    f.write(" ".join(sent).encode('utf-8') + '\n')
 
-        for idx, split in enumerate(valid_trg_sents, 1):
-            with open(os.path.join(args.output, 'valid.%d.tok%s.%s' % (idx, suffix, trglang)), 'wb') as f:
-                for sent in split:
-                    f.write(" ".join(sent).encode('utf-8') + '\n')
+        for s in ['valid', 'test']:
+            src_sents, trg_sents = sent_sets[s]
+            for idx, split in enumerate(src_sents, 1):
+                with open(os.path.join(args.output, '%s.%d.tok%s.%s' % (s, idx, suffix, srclang)), 'wb') as f:
+                    for sent in split:
+                        f.write(" ".join(sent).encode('utf-8') + '\n')
+
+            for idx, split in enumerate(trg_sents, 1):
+                with open(os.path.join(args.output, '%s.%d.tok%s.%s' % (s, idx, suffix, trglang)), 'wb') as f:
+                    for sent in split:
+                        f.write(" ".join(sent).encode('utf-8') + '\n')
 
     tr_sum = sum([len(spl) for spl in train_src_sents])
     vl_sum = sum([len(spl) for spl in valid_src_sents])
@@ -210,10 +225,10 @@ if __name__ == '__main__':
     splits = {
                 'train' : [train_src_sents, train_trg_sents, 0],
                 'valid' : [valid_src_sents, valid_trg_sents, n_train],
-                'test'  : [test_src_sents,  None, n_train + n_valid],
+                'test'  : [test_src_sents,  test_trg_sents, n_train + n_valid],
              }
 
-    for split in ['train', 'valid']:
+    for split in ['train', 'valid', 'test']:
         do_clean = (split == 'train')
         print "Processing %s splits" % split
         # This is the cross product of all splits
@@ -227,15 +242,6 @@ if __name__ == '__main__':
             print
 
         print "Final %s pair count: %d" % (split, len(sentences[split]))
-
-    if len(test_src_sents) > 0:
-        # We also have test sentences
-        print "Processing test splits"
-        split = "test"
-        src_sents, trg_sents, img_offset = splits[split]
-        for sidx, ssentsplit in enumerate(src_sents):
-            for idx, swords in enumerate(ssentsplit):
-                sentences[split].append([sidx, None, idx, imgs[img_offset+idx], swords, None])
 
     for split in ['train', 'valid', 'test']:
         if len(sentences[split]) > 0:
