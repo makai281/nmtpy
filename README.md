@@ -63,7 +63,7 @@ similar performance with OpenBLAS as well but the setup procedure may be difficu
 
 nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in the future.
 
-## Ensuring Reproducibility
+## Ensuring Reproducibility in Theano
 
 When we started to work on **dl4mt-tutorial**, we noticed an annoying reproducibility problem:
 Multiple runs of the same experiment (same seed, same machine, same GPU) were not producing exactly
