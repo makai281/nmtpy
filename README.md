@@ -80,7 +80,7 @@ But apparently this was not enough to obtain reproducible models. After debuggin
 So if you care (and you absolutely should) about reproducibility, make sure your Theano copy has above changes applied. If you use
 Theano from `master` branch and your clone is newer than *17 August 2016*, the second fix is probably available in your copy.
 
-Finally just to give some numbers, this irreproducibility was causing a deviation of 1 to 1.5 BLEU between multiple runs of the same experiment.
+Finally just to give some numbers, this irreproducibility was causing a deviation of **1 to 1.5** BLEU between multiple runs of the same experiment.
 
 ## Configuring Theano
 
