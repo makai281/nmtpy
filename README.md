@@ -6,13 +6,13 @@ The basic motivation behind forking **dl4mt-tutorial** was to create a framework
 easy to implement a new model by just copying and modifying an existing model class (or even
 inheriting from it and overriding some of its methods).
 
-To achieve this purpose, **nmtpy** tries to completely isolate training loop, beam search
-and model definition:
+To achieve this purpose, **nmtpy** tries to completely isolate training loop, beam search,
+iteration and model definition:
   - `nmt-train` script to initiate a training experiment
   - `nmt-translate` to produce model-agnostic translations. You just pass a trained model's
   checkpoint file and it does its job.
-  - A `BaseModel` and several other NMT models deriving from it which define the actual
-  architecture.
+  - An abstract `BaseModel` class to derive from to define your NMT architecture.
+  - An abstract `Iterator` to derive from for your custom iterators.
 
 A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is as follows:
 
