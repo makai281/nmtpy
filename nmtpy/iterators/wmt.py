@@ -111,6 +111,11 @@ class WMTIterator(Iterator):
         # We now have a list of samples
         self.n_samples = len(self._seqs)
 
+        # Depending on mode, we can have multiple sentences per image so
+        # let's store the number of actual images as well.
+        # n_unique_samples <= n_samples
+        self.n_unique_images = len(set([s[3] for s in self._seqs]))
+
         # Some statistics
         unk_trg = 0
         unk_src = 0
