@@ -39,7 +39,7 @@ class Model(BaseModel):
 
     def load_valid_data(self):
         self.valid_iterator = TextIterator(
-                                batch_size=1,#self.batch_size,
+                                batch_size=1,
                                 mask=True,
                                 shuffle_mode=None,
                                 file=self.data['valid_src'],
@@ -90,8 +90,9 @@ class Model(BaseModel):
         x = tensor.matrix('x', dtype=INT)
         x_mask = tensor.matrix('x_mask', dtype=FLOAT)
 
-        self.inputs['x'] = x
-        self.inputs['x_mask'] = x_mask
+        # Store tensors
+        self.inputs['x']        = x         # Source words
+        self.inputs['x_mask']   = x_mask    # Source mask
 
         n_timesteps = x.shape[0]
         n_samples = x.shape[1]
@@ -131,11 +132,15 @@ class Model(BaseModel):
 
         cost = log_probs.flatten()[x_flat_idx]
         cost = cost.reshape([x.shape[0], x.shape[1]])
-        cost = (cost * x_mask)#.sum(0)
+        cost = (cost * x_mask)
 
-        #self.f_log_probs_detailled = theano.function(self.inputs.values(), cost)
+        #f_log_probs_detailled return the log probs array correponding to each word log probs
+        self.f_log_probs_detailled = theano.function(self.inputs.values(), cost)
         cost = (cost * x_mask).sum(0)
+
+        #f_log_probs return the sum of the sentence log probs
         self.f_log_probs = theano.function(self.inputs.values(), cost)
+
         # We may want to normalize the cost by dividing
         # to the number of target tokens but this needs
         # scaling the learning rate accordingly.
@@ -145,6 +150,22 @@ class Model(BaseModel):
         self.x_mask = x_mask
 
         return cost.mean()
+
+    def val_loss(self, sentence=None):
+         probs = []
+         if sentence is None:
+             #Training validation
+             for data in self.valid_iterator:
+                 norm = data['y_mask'].sum(0)
+                 log_probs = sum(self.f_log_probs(*data.values())) / norm
+                 probs.extend(log_probs)
+             return np.array(probs).mean()
+         else:
+             #lm testing one sentence at the time
+             norm = sentence['y_mask'].sum(0)
+             log_probs = self.f_log_probs_detailled(*sentence.values())
+             probs.extend(log_probs)
+             return np.array(probs), norm
 
     def build_sampler(self):
         # x: 1 x 1
@@ -181,53 +202,27 @@ class Model(BaseModel):
         outs = [next_log_probs, next_word, next_state]
         self.f_next = theano.function(inps, outs, name='f_next')
 
-
-    def gen_sample(self, input_dict, trng=None, maxlen=30, argmax=False):
+    def gen_sample(tparams, f_next, options, trng=None, maxlen=30, argmax=False):
         sample = []
-        sample_scores = []
         sample_score = 0
-    	perplexity = 0
-        curr_loss=0
 
         # initial token is indicated by a -1 and initial state is zero
-        next_w = -1 * np.ones((1,)).astype(INT)
-        next_state = np.zeros(self.rnn_dim).astype(FLOAT)
-        #next_state = np.zeros((1,self.rnn_dim)).astype(FLOAT)
-        target = None
-        if "y" in input_dict:
-            # We're doing forced decoding
-            target = input_dict.pop("y")
-        #print '##-## target = ', target
-            maxlen = len(target)
-	    #print 'maxlen = ', maxlen
+        next_w = -1 * numpy.ones((1,)).astype(INT)
+        next_state = numpy.zeros((1, options['dim'])).astype(FLOAT)
 
         for ii in xrange(maxlen):
-    	    print("################## ITER ", ii)
-    	    #print "next_w=", next_w
-    	    next_state = next_state.reshape(1, self.rnn_dim)
-    	    inps = [next_w, next_state]
-            #self.set_dropout(False)
-            #curr_loss=self.val_loss()
-            #self.set_dropout(True)
-    	    #ret = self.f_next(*inps)
-            #next_p, next_w, next_state = ret[0], ret[1], ret[2]
-            #print "next_p[0]=", next_p[0]
-    	    if target is not None:
-    	    	next_w = target[ii]
-    	    	print("target = ",next_w)
-    	    elif argmax:
-                next_w = [next_p[0].argmax()]
-    	    	print "argmax: ", next_w[0]
+            inps = [next_w, next_state]
+            ret = f_next(*inps)
+            next_p, next_w, next_state = ret[0], ret[1], ret[2]
+
+            if argmax:
+                nw = next_p[0].argmax()
             else:
-                print "sampling: ", next_w[0]
-            #sample.append(next_w[0])
-    	    #sample_scores.append(next_p[0, next_w[0]])
-            #sample_score += next_p[0, next_w[0]]
-	        #print "sample score ", next_p[0, next_w[0]]
-            #perplexity=tensor.exp(sample_score/maxlen)
-            #print("##### maxlen : ",maxlen," ## sample_score : ",sample_score)
-            #perplexity=perplexity.eval()
-            if next_w[0] == 0:
+                nw = next_w[0]
+            sample.append(nw)
+            sample_score += next_p[0, nw]
+            if nw == 0:
                 break
+
 
         return sample, sample_score, sample_scores, curr_loss, maxlen
