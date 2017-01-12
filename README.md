@@ -31,7 +31,7 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
     - Ability to add new metrics easily
   - Single `.npz` file to store everything about a training experiment
   - Improved numerical stability and reproducibility
-  - Automatic free GPU selection using on `nvidia-smi`
+  - Automatic free GPU selection and reservation using `nvidia-smi`
   - Shuffling support between epochs:
     - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
     - Simple shuffle
