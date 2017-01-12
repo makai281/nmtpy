@@ -116,7 +116,7 @@ cnmem = 0.95
 
 ### Checking BLAS configuration
 
-Recent Theano versions can automatically detect correct MKL flags. To check whether yours is working, run the following command:
+Recent Theano versions can automatically detect correct MKL flags. You should obtain a similar output after running the following command:
 
 ```
 $ python -c 'import theano; print theano.config.blas.ldflags'
