@@ -1,6 +1,20 @@
 # nmtpy
 
-**nmtpy** is a suite of Python tools, primarily based on the starter code provided in [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial) for training neural machine translation networks using Theano. A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is as follows:
+**nmtpy** is a suite of Python tools, primarily based on the starter code provided in [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial) for training neural machine translation networks using Theano.
+
+The basic motivation behind forking **dl4mt-tutorial** was to create a framework where it would be
+easy to implement a new model by just copying and modifying an existing model class (or even
+inheriting from it and overriding some of its methods).
+
+To achieve this purpose, **nmtpy** tries to completely isolate training loop, beam search
+and model definition:
+  - `nmt-train` script to initiate a training experiment
+  - `nmt-translate` to produce model-agnostic translations. You just pass a trained model's
+  checkpoint file and it does its job.
+  - A `BaseModel` and several other NMT models deriving from it which define the actual
+  architecture.
+
+A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is as follows:
 
 #### General/API
   - No shell script, everything is in Python 
