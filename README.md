@@ -49,9 +49,48 @@ We recommend using Anaconda Python distribution which is equipped with Intel MKL
 improving CPU decoding speeds during beam search. With a correct compilation and installation, you should achieve
 similar performance with OpenBLAS as well but the setup procedure may be difficult to follow for inexperienced ones.
 
-**Note on MKL**: If you are using Anaconda, make sure you pass `ldflags = -lmkl_rt` in `[blas]` section of your `.theanorc`.
-
 nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in the future.
+
+## Configuring Theano
+
+Here is a basic `.theanorc` file recommended for best performance:
+
+```
+[global]
+# Not so important as nmtpy will pick an available GPU
+device = gpu0
+# We use float32 everywhere
+floatX = float32
+# Keep theano compilation in RAM if you have a 7/24 available server
+base_compiledir=/tmp/theano-%(user)s
+
+[nvcc]
+# This is already disabled by upstream Theano as well
+fastmath = False
+
+[cuda]
+# CUDA 8.0 is better
+root = /opt/cuda-7.5
+
+[dnn]
+# Make sure you use CuDNN as well
+enabled = auto
+library_path = /opt/CUDNN/cudnn-v5.1/lib64
+include_path = /opt/CUDNN/cudnn-v5.1/include
+
+[lib]
+# Allocate 95% of GPU memory once
+cnmem = 0.95
+```
+
+### Checking BLAS configuration
+
+Recent Theano versions can automatically detect correct MKL flags. To check whether yours is working, run the following command:
+
+```
+$ python -c 'import theano; print theano.config.blas.ldflags'
+-L/home/ozancag/miniconda/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -lm -Wl,-rpath,/home/ozancag/miniconda/lib
+```
 
 ## Installation
 After fulfilling the dependencies, create an easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
