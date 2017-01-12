@@ -10,7 +10,7 @@ setup(
         author='Ozan Çağlayan',
         author_email='ozancag@gmail.com',
         license='MIT',
-        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics', 'external.pycocoevalcap'],
+        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics', 'pycocoevalcap'],
         data_files=[('share/nmtpy/meteor', ['external/pycocoevalcap/meteor/meteor-1.5.jar'])],
         install_requires=[
           'numpy',
