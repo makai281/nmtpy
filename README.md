@@ -63,6 +63,11 @@ similar performance with OpenBLAS as well but the setup procedure may be difficu
 
 nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in the future.
 
+#### METEOR/BLEU
+
+- You need to run `external/get-meteor-data.sh` script from inside the `external/` folder to fetch METEOR paraphrase files.
+- `multi-bleu.perl` from [moses](https://github.com/moses-smt/mosesdecoder/blob/master/scripts/generic/multi-bleu.perl) should be in your `$PATH`.
+
 ## Ensuring Reproducibility in Theano
 
 When we started to work on **dl4mt-tutorial**, we noticed an annoying reproducibility problem:
