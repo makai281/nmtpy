@@ -16,14 +16,16 @@ from collections import OrderedDict
 
 import numpy as np
 
-from nmtpy.logger import Logger
-from nmtpy.config import Config
-from nmtpy.metrics import get_scorer
-from nmtpy.nmtutils import idx_to_sent
-from nmtpy.sysutils import *
-from nmtpy.filters import get_filter
+from nmtpy.logger           import Logger
+from nmtpy.config           import Config
+from nmtpy.metrics          import get_scorer
+from nmtpy.nmtutils         import idx_to_sent
+from nmtpy.textutils        import reduce_to_best
+from nmtpy.sysutils         import *
+from nmtpy.filters          import get_filter
 from nmtpy.iterators.bitext import BiTextIterator
-from nmtpy.typedef import *
+from nmtpy.typedef          import *
+
 import nmtpy.cleanup as cleanup
 
 log = Logger._logger
@@ -286,17 +288,24 @@ class Translator(object):
         def __encode(s):
             return s.encode('utf-8') if self.utf8 else s
 
+        # Write file
         with open(filename, 'w') as f:
             if self.mode == "forced" or dump_scores:
                 # We have a single hypothesis and a score for each sentence
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
                     f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc)))
+
             elif self.nbest > 1:
-                # We have a n hypotheses and n scores for each sentence
+                # We have n hypotheses and n scores for each sentence
                 for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
                     for tr, sc in zip(trs, scs):
                         f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr, sc)))
             else:
+                if self.valid_mode == 'pairs':
+                    # Pick the best hyp out of all source sentences for a single image
+                    self.trans = reduce_to_best(self.trans, self.scores,
+                                                self.iterator.n_unique_images, avoid_unk=True)
+                # Prepare and dump
                 self.hyps = [s[0] for s in self.trans]
                 hyps = "\n".join(self.hyps) + "\n"
                 f.write(__encode(hyps))
@@ -365,7 +374,7 @@ if __name__ == "__main__":
     parser.add_argument('-N', '--nbest'         , type=int, default=1,      help="N for N-best output (only for beam-search)")
     parser.add_argument('-r', '--seed'          , type=int, default=1234,   help="Random number seed for sampling mode (default: 1234)")
 
-    parser.add_argument('-v', '--validmode'     , default='single',         help="Validation mode for WMT16 MMT Task2: all/pairs/single/best")
+    parser.add_argument('-v', '--validmode'     , default='single',         help="Validation mode for WMT16 MMT Task2: all/pairs/single")
     parser.add_argument('-D', '--decoder'       , default='beamsearch',     choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, required=True,  help="Model file")
@@ -412,11 +421,6 @@ if __name__ == "__main__":
         hypf = get_temp_file(suffix=".nbest_hyps")
         out_file = hypf.name
         hypf.close()
-
-    # If we evaluate multiple source phrases and take their best
-    # assume -s is given
-    if args.validmode != 'single':
-        args.score = True
 
     # Dump hypotheses
     translator.write_hyps(out_file, args.score)
