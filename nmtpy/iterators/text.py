@@ -24,7 +24,7 @@ class TextIterator(Iterator):
         self.name = kwargs.get('name', 'x')
 
         self._keys = [self.name]
-        if self.mask and self.batch_size > 1:
+        if self.mask:
             self._keys.append('%s_mask' % self.name)
 
     def read(self):

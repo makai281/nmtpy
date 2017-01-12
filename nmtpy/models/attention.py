@@ -79,6 +79,7 @@ class Model(BaseModel):
 
         if from_translate:
             self.valid_iterator = TextIterator(
+                                    mask=False,
                                     batch_size=1,
                                     file=self.data['valid_src'], dict=self.src_dict,
                                     n_words=self.n_words_src)

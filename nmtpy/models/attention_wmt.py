@@ -38,8 +38,8 @@ class Model(ParentModel):
                 self.valid_ref_files = list([self.valid_ref_files])
 
             self.valid_iterator = WMTIterator(
-                    batch_size=1,
                     mask=False,
+                    batch_size=1,
                     pklfile=self.data['valid_src'],
                     srcdict=self.src_dict, n_words_src=self.n_words_src,
                     mode='single') # Override the given parameter
