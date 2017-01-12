@@ -17,11 +17,12 @@ setup(
           'six',
         ],
         scripts=[
-                    # These will be installed into your system
                     'bin/nmt-train',
                     'bin/nmt-extract',
                     'bin/nmt-translate',
                     'bin/nmt-build-dict',
                     'bin/nmt-coco-metrics',
+                    'external/subword-nmt/nmt-bpe-apply',
+                    'external/subword-nmt/nmt-bpe-learn',
                 ],
         zip_safe=False)
