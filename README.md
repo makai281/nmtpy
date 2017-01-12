@@ -22,7 +22,7 @@
   - Automatic free GPU selection using on `nvidia-smi`
   - Shuffling support between epochs:
     - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
-    - Simple permutation
+    - Simple shuffle
   - Improved parallel translation decoding on CPU
     - 620D/1000D NMT on 8 **Xeon E5-2690v2** using a beam size of 12: ~3400 words/sec
   - Export decoding informations into `json` for further visualization of attention coefficients
@@ -30,6 +30,7 @@
 #### Deep Learning
   - Efficient SGD, Adadelta, RMSProp and ADAM
     - Single forward/backward theano function without intermediate variables
+  - Ability to stop updating a set of weights by recompiling optimizer
   - Several recurrent blocks: GRU, Conditional GRU (CGRU) and LSTM
   - [Layer Normalization](https://github.com/ryankiros/layer-norm) support for GRU
   - Simple/Non-recurrent Dropout, L2 weight decay
