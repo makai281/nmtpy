@@ -20,8 +20,6 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
   - No shell script, everything is in Python 
   - Overhaul object-oriented refactoring of the code
     - Clear separation of API and scripts that interface with the API
-    - A `BaseModel` abstract class to derive from when you implement a new architecture
-    - An `Iterator` abstract class to derive from for novel iterators
   - Simple text configuration files to define everything regarding a training experiment
   - Transparent cleanup mechanism to kill stale processes, remove temporary files
   - Simultaneous logging of training details to stdout and log file
