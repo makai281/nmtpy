@@ -1,4 +1,4 @@
-# nmtpy
+![nmtpy](doc/logo.png?raw=true "nmtpy")
 
 **nmtpy** is a suite of Python tools, primarily based on the starter code provided in [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial) for training neural machine translation networks using Theano.
 
