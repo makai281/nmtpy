@@ -63,6 +63,25 @@ similar performance with OpenBLAS as well but the setup procedure may be difficu
 
 nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in the future.
 
+## Ensuring Reproducibility
+
+When we started to work on **dl4mt-tutorial**, we noticed an annoying reproducibility problem:
+Multiple runs of the same experiment (same seed, same machine, same GPU) were not producing exactly
+the same training and validation losses after a few iterations.
+
+The first solution that was [discussed](https://github.com/Theano/Theano/issues/3029) in Theano
+issues was to replace a non-deterministic GPU operation with its deterministic equivalent. To achieve this,
+you should **patch** your local Theano installation using [this patch](patches/00-theano-advancedinctensor.patch) unless upstream developers add
+a configuration option to `.theanorc`.
+
+But apparently this was not enough to obtain reproducible models. After debugging ~2 months, we discovered and
+[fixed](https://github.com/Theano/Theano/commit/8769382ff661aab15dda474a4c74456037f73cc6) a very insidious bug involving back-propagation in Theano.
+
+So if you care (and you absolutely should) about reproducibility, make sure your Theano copy has above changes applied. If you use
+Theano from `master` branch and your clone is newer than *17 August 2016*, the second fix is probably available in your copy.
+
+Finally just to give some numbers, this irreproducibility was causing a deviation of 1 to 1.5 BLEU between multiple runs of the same experiment.
+
 ## Configuring Theano
 
 Here is a basic `.theanorc` file recommended for best performance:
