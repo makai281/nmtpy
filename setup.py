@@ -2,6 +2,10 @@
 from setuptools import setup
 import nmtpy
 
+# Install pycocoevalcap metric scorers as well
+pycocometrics  = ['bleu', 'meteor', 'cider', 'rouge']
+pycocopackages = ['nmtpy.cocoeval.%s' % m for m in pycocometrics]
+
 setup(
         name='nmtpy',
         version=nmtpy.__version__,
@@ -10,8 +14,8 @@ setup(
         author='Ozan Çağlayan',
         author_email='ozancag@gmail.com',
         license='MIT',
-        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics', 'pycocoevalcap'],
-        data_files=[('share/nmtpy/meteor', ['external/pycocoevalcap/meteor/meteor-1.5.jar'])],
+        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics'] + pycocopackages,
+        data_files=[('share/nmtpy/meteor', ['external/meteor/meteor-1.5.jar', 'external/meteor/paraphrase*gz'])],
         install_requires=[
           'numpy',
           'theano',
