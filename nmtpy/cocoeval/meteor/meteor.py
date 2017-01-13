@@ -14,12 +14,15 @@ METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'meteor_data/meteor-1.5.ja
 class Meteor:
     def __init__(self, language, norm=False):
         self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, '-', '-', '-stdio', '-l', language]
+        self.env = os.environ
+        self.env['LC_ALL'] = 'C'
 
         if norm:
             self.meteor_cmd.append('-norm')
 
         self.meteor_p = subprocess.Popen(self.meteor_cmd, stdin=subprocess.PIPE, \
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        env=self.env)
         # Used to guarantee thread safety
         self.lock = threading.Lock()
 
