@@ -114,13 +114,6 @@ def get_gpu(which='auto'):
         return ("gpu%d" % which)
 
 def setup_train_args(args):
-    # Check METEOR path
-    if args.valid_metric == "meteor":
-        if "meteor_path" in args:
-            os.environ['METEOR_JAR'] = args['meteor_path']
-        else:
-            raise Exception("You need to provide 'meteor-path' in your configuration.")
-
     # Find out dimensional information
     dim_str = ""
     for k in sorted(args):
