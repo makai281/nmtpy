@@ -29,15 +29,13 @@ class Bleu:
             assert(type(hypo) is list)
             assert(len(hypo) == 1)
             assert(type(ref) is list)
-
-            if len(ref) == 1:
-                return None, None
+            assert(len(ref) >= 1)
 
             bleu_scorer += (hypo[0], ref)
 
         #score, scores = bleu_scorer.compute_score(option='shortest')
-        score, scores = bleu_scorer.compute_score(option='closest', verbose=0)
         #score, scores = bleu_scorer.compute_score(option='average', verbose=1)
+        score, scores = bleu_scorer.compute_score(option='closest', verbose=0)
 
         # return (bleu, bleu_info)
         return score, scores
