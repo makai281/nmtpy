@@ -7,9 +7,9 @@ import os
 import sys
 import subprocess
 import threading
+import pkg_resources
 
-# Assumes meteor-1.5.jar is in the same directory as meteor.py.  Change as needed.
-METEOR_JAR = 'meteor-1.5.jar'
+METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'data/meteor-1.5.jar')
 
 class Meteor:
     def __init__(self, language, norm=False):

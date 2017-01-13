@@ -1,8 +1,11 @@
 import os
+import pkg_resources
 from subprocess import check_output
 
-from ..sysutils import real_path, get_temp_file
+from ..sysutils import get_temp_file
 from .metric import Metric
+
+METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'data/meteor-1.5.jar')
 
 class METEORScore(Metric):
     def __init__(self, score=None):
@@ -13,11 +16,7 @@ class METEORScore(Metric):
 
 class METEORScorer(object):
     def __init__(self):
-        self.path = real_path(os.environ.get('METEOR_JAR', None))
-        if self.path is None or not os.path.exists(self.path):
-            raise Exception("METEOR jar file not found.")
-
-        self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]
+        self.__cmdline = ["java", "-Xmx2G", "-jar", METEOR_JAR]
 
     def compute(self, refs, hyps, language="auto", norm=False):
         cmdline = self.__cmdline[:]
