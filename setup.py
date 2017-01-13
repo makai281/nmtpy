@@ -27,7 +27,7 @@ setup(
                     'bin/nmt-translate',
                     'bin/nmt-build-dict',
                     'bin/nmt-coco-metrics',
-                    'external/subword-nmt/nmt-bpe-apply',
-                    'external/subword-nmt/nmt-bpe-learn',
+                    'bin/nmt-bpe-apply',
+                    'bin/nmt-bpe-learn',
                 ],
         zip_safe=False)
