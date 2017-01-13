@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-import glob
 from setuptools import setup
 import nmtpy
 
 # Install pycocoevalcap metric scorers as well
 pycocometrics  = ['bleu', 'meteor', 'cider', 'rouge']
 pycocopackages = ['nmtpy.cocoeval.%s' % m for m in pycocometrics]
-
-meteor_files = glob.glob('external/meteor/paraphrase*gz')
 
 setup(
         name='nmtpy',
@@ -17,8 +14,8 @@ setup(
         author='Ozan Çağlayan',
         author_email='ozancag@gmail.com',
         license='MIT',
-        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics'] + pycocopackages,
-        data_files=[('share/nmtpy/meteor', ['external/meteor/meteor-1.5.jar'] + meteor_files)],
+        packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics', 'nmtpy.cocoeval'] + pycocopackages,
+        package_data={'' : ['data/*']}, # METEOR files
         install_requires=[
           'numpy',
           'theano',

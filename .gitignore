@@ -1,3 +1,3 @@
 *.pyc
 *egg-info
-external/meteor/*gz
+nmtpy/data/*gz
