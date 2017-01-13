@@ -13,16 +13,13 @@ METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'meteor_data/meteor-1.5.ja
 
 class Meteor:
     def __init__(self, language, norm=False):
-        self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, \
-                '-', '-', '-stdio', '-l', language]
+        self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, '-', '-', '-stdio', '-l', language]
+
         if norm:
             self.meteor_cmd.append('-norm')
 
-        self.meteor_p = subprocess.Popen(self.meteor_cmd, \
-                cwd=os.path.dirname(os.path.abspath(__file__)), \
-                stdin=subprocess.PIPE, \
-                stdout=subprocess.PIPE, \
-                stderr=subprocess.PIPE)
+        self.meteor_p = subprocess.Popen(self.meteor_cmd, stdin=subprocess.PIPE, \
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # Used to guarantee thread safety
         self.lock = threading.Lock()
 
@@ -38,8 +35,9 @@ class Meteor:
             eval_line += ' ||| {}'.format(stat)
 
         self.meteor_p.stdin.write('{}\n'.format(eval_line))
-        for i in range(0,len(imgIds)):
+        for i in range(len(imgIds)):
             scores.append(float(self.meteor_p.stdout.readline().strip()))
+
         score = float(self.meteor_p.stdout.readline().strip())
         self.lock.release()
 
@@ -69,7 +67,7 @@ class Meteor:
         self.lock.release()
         return score
  
-    def __exit__(self):
+    def __del__(self):
         self.lock.acquire()
         self.meteor_p.stdin.close()
         self.meteor_p.wait()
