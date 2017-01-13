@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PREFIX="https://raw.githubusercontent.com/cmu-mtlab/meteor/master/data/paraphrase"
-SAVEDIR="pycocoevalcap/meteor/data"
+SAVEDIR="nmtpy/meteor_data/data"
 
 for lang in cz de en es fr ru; do
   if [ ! -f "${SAVEDIR}/paraphrase-${lang}.gz" ]; then

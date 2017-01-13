@@ -15,7 +15,7 @@ setup(
         author_email='ozancag@gmail.com',
         license='MIT',
         packages=['nmtpy', 'nmtpy.models', 'nmtpy.iterators', 'nmtpy.metrics', 'nmtpy.cocoeval'] + pycocopackages,
-        package_data={'' : ['data/*']}, # METEOR files
+        package_data={'' : ['meteor_data/meteor-1.5.jar', 'meteor_data/data/*gz']}, # METEOR files
         install_requires=[
           'numpy',
           'theano',

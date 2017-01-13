@@ -65,8 +65,14 @@ nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in
 
 #### METEOR/BLEU
 
-- You need to run `external/get-meteor-data.sh` script from inside the `external/` folder to fetch METEOR paraphrase files.
+- Before installing nmtpy package, you need to run `scripts/get-meteor-data.sh` script from the root folder to fetch METEOR paraphrase files.
 - `multi-bleu.perl` from [moses](https://github.com/moses-smt/mosesdecoder/blob/master/scripts/generic/multi-bleu.perl) should be in your `$PATH`.
+
+#### Installation
+
+```
+$ python setup.py install
+```
 
 ## Ensuring Reproducibility in Theano
 
