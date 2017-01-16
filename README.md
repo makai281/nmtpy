@@ -139,22 +139,3 @@ Recent Theano versions can automatically detect correct MKL flags. You should ob
 $ python -c 'import theano; print theano.config.blas.ldflags'
 -L/home/ozancag/miniconda/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -lm -Wl,-rpath,/home/ozancag/miniconda/lib
 ```
-
-## Installation
-After fulfilling the dependencies, create an easy-install link to the GIT repository so that whenever you issue a `git pull`, you start using the latest version automatically:
-
-```
-$ python setup.py develop
-```
-
-This is also crucial for `nmt-train` in case you create a new model file under `nmtpy/models`.
-
-## Utilities
-
-Once you do the installation correctly, you'll have access to 3 scripts in your Python environment:
-
-- `nmt-train`: Main training loop
-- `nmt-extract`: A small utility to save the source/target word embeddings of your networks. Note that you have to keep the layer names as `Wemb_enc` and `Wemb_dec` for this to work correctly.
-- `nmt-translate`: The utility which does the beam-search and translation generation.
-- `nmt-build-dict`: The utility to create vocabulary files (.pkl) from corpora.
-- `nmt-coco-metrics`: Evaluates a translation file with multiple references using BLEU1-4, METEOR, CIDEr and ROUGE.
