@@ -285,7 +285,7 @@ class BaseModel(object):
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
         # Beam search can change a lot based on the RNN
         # layer, types of input etc. Look at the attention model
-        # and copy it into your class and modify it correctly.
+        # and copy it into your class and modify it correctly if necessary.
 
         # nmt-translate will also use the relevant beam_search() based on model type.
 
