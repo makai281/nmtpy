@@ -25,7 +25,8 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
   - Simultaneous logging of training details to stdout and log file
   
 #### Training/Inference
-  - Plugin-like text filters for hypothesis post-processing (Example: BPE)
+  - Included [subword-nmt](https://github.com/rsennrich/subword-nmt) utilities for training and applying BPE model
+  - Plugin-like text filters for hypothesis post-processing (Example: BPE, Compound)
   - Early-stopping and checkpointing based on perplexity, BLEU or METEOR
     - `nmt-train` automatically calls `nmt-translate` during validation and returns the result back
     - Ability to add new metrics easily
