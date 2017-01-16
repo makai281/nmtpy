@@ -173,11 +173,11 @@ class BaseModel(object):
 
         # Normalize cost w.r.t sentence lengths to correctly compute perplexity
         # Only active when y_mask is available
-        try:
-            norm_cost = (cost / self.y_mask.sum(0)).mean()
+        if 'y_mask' in self.inputs:
+            norm_cost = (cost / self.inputs['y_mask'].sum(0)).mean()
             if regcost is not None:
                 norm_cost += regcost
-        except AttributeError as ae:
+        else:
             norm_cost = final_cost
 
         # Get gradients of cost with respect to variables
