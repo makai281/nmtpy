@@ -122,7 +122,7 @@ class Model(BaseModel):
     def add_alpha_regularizer(self, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
         alpha_reg = alpha_c * (
-            (tensor.cast(self.y_mask.sum(0) // self.x_mask.sum(0), FLOAT)[:, None] -
+            (tensor.cast(self.inputs['y_mask'].sum(0) // self.inputs['x_mask'].sum(0), FLOAT)[:, None] -
              self.alphas.sum(0))**2).sum(1).mean()
         return alpha_reg
 
@@ -386,8 +386,6 @@ class Model(BaseModel):
         self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         # For alpha regularization
-        self.x_mask = x_mask
-        self.y_mask = y_mask
         self.alphas = alphas
 
         return cost
