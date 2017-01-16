@@ -15,7 +15,7 @@ class Meteor:
     def __init__(self, language, norm=False):
         self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, '-', '-', '-stdio', '-l', language]
         self.env = os.environ
-        self.env['LC_ALL'] = 'C'
+        self.env['LC_ALL'] = 'en_US.UTF_8'
 
         if norm:
             self.meteor_cmd.append('-norm')
