@@ -76,6 +76,10 @@ nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in
 $ python setup.py install
 ```
 
+**Installation Note:** When you add a new model under `models/` it will not be directly available in runtime
+as it needs to be installed as well. To avoid re-installing each time, you can use development mode with `python setup.py develop`
+which will directly add the `git` repository to `PYTHONPATH`.
+
 ## Ensuring Reproducibility in Theano
 
 When we started to work on **dl4mt-tutorial**, we noticed an annoying reproducibility problem:
