@@ -35,23 +35,23 @@ class Model(BaseModel):
         self.enc_type = kwargs.get('enc_type', 'gru')
 
         # Do we apply layer normalization to GRU?
-        self.lnorm = kwargs.get('layer_norm', True)
+        self.lnorm = kwargs.get('layer_norm', False)
 
         # Shuffle mode (default: No shuffle)
-        self.smode = kwargs.get('shuffle_mode', 'trglen')
+        self.smode = kwargs.get('shuffle_mode', 'simple')
 
         # Get dropout parameters
         # Let's keep the defaults as 0 to not use dropout
         # You can adjust those from your conf files.
-        self.emb_dropout = kwargs.get('emb_dropout', 0.2)
-        self.ctx_dropout = kwargs.get('ctx_dropout', 0.4)
-        self.out_dropout = kwargs.get('out_dropout', 0.4)
+        self.emb_dropout = kwargs.get('emb_dropout', 0.)
+        self.ctx_dropout = kwargs.get('ctx_dropout', 0.)
+        self.out_dropout = kwargs.get('out_dropout', 0.)
 
         # Number of additional GRU encoders for source sentences
         self.n_enc_layers  = kwargs.get('n_enc_layers' , 1)
 
         # Use a single embedding matrix for target words?
-        self.tied_trg_emb = kwargs.get('tied_trg_emb', True)
+        self.tied_trg_emb = kwargs.get('tied_trg_emb', False)
 
         # Load dictionaries, limit shortlist size if requested
         self.src_dict, src_idict = load_dictionary(dicts['src'])
