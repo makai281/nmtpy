@@ -10,7 +10,7 @@ from ..typedef import *
 from ..nmtutils import *
 from ..iterators.text import TextIterator
 
-from ..models.basemodel import BaseModel
+from .basemodel import BaseModel
 
 class Model(BaseModel):
     def __init__(self, seed, logger, **kwargs):

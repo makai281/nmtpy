@@ -21,7 +21,7 @@ from ..typedef import *
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from ..models.basemodel import BaseModel
+from .basemodel import BaseModel
 
 ########## Define layers here ###########
 def init_gru_decoder_multisum(params, nin, dim, dimctx, scale=0.01, prefix='gru_decoder_multisum'):

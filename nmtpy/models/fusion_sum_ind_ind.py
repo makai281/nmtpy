@@ -21,7 +21,7 @@ from ..typedef import *
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from ..models.basemodel import BaseModel
+from .basemodel import BaseModel
 
 class Model(BaseModel):
     def __init__(self, seed, logger, **kwargs):

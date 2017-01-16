@@ -21,7 +21,7 @@ from ..typedef import *
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from ..models.attention import Model as ParentModel
+from .attention import Model as ParentModel
 
 # Same model as attention but using WMTIterator
 class Model(ParentModel):
