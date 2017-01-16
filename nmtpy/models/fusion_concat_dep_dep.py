@@ -476,10 +476,7 @@ class Model(ParentModel):
 
         self.f_log_probs = theano.function(self.inputs.values(), cost)
 
-        if self.norm_cost:
-            return (cost / y_mask.sum(0)).mean()
-        else:
-            return cost.mean()
+        return cost
 
     def build_sampler(self):
         x               = tensor.matrix('x', dtype=INT)

@@ -239,9 +239,6 @@ class Model(BaseModel):
         # We need both dictionaries
         dicts = kwargs['dicts']
 
-        # Should we normalize train cost or not?
-        self.norm_cost = kwargs.get('norm_cost', True)
-
         # We'll use both dictionaries
         self.src_dict, src_idict = load_dictionary(dicts['src'])
         self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
@@ -481,10 +478,7 @@ class Model(BaseModel):
 
         self.f_log_probs = theano.function(self.inputs.values(), cost)
 
-        if self.norm_cost:
-            return (cost / y_mask.sum(0)).mean()
-        else:
-            return cost.mean()
+        return cost
 
     def get_alpha_regularizer(self, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
