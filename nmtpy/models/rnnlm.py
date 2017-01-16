@@ -20,10 +20,6 @@ class Model(BaseModel):
         # Load dictionaries
         dicts = kwargs['dicts']
 
-        # Should we normalize train cost or not?
-        # TODO: It should be implemented in this file, look at attention.py
-        self.norm_cost = kwargs.get('norm_cost', False)
-
         # Let's default to GRU
         self.rnn_type = kwargs.get('rnn_type', 'gru')
 
@@ -140,14 +136,6 @@ class Model(BaseModel):
 
         #f_log_probs return the sum of the sentence log probs
         self.f_log_probs = theano.function(self.inputs.values(), cost)
-
-        # We may want to normalize the cost by dividing
-        # to the number of target tokens but this needs
-        # scaling the learning rate accordingly.
-        #norm_cost = cost / x_mask.sum()
-
-        # For alpha regularization
-        self.x_mask = x_mask
 
         return cost.mean()
 
