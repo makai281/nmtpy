@@ -5,7 +5,7 @@ import numpy as np
 import theano
 import theano.tensor as tensor
 
-from .typedef import FLOAT
+from .defaults import FLOAT
 
 def sgd(tparams, grads, inp, cost, lr0):
     """Stochastic Gradient Descent optimizer."""

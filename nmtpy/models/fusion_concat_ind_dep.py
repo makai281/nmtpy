@@ -17,7 +17,7 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from ..typedef import *
+from ..defaults import INT, FLOAT
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 

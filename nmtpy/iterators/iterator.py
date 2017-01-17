@@ -8,7 +8,7 @@ from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 
 import numpy as np
-from ..typedef import *
+from ..defaults import INT, FLOAT
 
 class Iterator(object):
     """Base Iterator class."""

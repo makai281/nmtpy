@@ -7,7 +7,7 @@ import theano.tensor as tensor
 from sys import getsizeof
 # Ours
 from ..layers import *
-from ..typedef import *
+from ..defaults import INT, FLOAT
 from ..nmtutils import *
 from ..iterators.text import TextIterator
 

@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 
+# Default data types
+INT   = 'int64'
+FLOAT = 'float32'
+
+# Default training parameters
 DEFAULTS = {
         'weight_init':        'xavier',       # Can be a float for the scale of normal initializatio, "xavier" or "he".
         'batch_size':         32,             # Training batch size

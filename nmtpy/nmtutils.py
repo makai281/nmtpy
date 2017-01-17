@@ -3,7 +3,7 @@ import numpy as np
 import cPickle
 
 from collections import OrderedDict
-from .typedef import *
+from .defaults import INT, FLOAT
 
 class DotDict(dict):
     def __init__(self, *args, **kwargs):

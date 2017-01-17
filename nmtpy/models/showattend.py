@@ -18,7 +18,7 @@ import theano.tensor as tensor
 
 # Ours
 from ..layers import *
-from ..typedef import *
+from ..defaults import INT, FLOAT
 from ..nmtutils import *
 from ..iterators import WMTIterator
 

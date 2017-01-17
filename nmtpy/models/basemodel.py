@@ -17,7 +17,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 from ..nmtutils import unzip, get_param_dict
 from ..sysutils import *
-from ..typedef import *
+from ..defaults import INT, FLOAT
 
 #######################################
 ## For debugging function input outputs

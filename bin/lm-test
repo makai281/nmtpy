@@ -24,7 +24,6 @@ from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
 from nmtpy.filters import get_filter
 from nmtpy.iterators.bitext import BiTextIterator
-from nmtpy.typedef import *
 import nmtpy.cleanup as cleanup
 
 log = Logger._logger

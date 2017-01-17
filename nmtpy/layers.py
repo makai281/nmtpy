@@ -6,7 +6,7 @@ import theano
 from theano import tensor
 
 from .nmtutils import *
-from .typedef import *
+from .defaults import INT, FLOAT
 
 # Shorthands for activations
 linear  = lambda x: x

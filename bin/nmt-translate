@@ -25,7 +25,7 @@ from nmtpy.textutils        import reduce_to_best
 from nmtpy.sysutils         import *
 from nmtpy.filters          import get_filter
 from nmtpy.iterators.bitext import BiTextIterator
-from nmtpy.typedef          import *
+from nmtpy.defaults         import INT, FLOAT
 
 import nmtpy.cleanup as cleanup
 

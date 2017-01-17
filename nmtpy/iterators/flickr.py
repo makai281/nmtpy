@@ -9,7 +9,7 @@ from collections import OrderedDict
 import numpy as np
 
 from ..nmtutils import idx_to_sent, load_dictionary
-from ..typedef  import INT, FLOAT
+from ..defaults import INT, FLOAT
 from .iterator import Iterator
 
 class FlickrIterator(object):
