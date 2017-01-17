@@ -28,6 +28,7 @@ class MainLoop(object):
         self.max_epochs     = train_args.max_epochs
         self.early_patience = train_args.patience
         self.valid_metric   = train_args.valid_metric
+        self.valid_mode     = train_args.valid_mode
         self.valid_start    = train_args.valid_start
         self.beam_size      = train_args.beam_size
         self.njobs          = train_args.njobs
@@ -190,7 +191,8 @@ class MainLoop(object):
                 metric_str, metric = self.model.run_beam_search(beam_size=self.beam_size,
                                                                 n_jobs=self.njobs,
                                                                 metric=self.valid_metric,
-                                                                mode='beamsearch')
+                                                                mode='beamsearch',
+                                                                valid_mode=self.valid_mode)
 
                 self._print("Validation %2d - %s" % (self.vctr, metric_str))
 

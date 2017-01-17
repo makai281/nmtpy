@@ -52,9 +52,9 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, out_file=None):
+def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, valid_mode='single', out_file=None):
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
-           "-j", str(n_jobs), "-m", model_path, "-M", metric]
+           "-j", str(n_jobs), "-m", model_path, "-M", metric, "-v", valid_mode]
     if out_file:
         cmd.extend(["-o", out_file])
     # nmt-translate prints a dict of metrics
