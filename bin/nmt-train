@@ -18,9 +18,9 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 # Bring default values for arguments which are not set
-from nmtpy import defaults as dflt
-all_defaults = dict(dflt.DEFAULTS)
-all_defaults.update(dflt.TRAIN_DEFAULTS)
+from nmtpy.defaults import DEFAULTS, TRAIN_DEFAULTS
+all_defaults = dict(DEFAULTS)
+all_defaults.update(TRAIN_DEFAULTS)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='nmt-train')
