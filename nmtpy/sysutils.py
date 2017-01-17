@@ -168,25 +168,24 @@ def get_exp_identifier(args):
 
     return name
 
-def setup_train_args(args):
-    # Get identifier name
-    name = get_exp_identifier(args)
-
-    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
-    del args['model_path_suffix']
-
-    # Create folders if not
-    ensure_dirs([args.model_path])
-
+def get_next_runid(model_path, exp_name):
     # Log file, runs start from 1, incremented if exists
     i = 1
-    log_file = os.path.join(args.model_path, "%s.%d.log" % (name, i))
 
-    while os.path.exists(log_file):
+    while os.path.exists(os.path.join(model_path, "%s.%d.log" % (exp_name, i))):
         i += 1
-        log_file = os.path.join(args.model_path, "%s.%d.log" % (name, i))
 
-    # Save prefix
-    args.model_path = os.path.join(args.model_path, "%s.%d" % (name, i))
+    return i
 
-    return args, log_file
+def setup_train_args(args):
+    # Get identifier name
+    exp_name = get_exp_identifier(args)
+    next_run_id = get_next_runid(args.model_path, exp_name)
+
+    # Construct log file name
+    log_fname = os.path.join(args.model_path, "%s.%d.log" % (exp_name, next_run_id))
+
+    # Save new path
+    args.model_path = os.path.join(args.model_path, "%s.%d" % (exp_name, next_run_id))
+
+    return args, log_fname

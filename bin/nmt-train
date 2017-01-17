@@ -9,7 +9,7 @@ import platform
 
 from nmtpy.config import Config
 from nmtpy.logger import Logger
-from nmtpy.sysutils import setup_train_args, get_device
+from nmtpy.sysutils import setup_train_args, get_device, ensure_dirs
 from nmtpy.nmtutils import DotDict, get_param_dict
 from nmtpy.mainloop import MainLoop
 
@@ -51,7 +51,10 @@ if __name__ == '__main__':
     args = Config(cmd_args.config).get()
 
     # Create a folder named as conf file
-    args['model_path_suffix'] = os.path.splitext(os.path.basename(cmd_args.config))[0]
+    models_folder_name = os.path.splitext(os.path.basename(cmd_args.config))[0]
+    args.model_path = os.path.join(args.model_path, models_folder_name)
+    ensure_dirs([args.model_path])
+
     extra_params = cmd_args.extra
     del cmd_args.__dict__['config']
     del cmd_args.__dict__['extra']
