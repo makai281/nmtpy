@@ -18,8 +18,7 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 DEFAULTS = {
-        'weight_init':        'xavier',       # Scale of the uniform distribution for weight initialization.
-                                              # Can be a float, "xavier" or "he".
+        'weight_init':        'xavier',       # Can be a float for the scale of normal initializatio, "xavier" or "he".
         'batch_size':         32,             # Training batch size
         'optimizer':          'adam',         # adadelta, sgd, rmsprop, adam
         'lrate':              0.0004,         # Initial learning rate
@@ -71,19 +70,21 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--suffix'        , type=str  , help="Optional suffix to append to model name")
     parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
 
-    pargs = parser.parse_args()
+    ##############################
+    # Parse command-line arguments
+    cmd_args = parser.parse_args()
 
-    # First parse configuration file for arguments as base
-    args = Config(pargs.config).get()
+    # Parse configuration file for arguments
+    args = Config(cmd_args.config).get()
 
     # Create a folder named as conf file
-    args['model_path_suffix'] = os.path.splitext(os.path.basename(pargs.config))[0]
-    extra_params = pargs.extra
-    del pargs.__dict__['config']
-    del pargs.__dict__['extra']
+    args['model_path_suffix'] = os.path.splitext(os.path.basename(cmd_args.config))[0]
+    extra_params = cmd_args.extra
+    del cmd_args.__dict__['config']
+    del cmd_args.__dict__['extra']
 
     # Override .conf arguments from the ones given in cmdline
-    args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
+    args.update([(k,v) for k,v in cmd_args.__dict__.items() if v is not None])
 
     for k,v in all_defaults.iteritems():
         if k not in args:
@@ -106,7 +107,7 @@ if __name__ == '__main__':
     Logger.set_file(log_file)
     log = Logger._logger
 
-    # Reserve GPU
+    # Set device for Theano
     if 'THEANO_FLAGS' not in os.environ:
         args.device_id = get_device(args.device_id)
         os.environ['THEANO_FLAGS'] = "device=%s" % args.device_id
