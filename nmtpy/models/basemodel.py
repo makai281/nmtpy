@@ -208,7 +208,7 @@ class BaseModel(object):
         else:
             self.train_batch = theano.function(self.inputs.values(), norm_cost, updates=updates)
 
-    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', valid_mode='single', out_file=None):
+    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', valid_mode='single'):
         """Save model under /tmp for passing it to nmt-translate."""
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
@@ -218,8 +218,7 @@ class BaseModel(object):
                                           n_jobs=n_jobs,
                                           metric=metric,
                                           mode=mode,
-                                          valid_mode=valid_mode,
-                                          out_file=out_file)
+                                          valid_mode=valid_mode)
 
         return result
 
