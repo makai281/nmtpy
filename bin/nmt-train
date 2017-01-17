@@ -9,7 +9,7 @@ import platform
 
 from nmtpy.config import Config
 from nmtpy.logger import Logger
-from nmtpy.sysutils import setup_train_args, get_gpu
+from nmtpy.sysutils import setup_train_args, get_device
 from nmtpy.nmtutils import DotDict, get_param_dict
 from nmtpy.mainloop import MainLoop
 
@@ -108,7 +108,7 @@ if __name__ == '__main__':
 
     # Reserve GPU
     if 'THEANO_FLAGS' not in os.environ:
-        args.device_id = get_gpu(args.device_id)
+        args.device_id = get_device(args.device_id)
         os.environ['THEANO_FLAGS'] = "device=%s" % args.device_id
 
     log.info("THEANO_FLAGS = %s" % os.environ['THEANO_FLAGS'])
