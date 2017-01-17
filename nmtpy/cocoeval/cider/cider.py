@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Filename: cider.py
 #
 # Description: Describes the class to compute the CIDEr (Consensus-Based Image Description Evaluation) Metric 

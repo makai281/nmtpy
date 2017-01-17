@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Python wrapper for METEOR implementation, by Xinlei Chen
 # Acknowledge Michael Denkowski for the generous discussion and help 
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # bleu_scorer.py
 # David Chiang <chiang@isi.edu>
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # File Name : bleu.py
 #
 # Description : Wrapper for BLEU scorer.

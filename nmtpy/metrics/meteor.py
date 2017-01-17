@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import pkg_resources
 from subprocess import check_output

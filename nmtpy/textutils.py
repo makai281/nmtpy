@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Text processing related functions"""
 
 def reduce_to_best(hyps, scores, n_unique_samples, avoid_unk=True):

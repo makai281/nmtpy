@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Tsung-Yi Lin <tl483@cornell.edu>
 # Ramakrishna Vedantam <vrama91@vt.edu>
 

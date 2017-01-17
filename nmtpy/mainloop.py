@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from shutil import copy
 
 import numpy as np

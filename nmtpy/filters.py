@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 class CompoundFilter(object):
     """Filters out fillers from compound splitted sentences."""
     def __init__(self):
