@@ -18,8 +18,8 @@ import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
 # Bring default values for arguments which are not set
-from nmtpy.defaults import DEFAULTS, TRAIN_DEFAULTS
-all_defaults = dict(DEFAULTS)
+from nmtpy.defaults import MODEL_DEFAULTS, TRAIN_DEFAULTS
+all_defaults = dict(MODEL_DEFAULTS)
 all_defaults.update(TRAIN_DEFAULTS)
 
 if __name__ == '__main__':
@@ -74,10 +74,11 @@ if __name__ == '__main__':
 
     # Setup arguments
     args, log_file = setup_train_args(args)
+
     # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
     model_args = dict([(k,v) for k,v in args.iteritems() if k not in TRAIN_DEFAULTS])
     train_args = dict([(k,v) for k,v in args.iteritems() if k in TRAIN_DEFAULTS])
-    train_args = DotDict(train_args)
+    ###################################
 
     # Start logging module (both to terminal and to file)
     Logger.set_file(log_file)
@@ -172,4 +173,4 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
 
     # Create mainloop
-    MainLoop(model, log, train_args).run()
+    MainLoop(model, log, DotDict(train_args)).run()

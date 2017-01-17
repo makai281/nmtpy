@@ -4,14 +4,17 @@
 INT   = 'int64'
 FLOAT = 'float32'
 
-# Default training parameters
-DEFAULTS = {
+# These defaults are passed to the constructor
+# of your model.
+MODEL_DEFAULTS = {
         'weight_init':        'xavier',       # Can be a float for the scale of normal initializatio, "xavier" or "he".
         'batch_size':         32,             # Training batch size
         'optimizer':          'adam',         # adadelta, sgd, rmsprop, adam
         'lrate':              0.0004,         # Initial learning rate
         }
 
+# Default training parameters
+# These are either used in nmt-train or passed to MainLoop
 TRAIN_DEFAULTS = {
         'debug':              False,          # Dump graph and print theano node input/outputs
         'decay_c':            0.,             # L2 penalty factor
