@@ -7,8 +7,8 @@ import subprocess
 
 from . import cleanup
 
-"""System related utility functions."""
 def ensure_dirs(dirs):
+    """Create a list of directories if not exists."""
     try:
         for d in dirs:
             os.makedirs(d)
@@ -16,14 +16,15 @@ def ensure_dirs(dirs):
         pass
 
 def real_path(p):
+    """Expand UNIX tilde and return real path."""
     return os.path.realpath(os.path.expanduser(p))
 
 def listify(l):
-    if not isinstance(l, list):
-        return [l]
-    return l
+    """Encapsulate l with list[] if not."""
+    return [l] if not isinstance(l, list) else l
 
 def readable_size(n):
+    """Return a readable size string."""
     sizes = ['K', 'M', 'G']
     fmt = ''
     size = n
@@ -37,8 +38,7 @@ def readable_size(n):
     return '%.1f%s' % (size, fmt)
 
 def get_temp_file(suffix="", name=None, delete=False):
-    """Creates a temporary file under /tmp. If name is not None
-    it will be used as the temporary file's name."""
+    """Creates a temporary file under /tmp."""
     if name:
         name = os.path.join("/tmp", name)
         t = open(name, "w")
@@ -52,12 +52,12 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, valid_mode='single', out_file=None):
+def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, valid_mode='single'):
+    """Run nmt-translate for validation during training."""
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
            "-j", str(n_jobs), "-m", model_path, "-M", metric, "-v", valid_mode]
-    if out_file:
-        cmd.extend(["-o", out_file])
-    # nmt-translate prints a dict of metrics
+
+    # nmt-translate will print a dict of metrics
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=sys.stdout)
     cleanup.register_proc(p.pid)
     out, err = p.communicate()
@@ -65,18 +65,20 @@ def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, valid_mode
     results = eval(out.splitlines()[-1].strip())
     return results[metric]
 
-### GPU & PBS related functions
 def create_gpu_lock(used_gpu):
+    """Create a lock file for GPU reservation."""
     name = "gpu_lock.pid%d.gpu%s" % (os.getpid(), used_gpu)
     lockfile = get_temp_file(name=name)
     lockfile.write("[nmtpy] %s\n" % name)
 
 def fopen(filename, mode='r'):
+    """GZIP-aware file opening function."""
     if filename.endswith('.gz'):
         return gzip.open(filename, mode)
     return open(filename, mode)
 
 def find_executable(fname):
+    """Find executable in PATH."""
     fname = os.path.expanduser(fname)
     if os.path.isabs(fname) and os.access(fname, os.X_OK):
         return fname
@@ -85,7 +87,8 @@ def find_executable(fname):
         if os.access(fpath, os.X_OK):
             return fpath
 
-def get_gpu(which='auto'):
+def get_device(which='auto'):
+    """Return Theano device to use by favoring GPUs first."""
     if which == "cpu":
         return "cpu", None
     elif which.startswith("gpu"):
@@ -113,71 +116,77 @@ def get_gpu(which='auto'):
         lock_file = create_gpu_lock(which)
         return ("gpu%d" % which)
 
-def setup_train_args(args):
-    # Find out dimensional information
-    dim_str = ""
+def get_exp_identifier(args):
+    """Return a representative string for the experiment."""
+
+    names = [args.model_type]
+
     for k in sorted(args):
         if k.endswith("_dim"):
-            dim_str += "%s_%d-" % (k, args[k])
-    if len(dim_str) > 0:
-        dim_str = dim_str[:-1]
+            # Only the first letter should suffice for now, e for emb, r for rnn
+            names.append('%s%d' % (k[0], args[k]))
 
-    # Append learning rate
-    args.lrate = float(args.lrate)
-    opt_string = args.optimizer
-    opt_string += "-lr_%.e" % args.lrate
+    name = '-'.join(names)
 
-    # Set model name
-    name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
+    # Append optimizer and learning rate
+    name += '-%s_%.e' % (args.optimizer, float(args.lrate))
+
+    # Append batch size
+    name += '-bs%d' % args.batch_size
+
+    # Validation stuff
+    name += '-%s' % args.valid_metric
 
     if args.valid_freq > 0:
-        name += "-each_%d" % args.valid_freq
+        name += "-each%d" % args.valid_freq
     else:
-        name += "-each_epoch"
+        name += "-eachepoch"
 
     if args.decay_c > 0:
-        name += "-decay_%.e" % args.decay_c
+        name += "-l2_%.e" % args.decay_c
 
     if 'emb_dropout' in args:
-        name += "-dout_%.1f_%.1f_%.1f" % (args.emb_dropout, args.ctx_dropout, args.out_dropout)
+        name += "-do_%.1f_%.1f_%.1f" % (args.emb_dropout, args.ctx_dropout, args.out_dropout)
 
     if args.clip_c > 0:
-        name += "-gclip_%.1f" % args.clip_c
+        name += "-gc%d" % int(args.clip_c)
 
     if args.alpha_c > 0:
         name += "-alpha_%.e" % args.alpha_c
 
     if isinstance(args.weight_init, str):
-        name += "-winit_%s" % args.weight_init
+        name += "-init_%s" % args.weight_init
     else:
-        name += "-winit_%.e" % args.weight_init
+        name += "-init_%.e" % args.weight_init
 
-    if args.seed != 1234:
-        name += "-seed_%d" % args.seed
-
-    if len(args.get('suffix', '')) > 0:
-        name = "%s-%s" % (name, args.suffix)
+    # Append seed
+    name += "-s%d" % args.seed
 
     if 'suffix' in args:
+        name = "%s-%s" % (name, args.suffix)
         del args['suffix']
+
+    return name
+
+def setup_train_args(args):
+    # Get identifier name
+    name = get_exp_identifier(args)
 
     args.model_path = os.path.join(args.model_path, args.model_path_suffix)
     del args['model_path_suffix']
 
+    # Create folders if not
     ensure_dirs([args.model_path])
 
-    # Log suffix
-    logsuff = 'log'
-
-    # Log file
+    # Log file, runs start from 1, incremented if exists
     i = 1
-    log_file = os.path.join(args.model_path, "%s_run%d.%s" % (name, i, logsuff))
+    log_file = os.path.join(args.model_path, "%s.%d.log" % (name, i))
 
     while os.path.exists(log_file):
         i += 1
-        log_file = os.path.join(args.model_path, "%s_run%d.%s" % (name, i, logsuff))
+        log_file = os.path.join(args.model_path, "%s.%d.log" % (name, i))
 
     # Save prefix
-    args.model_path = os.path.join(args.model_path, "%s_run%d" % (name, i))
+    args.model_path = os.path.join(args.model_path, "%s.%d" % (name, i))
 
     return args, log_file
