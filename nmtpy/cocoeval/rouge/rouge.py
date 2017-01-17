@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# 
 # File Name : rouge.py
 #
 # Description : Computes ROUGE-L metric as described by Lin and Hovey (2004)

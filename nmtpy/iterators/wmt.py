@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from six.moves import range
 from six.moves import zip
 

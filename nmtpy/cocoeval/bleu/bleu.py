@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# 
 # File Name : bleu.py
 #
 # Description : Wrapper for BLEU scorer.
@@ -9,7 +7,6 @@
 # Authors : Hao Fang <hfang@uw.edu> and Tsung-Yi Lin <tl483@cornell.edu>
 
 from bleu_scorer import BleuScorer
-
 
 class Bleu:
     def __init__(self, n=4):

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import os
 import glob
 from string import digits

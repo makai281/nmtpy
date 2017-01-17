@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # bleu_scorer.py
 # David Chiang <chiang@isi.edu>
 
