@@ -38,6 +38,7 @@ class MainLoop(object):
         self.do_sampling    = self.f_sample > 0
         self.do_beam_search = self.valid_metric != 'px'
 
+        # NOTE: This is relevant only for fusion models + WMTIterator
         self.valid_mode     = 'single'
         if 'valid_mode' in self.model.__dict__:
             self.valid_mode = self.model.valid_mode
