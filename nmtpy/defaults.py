@@ -17,8 +17,8 @@ TRAIN_DEFAULTS = {
         'alpha_c':            0.,             # Alpha regularization for attentional models (not quite tested)
         'clip_c':             5.,             # Clip gradients above clip_c
         'decay_c':            0.,             # L2 penalty factor
-        'patience':           30,             # Early stopping patience
-        'max_epochs':         200,            # Max number of epochs to train
+        'patience':           10,             # Early stopping patience
+        'max_epochs':         100,            # Max number of epochs to train
         'max_iteration':      int(1e6),       # Max number of updates to train
         'valid_metric':       'bleu',         # bleu, px, meteor
         'valid_start':        1,              # Epoch which validation will start
