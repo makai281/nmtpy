@@ -60,13 +60,13 @@ class MainLoop(object):
         """Overwrite best on-disk model and saves it as a different file optionally."""
         if self.save_best:
             self._print('Saving the best model')
-            self.model.save(self.model.model_path + '.npz')
+            self.model.save(self.model.save_path + '.npz')
 
         # Save each best model as different files, can be useful for ensembling
         if self.save_iter:
             self._print('Saving best model at iteration %d' % self.uctr)
-            model_path_uidx = '%s.iter%d.npz' % (self.model.model_path, self.uctr)
-            copy(self.model.model_path + '.npz', model_path_uidx)
+            model_path_uidx = '%s.iter%d.npz' % (self.model.save_path, self.uctr)
+            copy(self.model.save_path + '.npz', model_path_uidx)
 
     # TODO
     def __update_lrate(self):
@@ -227,7 +227,7 @@ class MainLoop(object):
             self._print('--> Current best %s: %s at validation %d' % (self.valid_metric,
                                                                       best_metric,
                                                                       best_metric_idx))
-        self._print('--> This is model: %s' % os.path.basename(self.model.model_path))
+        self._print('--> This is model: %s' % os.path.basename(self.model.save_path))
 
     def run(self):
         """Run training loop."""
