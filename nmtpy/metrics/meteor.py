@@ -6,7 +6,7 @@ from subprocess import check_output
 from ..sysutils import get_temp_file
 from .metric import Metric
 
-METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'meteor_data/meteor-1.5.jar')
+METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'external/meteor-1.5.jar')
 
 class METEORScore(Metric):
     def __init__(self, score=None):
