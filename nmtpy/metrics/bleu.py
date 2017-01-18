@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 import os
+import pkg_resources
+
 from subprocess import Popen, PIPE, check_output
 
-from ..sysutils import find_executable, real_path, get_temp_file
+from ..sysutils import real_path, get_temp_file
 from .metric    import Metric
+
+BLEU_SCRIPT = pkg_resources.resource_filename('nmtpy', 'external/multi-bleu.perl')
 
 class BLEUScore(Metric):
     def __init__(self, score=None):
@@ -15,15 +19,11 @@ class BLEUScore(Metric):
 
 """MultiBleuScorer class."""
 class MultiBleuScorer(object):
-    def __init__(self, lowercase=False, script="multi-bleu.perl"):
-        # For multi-bleu.script we give the reference(s) files as argv,
+    def __init__(self, lowercase=False):
+        # For multi-bleu.perl we give the reference(s) files as argv,
         # while the candidate translations are read from stdin.
-        self.script = find_executable(script)
         self.lowercase = lowercase
-        if not self.script:
-            raise Exception("BLEU script %s not found." % self.script)
-
-        self.__cmdline = [self.script]
+        self.__cmdline = [BLEU_SCRIPT]
         if self.lowercase:
             self.__cmdline.append("-lc")
 
