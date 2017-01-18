@@ -62,7 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--init'          , help="Pretrained model .npz",
                                                   type=str)
     parser.add_argument('-t', '--timestamp'     , help="Add timestamp to log messages.",
-                                                  default=True)
+                                                  default=False)
 
     parser.add_argument('-v', '--verbose'       , help="Dump Theano graph and inspect optimization.",
                                                   action="store_true", default=False)
