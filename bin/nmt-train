@@ -24,8 +24,8 @@ from nmtpy.defaults import MODEL_DEFAULTS as mddefs
 
 if __name__ == '__main__':
     # Pretty print defaults
-    defs  = '\n' + pretty_repr(trdefs, 'Training defaults') + '\n\n'
-    defs += pretty_repr(mddefs, 'Model defaults')
+    defs  = '\n' + pretty_dict(trdefs, 'Training defaults') + '\n\n'
+    defs += pretty_dict(mddefs, 'Model defaults')
 
     parser = argparse.ArgumentParser(prog='nmt-train',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--init'          , help="Pretrained model .npz",
                                                   type=str)
     parser.add_argument('-t', '--timestamp'     , help="Add timestamp to log messages.",
-                                                  default=False)
+                                                  action="store_true", default=False)
 
     parser.add_argument('-v', '--verbose'       , help="Dump Theano graph and inspect optimization.",
                                                   action="store_true", default=False)
@@ -96,7 +96,6 @@ if __name__ == '__main__':
     # Parse configuration file and merge with the rest
     conf = Config(cfname, trdefs=trdefs, mddefs=mddefs, override=cmd_args)
     train_args, model_args = conf.parse()
-
 
     # Create a folder named as conf file
     folder_name = os.path.splitext(os.path.basename(cfname))[0]
@@ -136,8 +135,7 @@ if __name__ == '__main__':
         np.random.seed(train_args.seed)
 
     # Print options
-    pretty_repr(train_args.__dict__, 'Training options:', print_func=log.info)
-    pretty_repr(model_args.__dict__, 'Model options:', print_func=log.info)
+    print_summary(train_args, model_args, print_func=log.info)
 
     # Import the model
     try:

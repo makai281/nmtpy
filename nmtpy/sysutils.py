@@ -7,7 +7,60 @@ import subprocess
 
 from . import cleanup
 
-def pretty_repr(elem, msg=None, print_func=None):
+def print_summary(train_args, model_args, print_func=None):
+    """Returns or prints a summary of training/model options."""
+    def _get_max_width(keys):
+        return max([len(k) for k in keys]) + 1
+
+    def _dict_str(d, maxlen):
+        res = ""
+        templ = '%' + str(maxlen) + 's : '
+        kvs = []
+        for k,v in d.items():
+            if isinstance(v, list):
+                kvs.append((k, v.pop(0)))
+                for l in v:
+                    kvs.append((k, l))
+            else:
+                kvs.append((k,v))
+
+        kvs = sorted(kvs, key=lambda x: x[0])
+        for k,v in kvs:
+            res += (templ % k) + str(v) + '\n'
+        return res
+
+    max_width = _get_max_width(train_args.__dict__.keys() +
+                               model_args.__dict__.keys())
+
+    # Add training options
+    result  = 'Training options:'
+    result += '\n' + ('-' * 35) + '\n'
+
+    result += _dict_str(train_args.__dict__, max_width)
+
+    # Copy
+    model_args = dict(model_args.__dict__)
+    # Remove these and treat them separately
+    model_data = model_args.pop('data')
+    model_dict = model_args.pop('dicts')
+
+    # Add model options
+    result += '\nModel options:'
+    result += '\n' + ('-' * 35) + '\n'
+
+    result += _dict_str(model_args, max_width)
+    result += ('%' + str(max_width) + 's =\n') % 'dicts'
+    result += _dict_str(model_dict, max_width)
+    result += ('%' + str(max_width) + 's =\n') % 'data'
+    result += _dict_str(model_data, max_width)
+
+    if print_func:
+        for line in result.split('\n'):
+            print_func(line)
+    else:
+        return result
+
+def pretty_dict(elem, msg=None, print_func=None):
     """Returns a string representing elem optionally prepended by a message."""
     result = ""
     if msg:
@@ -16,12 +69,11 @@ def pretty_repr(elem, msg=None, print_func=None):
         # Add trailing lines
         result += ('-' * len(msg)) + '\n'
 
-    if isinstance(elem, dict):
-        skeys = sorted(elem.keys())
-        maxlen = max([len(k) for k in skeys]) + 1
-        templ = '%' + str(maxlen) + 's : %s\n'
-        for k in skeys:
-            result += (templ % (k, elem[k]))
+    skeys = sorted(elem.keys())
+    maxlen = max([len(k) for k in skeys]) + 1
+    templ = '%' + str(maxlen) + 's : '
+    for k in skeys:
+        result += (templ % k) + str(elem[k]) + '\n'
 
     if print_func:
         for line in result.split('\n'):
