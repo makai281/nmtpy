@@ -4,125 +4,151 @@ import os
 import sys
 import logging
 import argparse
-import importlib
 import platform
+import textwrap
+import importlib
 
 from nmtpy.config import Config
 from nmtpy.logger import Logger
-from nmtpy.sysutils import setup_train_args, get_device, ensure_dirs
-from nmtpy.nmtutils import DotDict, get_param_dict
+from nmtpy.sysutils import *
+from nmtpy.nmtutils import get_param_dict
 from nmtpy.mainloop import MainLoop
 
 # Ensure cleaning up temp files and processes
 import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
-# Bring default values for arguments which are not set
-from nmtpy.defaults import MODEL_DEFAULTS, TRAIN_DEFAULTS
-all_defaults = dict(MODEL_DEFAULTS)
-all_defaults.update(TRAIN_DEFAULTS)
+# Import defaults
+from nmtpy.defaults import TRAIN_DEFAULTS as trdefs
+from nmtpy.defaults import MODEL_DEFAULTS as mddefs
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='nmt-train')
+    # Pretty print defaults
+    defs  = '\n' + pretty_repr(trdefs, 'Training defaults') + '\n\n'
+    defs += pretty_repr(mddefs, 'Model defaults')
 
-    # Mandatory arguments
-    parser.add_argument('-c', '--config'        , type=str  , help="Path to model configuration file", required=True)
+    parser = argparse.ArgumentParser(prog='nmt-train',
+                                     formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description=textwrap.dedent('''\
+                                        nmt-train trains the given model on a free GPU.
+                                        All the details regarding the model and the hyper-parameters
+                                        are given through -c/--config flag.
 
-    # Useful arguments (especially for hyper-parameter search scripts)
-    parser.add_argument('-T', '--model-type'    , type=str  , help="Override the model type given in the configuration file")
-    parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
-    parser.add_argument('-R', '--seed'          , type=int  , help="Random seed")
-    parser.add_argument('-s', '--suffix'        , type=str  , help="Optional suffix to append to model name")
-    parser.add_argument('-i', '--init'          , type=str  , help="Init parameters from a trained one")
+                                        A list of sane defaults are defined in nmtpy/defaults.py and
+                                        listed below. These defaults are used if you did not override
+                                        them in the configuration file.
 
-    # These can come from configuration parameters or from defaults.py if not 
-    # Maybe it would be better to remove these, or move the defaults to the defaults of arguments
-    parser.add_argument('-a', '--alpha-c'       , type=float, help="Alpha regularization factor")
-    parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
-    parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
-    parser.add_argument('-M', '--valid-metric'  , type=str  , help="Validation metric: px, bleu, meteor")
-    parser.add_argument('-j', '--njobs'         , type=str  , help="# of CPU jobs for beam-search")
-    parser.add_argument('-l', '--lrate'         , type=str  , help="Initial learning rate")
-    parser.add_argument('-o', '--optimizer'     , type=str  , help="Optimizer: sgd, adadelta, rmsprop, adam")
-    parser.add_argument('-V', '--valid-freq'    , type=int  , help="Validation frequency in terms of updates")
-    parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
+                                        A final way of overriding parameters are through the variable
+                                        length 'extra' arguments.
 
-    parser.add_argument('-d', '--debug'         , action='store_true', help="Enable debugging outputs (Warning: very verbose)")
-    parser.add_argument('-e', '--extra'         , nargs='*' , help="Extra key:value pairs as in conf to override them")
+                                        Example:
+                                          $ nmt-train -c sample.conf
+                                          # Change seed and model_type by overriding them
+                                          $ nmt-train -c sample.conf "seed:1235" "model_type:att"
+                                          ''') + defs,
+                                     argument_default=argparse.SUPPRESS)
 
-    ##############################
-    # Parse command-line arguments
-    cmd_args = parser.parse_args()
+    # Mandatory argument pointing to the configuration file
+    parser.add_argument('-c', '--config'        , help="Path to model configuration file",
+                                                  type=str, required=True)
 
-    # Parse configuration file for arguments
-    args = Config(cmd_args.config).get()
+    # Override the model-type given in configuration file to experiment with
+    # a different model by fixing every other parameter given in the configuration
+    parser.add_argument('-m', '--model-type'    , help="Override the model type given in the configuration",
+                                                  type=str)
+
+    parser.add_argument('-s', '--suffix'        , help="Model file suffix",
+                                                  type=str, default=None)
+    parser.add_argument('-i', '--init'          , help="Pretrained model .npz",
+                                                  type=str)
+    parser.add_argument('-t', '--timestamp'     , help="Add timestamp to log messages.",
+                                                  default=True)
+
+    parser.add_argument('-v', '--verbose'       , help="Dump Theano graph and inspect optimization.",
+                                                  action="store_true", default=False)
+
+    # You can basically override everything by passing 'lrate: 0.1' style strings at the end
+    # of command-line arguments
+    parser.add_argument('extra'                 , help="List of 'key:value' to override configuration",
+                                                  nargs="*", default=[])
+
+    ####################################
+    # Parse command-line arguments first
+    ####################################
+    cargs   = parser.parse_args()
+
+    # Pop config filename, verbose flag and extra
+    cfname  = cargs.__dict__.pop('config')
+    verbose = cargs.__dict__.pop('verbose')
+    extra   = cargs.__dict__.pop('extra')
+    suffix  = cargs.__dict__.pop('suffix')
+    tstamp  = cargs.__dict__.pop('timestamp')
+
+    # Take the remaining command line arguments (model_type and/or init if any)
+    cmd_args = cargs.__dict__
+
+    # Split and convert extra arguments to dict
+    ext_args = dict([e.split(':', 1) for e in extra])
+
+    # Merge by prioritizing extra arguments
+    cmd_args.update(ext_args)
+
+    # Parse configuration file and merge with the rest
+    conf = Config(cfname, trdefs=trdefs, mddefs=mddefs, override=cmd_args)
+    train_args, model_args = conf.parse()
+
 
     # Create a folder named as conf file
-    models_folder_name = os.path.splitext(os.path.basename(cmd_args.config))[0]
-    args.model_path = os.path.join(args.model_path, models_folder_name)
-    ensure_dirs([args.model_path])
+    folder_name = os.path.splitext(os.path.basename(cfname))[0]
+    model_args.save_path = os.path.join(model_args.save_path, folder_name)
+    ensure_dirs([model_args.save_path])
 
-    extra_params = cmd_args.extra
-    del cmd_args.__dict__['config']
-    del cmd_args.__dict__['extra']
-
-    # Override .conf arguments from the ones given in cmdline
-    args.update([(k,v) for k,v in cmd_args.__dict__.items() if v is not None])
-
-    for k,v in all_defaults.items():
-        if k not in args:
-            args[k] = v
-
-    if extra_params:
-        for opt in extra_params:
-            key, value = opt.split(":")
-            key = key.replace('-', '_')
-            args[key] = eval(value, {}, {})
-
-    # Setup arguments
-    args, log_file = setup_train_args(args)
-
-    # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
-    model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
-    train_args = dict([(k,v) for k,v in args.items() if k in TRAIN_DEFAULTS])
+    # Create a unique experience identifier string
+    exp_id = get_exp_identifier(train_args, model_args, suffix=suffix)
+    # Get unique run identifier (starts from 1)
+    run_id = get_next_runid(model_args.save_path, exp_id)
+    # Get log file name
+    log_fname = os.path.join(model_args.save_path,
+                             "%s.%d.log" % (exp_id, run_id))
+    # Update save_path
+    model_args.save_path = os.path.join(model_args.save_path,
+                                        "%s.%d" % (exp_id, run_id))
     ###################################
 
     # Start logging module (both to terminal and to file)
-    Logger.set_file(log_file)
-    log = Logger._logger
+    Logger.setup(log_file=log_fname, timestamp=tstamp)
+    log = Logger.get()
 
     # Set device for Theano
     if 'THEANO_FLAGS' not in os.environ:
-        args.device_id = get_device(args.device_id)
-        os.environ['THEANO_FLAGS'] = "device=%s" % args.device_id
+        train_args.device_id = get_device(train_args.device_id)
+        os.environ['THEANO_FLAGS'] = "device=%s" % train_args.device_id
 
     log.info("THEANO_FLAGS = %s" % os.environ['THEANO_FLAGS'])
 
     # Import theano
     import theano
     import numpy as np
-    log.info("Using device: %s (on machine %s)" % (args.device_id, platform.node()))
+    log.info("Using device: %s (on machine %s)" % (train_args.device_id, platform.node()))
 
     # Set numpy random seed before everything else
-    if args.seed != 0:
-        np.random.seed(args.seed)
+    if train_args.seed != 0:
+        np.random.seed(train_args.seed)
 
     # Import the model
     try:
-       Model = importlib.import_module("nmtpy.models.%s" % args.model_type).Model
+       Model = importlib.import_module("nmtpy.models.%s" % train_args.model_type).Model
     except ImportError as e:
-        log.error("Error while importing %s" % args.model_type)
+        log.error("Error while importing %s" % train_args.model_type)
         log.error(e)
         sys.exit(1)
 
-    # Print parameter summary
-    log.info("Model options:")
-    log.info("--------------")
-    for p in sorted(args.keys()):
-        log.info(" %20s -> %s" % (p, args[p]))
+    # Print options
+    pretty_repr(train_args.__dict__, 'Training options:', print_func=log.info)
+    pretty_repr(model_args.__dict__, 'Model options:', print_func=log.info)
 
     # Create model object
-    model = Model(seed=args.seed, logger=log, **model_args)
+    model = Model(seed=train_args.seed, logger=log, **(model_args.__dict__))
 
     # Initialize parameters
     log.info("Initializing parameters")
@@ -130,9 +156,10 @@ if __name__ == '__main__':
 
     # Load pre-trained model weights if requested
     init_params = None
-    if "init" in args:
+    if train_args.init:
         log.info('Overriding parameters from pre-trained model')
-        init_params = get_param_dict(args.init)
+        log.info('  %s' % os.path.basename(train_args.init))
+        init_params = get_param_dict(train_args.init)
 
     # Create theano shared variables
     log.info('Creating shared variables')
@@ -155,29 +182,29 @@ if __name__ == '__main__':
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
 
-    if args.sample_freq > 0:
+    if train_args.sample_freq > 0:
         log.info('Building sampler')
         model.build_sampler()
 
     # Compute regularized loss
     reg_loss = []
-    if args.decay_c > 0:
-        reg_loss.append(model.get_l2_weight_decay(args.decay_c))
-    if args.alpha_c > 0:
-        reg_loss.append(model.get_alpha_regularizer(args.alpha_c))
+    if train_args.decay_c > 0:
+        reg_loss.append(model.get_l2_weight_decay(train_args.decay_c))
+    if train_args.alpha_c > 0:
+        reg_loss.append(model.get_alpha_regularizer(train_args.alpha_c))
 
     reg_loss = sum(reg_loss) if len(reg_loss) > 0 else None
 
     # Build optimizer
-    log.info('Building optimizer %s (initial lr=%.5f)' % (args.optimizer, model.lrate))
-    model.build_optimizer(data_loss, reg_loss, args.clip_c, debug=args.debug)
+    log.info('Building optimizer %s (initial lr=%.5f)' % (model_args.optimizer, model_args.lrate))
+    model.build_optimizer(data_loss, reg_loss, train_args.clip_c, debug=verbose)
 
     # Save graph
-    if args.debug:
+    if verbose:
         theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
 
     # Reseed to retain the order of shuffle operations
-    np.random.seed(args.seed)
+    np.random.seed(train_args.seed)
 
     # Create mainloop
-    MainLoop(model, log, DotDict(train_args)).run()
+    MainLoop(model, log, train_args).run()
