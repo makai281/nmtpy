@@ -14,12 +14,15 @@ def _parse_value(value):
     # Check for path, files
     elif value.startswith(('~', '/', '../', './')):
         real_path = os.path.realpath(os.path.expanduser(value))
-        # Resolve wildcards if any
-        files = glob.glob(real_path)
-        if len(files) == 0:
-            raise Exception('%s did not match any file.' % value)
-        # Return list if multiple, single file if not
-        return sorted(files) if len(files) > 1 else files[0]
+        if '*' in real_path:
+            # Resolve wildcards if any
+            files = glob.glob(real_path)
+            if len(files) == 0:
+                raise Exception('%s did not match any file.' % value)
+            # Return list if multiple, single file if not
+            return sorted(files) if len(files) > 1 else files[0]
+        else:
+            return real_path
 
     else:
         # Detect strings, floats and ints
