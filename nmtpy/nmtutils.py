@@ -5,12 +5,14 @@ import cPickle
 from collections import OrderedDict
 from .defaults import INT, FLOAT
 
+def invert_dictionary(d):
+    return OrderedDict([(v,k) for k,v in d.iteritems()])
+
 def load_dictionary(fname):
     with open(fname, "rb") as f:
         vocab = cPickle.load(f)
 
-    ivocab = OrderedDict([(v,k) for k,v in vocab.iteritems()])
-    return vocab, ivocab
+    return vocab, invert_dictionary(vocab)
 
 # Function to convert idxs to sentence
 def idx_to_sent(ivocab, idxs, join=True):
