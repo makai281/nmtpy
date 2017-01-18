@@ -5,13 +5,14 @@ INT   = 'int64'
 FLOAT = 'float32'
 
 MODEL_DEFAULTS = {
-        'weight_init':        'xavier',       # Can be a float for the scale of normal initializatio, "xavier" or "he".
+        'weight_init':        'xavier',       # Can be a float for the scale of normal initialization, "xavier" or "he".
         'batch_size':         32,             # Training batch size
         'optimizer':          'adam',         # adadelta, sgd, rmsprop, adam
         'lrate':              0.0004,         # Initial learning rate
         }
 
 TRAIN_DEFAULTS = {
+        'init':               None,           # Pretrained model .npz file
         'device_id':          'auto',         #
         'seed':               1234,           # RNG seed
         'alpha_c':            0.,             # Alpha regularization for attentional models (not quite tested)
