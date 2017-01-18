@@ -7,6 +7,24 @@ import subprocess
 
 from . import cleanup
 
+def pretty_repr(elem, msg=None):
+    """Returns a string representing elem optionally prepended by a message."""
+    result = ""
+    if msg:
+        # Add message
+        result += msg + '\n'
+        # Add trailing lines
+        result += ('-' * len(msg)) + '\n'
+
+    if isinstance(elem, dict):
+        skeys = sorted(elem.keys())
+        maxlen = max([len(k) for k in skeys]) + 1
+        templ = '%' + str(maxlen) + 's : %s\n'
+        for k in skeys:
+            result += (templ % (k, elem[k]))
+
+        return result
+
 def ensure_dirs(dirs):
     """Create a list of directories if not exists."""
     try:
