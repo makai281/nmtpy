@@ -289,6 +289,7 @@ class Model(BaseModel):
         y = tensor.matrix('y', dtype=INT)
         y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
+        self.inputs = OrderedDict()
         self.inputs['x'] = x
         self.inputs['x_mask'] = x_mask
         self.inputs['y'] = y

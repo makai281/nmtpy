@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-# 3rd party
+from collections import OrderedDict
 import numpy as np
 
 import theano
 import theano.tensor as tensor
-from sys import getsizeof
 # Ours
 from ..layers import *
 from ..defaults import INT, FLOAT
@@ -88,6 +87,7 @@ class Model(BaseModel):
         x_mask = tensor.matrix('x_mask', dtype=FLOAT)
 
         # Store tensors
+        self.inputs = OrderedDict()
         self.inputs['x']        = x         # Source words
         self.inputs['x_mask']   = x_mask    # Source mask
 

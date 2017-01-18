@@ -99,6 +99,7 @@ class Model(BaseModel):
         y_mask = tensor.matrix('y_mask', dtype=FLOAT)
 
         # Store tensors
+        self.inputs = OrderedDict()
         self.inputs['x_img'] = x_img
         self.inputs['y'] = y
         self.inputs['y_mask'] = y_mask

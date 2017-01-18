@@ -368,6 +368,7 @@ class Model(BaseModel):
         n_timesteps_trg = y.shape[0]
 
         # Store tensors
+        self.inputs = OrderedDict()
         self.inputs['x']        = x         # Source words
         self.inputs['x_mask']   = x_mask    # Source mask
         self.inputs['x_img']    = x_img     # Image features
