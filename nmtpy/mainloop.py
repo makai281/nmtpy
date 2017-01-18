@@ -29,15 +29,18 @@ class MainLoop(object):
         self.max_epochs     = train_args.max_epochs
         self.early_patience = train_args.patience
         self.valid_metric   = train_args.valid_metric
-        self.valid_mode     = train_args.valid_mode
         self.valid_start    = train_args.valid_start
-        self.beam_size      = train_args.beam_size
-        self.njobs          = train_args.njobs
+        self.beam_size      = train_args.valid_beam
+        self.njobs          = train_args.valid_njobs
         self.f_valid        = train_args.valid_freq
         self.f_sample       = train_args.sample_freq
         self.f_verbose      = 10
         self.do_sampling    = self.f_sample > 0
         self.do_beam_search = self.valid_metric != 'px'
+
+        self.valid_mode     = 'single'
+        if 'valid_mode' in self.model.__dict__:
+            self.valid_mode = self.model.valid_mode
 
         # Number of samples to produce
         self.n_samples      = 5
@@ -193,7 +196,7 @@ class MainLoop(object):
                                                                 n_jobs=self.njobs,
                                                                 metric=self.valid_metric,
                                                                 mode='beamsearch',
-                                                                valid_mode=self.valid_mode)
+                                                                valid_mode=self.model.valid_mode)
 
                 self._print("Validation %2d - %s" % (self.vctr, metric_str))
 
