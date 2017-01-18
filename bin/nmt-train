@@ -135,6 +135,10 @@ if __name__ == '__main__':
     if train_args.seed != 0:
         np.random.seed(train_args.seed)
 
+    # Print options
+    pretty_repr(train_args.__dict__, 'Training options:', print_func=log.info)
+    pretty_repr(model_args.__dict__, 'Model options:', print_func=log.info)
+
     # Import the model
     try:
        Model = importlib.import_module("nmtpy.models.%s" % train_args.model_type).Model
@@ -143,12 +147,10 @@ if __name__ == '__main__':
         log.error(e)
         sys.exit(1)
 
-    # Print options
-    pretty_repr(train_args.__dict__, 'Training options:', print_func=log.info)
-    pretty_repr(model_args.__dict__, 'Model options:', print_func=log.info)
-
     # Create model object
-    model = Model(seed=train_args.seed, logger=log, **(model_args.__dict__))
+    # Save model_type into the model as well
+    model = Model(seed=train_args.seed, logger=log,
+                  model_type=train_args.model_type, **(model_args.__dict__))
 
     # Initialize parameters
     log.info("Initializing parameters")
