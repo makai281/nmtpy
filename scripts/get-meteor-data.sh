@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PREFIX="https://raw.githubusercontent.com/cmu-mtlab/meteor/master/data/paraphrase"
-SAVEDIR="nmtpy/meteor_data/data"
+SAVEDIR="nmtpy/external/data"
 
 for lang in cz de en es fr ru; do
   if [ ! -f "${SAVEDIR}/paraphrase-${lang}.gz" ]; then
