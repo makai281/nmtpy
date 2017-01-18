@@ -29,7 +29,8 @@ from nmtpy.defaults         import INT, FLOAT
 
 import nmtpy.cleanup as cleanup
 
-log = Logger._logger
+Logger.setup()
+log = Logger.get()
 
 """Worker process which does beam search."""
 def translate_model(queue, rqueue, pid, model, beam_size, nbest,

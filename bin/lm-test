@@ -26,7 +26,8 @@ from nmtpy.filters import get_filter
 from nmtpy.iterators.bitext import BiTextIterator
 import nmtpy.cleanup as cleanup
 
-log = Logger._logger
+Logger.setup()
+log = Logger.get()
 
 """Worker process which does calculate logprobs from data send through the model."""
 def test_model(queue, rqueue, pid, model, beam_size, nbest,
