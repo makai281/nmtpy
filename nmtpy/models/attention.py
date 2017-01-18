@@ -29,9 +29,6 @@ class Model(BaseModel):
         # Call parent's init first
         super(Model, self).__init__(**kwargs)
 
-        # Load dictionaries
-        dicts = kwargs['dicts']
-
         # Use GRU by default as encoder
         self.enc_type = kwargs.get('enc_type', 'gru')
 
@@ -54,11 +51,28 @@ class Model(BaseModel):
         # Use a single embedding matrix for target words?
         self.tied_trg_emb = kwargs.get('tied_trg_emb', False)
 
-        # Load dictionaries, limit shortlist size if requested
-        self.src_dict, src_idict = load_dictionary(dicts['src'])
+        # Load dictionaries
+        if 'src_dict' in kwargs:
+            # Already passed through kwargs (nmt-translate)
+            self.src_dict = kwargs['src_dict']
+            # Invert dict
+            src_idict = invert_dictionary(self.src_dict)
+        else:
+            # Load them from pkl files
+            self.src_dict, src_idict = load_dictionary(kwargs['dicts']['src'])
+
+        if 'trg_dict' in kwargs:
+            # Already passed through kwargs (nmt-translate)
+            self.trg_dict = kwargs['trg_dict']
+            # Invert dict
+            trg_idict = invert_dictionary(self.trg_dict)
+        else:
+            # Load them from pkl files
+            self.trg_dict, trg_idict = load_dictionary(kwargs['dicts']['trg'])
+
+        # Limit shortlist sizes
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
-        self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
         self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) \
                 if self.n_words_trg > 0 else len(self.trg_dict)
 
