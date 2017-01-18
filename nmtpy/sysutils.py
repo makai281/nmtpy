@@ -7,7 +7,7 @@ import subprocess
 
 from . import cleanup
 
-def pretty_repr(elem, msg=None):
+def pretty_repr(elem, msg=None, print_func=None):
     """Returns a string representing elem optionally prepended by a message."""
     result = ""
     if msg:
@@ -23,6 +23,10 @@ def pretty_repr(elem, msg=None):
         for k in skeys:
             result += (templ % (k, elem[k]))
 
+    if print_func:
+        for line in result.split('\n'):
+            print_func(line)
+    else:
         return result
 
 def ensure_dirs(dirs):
@@ -70,10 +74,10 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, valid_mode='single'):
+def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode='single'):
     """Run nmt-translate for validation during training."""
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
-           "-j", str(n_jobs), "-m", model_path, "-M", metric, "-v", valid_mode]
+           "-j", str(n_jobs), "-m", save_path, "-M", metric, "-v", valid_mode]
 
     # nmt-translate will print a dict of metrics
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=sys.stdout)
@@ -134,76 +138,64 @@ def get_device(which='auto'):
         lock_file = create_gpu_lock(which)
         return ("gpu%d" % which)
 
-def get_exp_identifier(args):
+def get_exp_identifier(train_args, model_args, suffix=None):
     """Return a representative string for the experiment."""
 
-    names = [args.model_type]
+    names = [train_args.model_type]
 
-    for k in sorted(args):
+    for k in sorted(model_args.__dict__):
         if k.endswith("_dim"):
             # Only the first letter should suffice for now, e for emb, r for rnn
-            names.append('%s%d' % (k[0], args[k]))
+            names.append('%s%d' % (k[0], getattr(model_args, k)))
 
+    # Join so far
     name = '-'.join(names)
 
     # Append optimizer and learning rate
-    name += '-%s_%.e' % (args.optimizer, float(args.lrate))
+    name += '-%s_%.e' % (model_args.optimizer, model_args.lrate)
 
     # Append batch size
-    name += '-bs%d' % args.batch_size
+    name += '-bs%d' % model_args.batch_size
 
     # Validation stuff
-    name += '-%s' % args.valid_metric
+    name += '-%s' % train_args.valid_metric
 
-    if args.valid_freq > 0:
-        name += "-each%d" % args.valid_freq
+    if train_args.valid_freq > 0:
+        name += "-each%d" % train_args.valid_freq
     else:
         name += "-eachepoch"
 
-    if args.decay_c > 0:
-        name += "-l2_%.e" % args.decay_c
+    if train_args.decay_c > 0:
+        name += "-l2_%.e" % train_args.decay_c
 
-    if 'emb_dropout' in args:
-        name += "-do_%.1f_%.1f_%.1f" % (args.emb_dropout, args.ctx_dropout, args.out_dropout)
+    if 'emb_dropout' in model_args:
+        name += "-do_%.1f_%.1f_%.1f" % (model_args.emb_dropout,
+                                        model_args.ctx_dropout,
+                                        model_args.out_dropout)
 
-    if args.clip_c > 0:
-        name += "-gc%d" % int(args.clip_c)
+    if train_args.clip_c > 0:
+        name += "-gc%d" % int(train_args.clip_c)
 
-    if args.alpha_c > 0:
-        name += "-alpha_%.e" % args.alpha_c
+    if train_args.alpha_c > 0:
+        name += "-alpha_%.e" % train_args.alpha_c
 
-    if isinstance(args.weight_init, str):
-        name += "-init_%s" % args.weight_init
+    if isinstance(model_args.weight_init, str):
+        name += "-init_%s" % model_args.weight_init
     else:
-        name += "-init_%.e" % args.weight_init
+        name += "-init_%.2f" % model_args.weight_init
 
     # Append seed
-    name += "-s%d" % args.seed
+    name += "-s%d" % train_args.seed
 
-    if 'suffix' in args:
-        name = "%s-%s" % (name, args.suffix)
-        del args['suffix']
+    if suffix:
+        name = "%s-%s" % (name, suffix)
 
     return name
 
-def get_next_runid(model_path, exp_name):
+def get_next_runid(save_path, exp_id):
     # Log file, runs start from 1, incremented if exists
     i = 1
-
-    while os.path.exists(os.path.join(model_path, "%s.%d.log" % (exp_name, i))):
+    while os.path.exists(os.path.join(save_path, "%s.%d.log" % (exp_id, i))):
         i += 1
 
     return i
-
-def setup_train_args(args):
-    # Get identifier name
-    exp_name = get_exp_identifier(args)
-    next_run_id = get_next_runid(args.model_path, exp_name)
-
-    # Construct log file name
-    log_fname = os.path.join(args.model_path, "%s.%d.log" % (exp_name, next_run_id))
-
-    # Save new path
-    args.model_path = os.path.join(args.model_path, "%s.%d" % (exp_name, next_run_id))
-
-    return args, log_fname
