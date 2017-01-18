@@ -197,7 +197,7 @@ class MainLoop(object):
                                                                 n_jobs=self.njobs,
                                                                 metric=self.valid_metric,
                                                                 mode='beamsearch',
-                                                                valid_mode=self.model.valid_mode)
+                                                                valid_mode=self.valid_mode)
 
                 self._print("Validation %2d - %s" % (self.vctr, metric_str))
 
