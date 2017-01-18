@@ -38,7 +38,7 @@ class BaseModel(object):
         self.use_dropout    = None
 
         # Input tensor lists
-        self.inputs         = OrderedDict()
+        self.inputs         = None
 
         # Theano variables
         self.f_log_probs    = None
