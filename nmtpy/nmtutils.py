@@ -5,11 +5,6 @@ import cPickle
 from collections import OrderedDict
 from .defaults import INT, FLOAT
 
-class DotDict(dict):
-    def __init__(self, *args, **kwargs):
-        super(DotDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
-
 def load_dictionary(fname):
     with open(fname, "rb") as f:
         vocab = cPickle.load(f)
