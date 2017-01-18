@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # Override .conf arguments from the ones given in cmdline
     args.update([(k,v) for k,v in cmd_args.__dict__.items() if v is not None])
 
-    for k,v in all_defaults.iteritems():
+    for k,v in all_defaults.items():
         if k not in args:
             args[k] = v
 
@@ -83,8 +83,8 @@ if __name__ == '__main__':
     args, log_file = setup_train_args(args)
 
     # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
-    model_args = dict([(k,v) for k,v in args.iteritems() if k not in TRAIN_DEFAULTS])
-    train_args = dict([(k,v) for k,v in args.iteritems() if k in TRAIN_DEFAULTS])
+    model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
+    train_args = dict([(k,v) for k,v in args.items() if k in TRAIN_DEFAULTS])
     ###################################
 
     # Start logging module (both to terminal and to file)
