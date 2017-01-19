@@ -64,11 +64,10 @@ similar performance with OpenBLAS as well but the setup procedure may be difficu
 
 nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in the future.
 
-#### METEOR/BLEU
+#### Additional data for METEOR
 
 - Before installing nmtpy package, you need to run `scripts/get-meteor-data.sh` script from the root folder to fetch METEOR paraphrase files.
-  - Please note that METEOR requires a Java runtime so `java` should be in your `$PATH`.
-- `multi-bleu.perl` from [moses](https://github.com/moses-smt/mosesdecoder/blob/master/scripts/generic/multi-bleu.perl) should be in your `$PATH`.
+- Please note that METEOR requires a Java runtime so `java` should be in your `$PATH`.
 
 #### Installation
 
