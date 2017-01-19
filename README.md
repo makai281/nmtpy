@@ -20,18 +20,18 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
   - No shell script, everything is in Python 
   - Overhaul object-oriented refactoring of the code
     - Clear separation of API and scripts that interface with the API
-  - Simple text configuration files to define everything regarding a training experiment
+  - INI style configuration files to define everything regarding a training experiment
   - Transparent cleanup mechanism to kill stale processes, remove temporary files
   - Simultaneous logging of training details to stdout and log file
   
 #### Training/Inference
-  - Included [subword-nmt](https://github.com/rsennrich/subword-nmt) utilities for training and applying BPE model
+  - Supports out-of-the-box BLEU, METEOR and COCO eval metrics
+  - Includes [subword-nmt](https://github.com/rsennrich/subword-nmt) utilities for training and applying BPE model
   - Plugin-like text filters for hypothesis post-processing (Example: BPE, Compound)
   - Early-stopping and checkpointing based on perplexity, BLEU or METEOR
     - `nmt-train` automatically calls `nmt-translate` during validation and returns the result back
     - Ability to add new metrics easily
   - Single `.npz` file to store everything about a training experiment
-  - Improved numerical stability and reproducibility
   - Automatic free GPU selection and reservation using `nvidia-smi`
   - Shuffling support between epochs:
     - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
@@ -41,15 +41,19 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
   - Export decoding informations into `json` for further visualization of attention coefficients
   
 #### Deep Learning
+  - Improved numerical stability and reproducibility
+  - Glorot/Xavier, He, Orthogonal weight initializations
   - Efficient SGD, Adadelta, RMSProp and ADAM
     - Single forward/backward theano function without intermediate variables
   - Ability to stop updating a set of weights by recompiling optimizer
-  - Several recurrent blocks: GRU, Conditional GRU (CGRU) and LSTM
+  - Several recurrent blocks:
+    - GRU, Conditional GRU (CGRU) and LSTM
+    - Multimodal attentive CGRU variants
   - [Layer Normalization](https://github.com/ryankiros/layer-norm) support for GRU
-  - Simple/Non-recurrent Dropout, L2 weight decay
-  - Training and validation loss normalization for correct perplexity computation
   - [Tied target embeddings](https://arxiv.org/abs/1608.05859)
-  - Glorot/Xavier, He, Orthogonal weight initializations
+  - Simple/Non-recurrent Dropout, L2 weight decay
+  - Training and validation loss normalization for comparable perplexities
+  - Initialization of a model with a pretrained NMT for further finetuning
 
 ## Requirements
 
