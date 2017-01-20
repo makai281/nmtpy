@@ -591,7 +591,7 @@ class Model(ParentModel):
         # ctx0: the set of context vectors leading to the next_state
         # with an initial shape of (n_src_words x 1 x ctx_dim)
 
-        text_ctx, img_ctx, next_state = self.f_init(*inputs)
+        next_state, text_ctx, img_ctx = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,), dtype=INT)
