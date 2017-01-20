@@ -564,7 +564,7 @@ class Model(ParentModel):
         ################
         # Build f_next()
         ################
-        inputs = [y, text_ctx, img_ctx, text_init_state]
+        inputs = [y, text_init_state, text_ctx, img_ctx]
         outs = [next_log_probs, next_word, h] + alphas
         self.f_next = theano.function(inputs, outs, name='f_next')
 
@@ -609,7 +609,7 @@ class Model(ParentModel):
             # the size of the 2nd dimension as the context vectors of the source
             # sequence is always the same regardless of the decoding process.
             # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, _, next_state, alpha_txt, alpha_img = self.f_next(next_w, tiled_ctx, img_ctx, next_state)
+            next_log_p, _, next_state, alpha_txt, alpha_img = self.f_next(next_w, next_state, tiled_ctx, img_ctx)
 
             # For each f_next, we obtain a new set of alpha's for the next_w
             # for each hypothesis in the beam search
