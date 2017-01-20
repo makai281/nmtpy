@@ -142,10 +142,12 @@ class Model(BaseModel):
         return alpha_reg
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
+        get_att = kwargs.get('get_att_alphas', False)
+
         # Final results and their scores
         final_sample        = []
         final_score         = []
-        final_alignments    = []
+        final_alignments    = [] if get_att else None
 
         # Initially we have one empty hypothesis with a score of 0
         hyp_alignments  = [[]]
@@ -227,7 +229,8 @@ class Model(BaseModel):
                     # <eos> found, separate out finished hypotheses
                     final_sample.append(new_hyp)
                     final_score.append(costs[idx])
-                    final_alignments.append(new_ali)
+                    if get_att:
+                        final_alignments.append(new_ali)
                 else:
                     # Add formed hypothesis to the new hypotheses list
                     new_hyp_samples.append(new_hyp)
@@ -254,7 +257,8 @@ class Model(BaseModel):
         for idx in xrange(live_beam):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
-            final_alignments.append(hyp_alignments[idx])
+            if get_att:
+                final_alignments.append(hyp_alignments[idx])
 
         return final_sample, final_score, final_alignments
 
