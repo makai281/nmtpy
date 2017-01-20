@@ -33,12 +33,12 @@ def init_multigru_concat_ind_dep(params, nin, dim, dimctx, scale=0.01, prefix='g
     params = param_init_gru_cond(params, nin, dim, dimctx, scale, prefix)
 
     # Add weights for concat fusion
-    params[pp(prefix, 'W_fus')]     = norm_weight(2*dimctx, dimctx, scale=scale)
-    params[pp(prefix, 'c_fus')]     = np.zeros((dimctx, )).astype(FLOAT)
+    params[pp(prefix, 'W_fus')] = norm_weight(2*dimctx, dimctx, scale=scale)
+    params[pp(prefix, 'c_fus')] = np.zeros((dimctx, )).astype(FLOAT)
 
     # Add separate attention weights for the 2nd modality
-    params[pp(prefix, 'Wc_att2')]   = norm_weight(dimctx, dimctx, scale=scale)
-    params[pp(prefix,  'b_att2')]   = np.zeros((dimctx,)).astype(FLOAT)
+    params[pp(prefix, 'Wc_att2')] = norm_weight(dimctx, dimctx, scale=scale)
+    params[pp(prefix,  'b_att2')] = np.zeros((dimctx,)).astype(FLOAT)
 
     params[pp(prefix, 'W_comb_att2')] = norm_weight(dim, dimctx, scale=scale)
     return params
