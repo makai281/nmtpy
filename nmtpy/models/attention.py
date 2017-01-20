@@ -182,11 +182,10 @@ class Model(BaseModel):
             # the size of the 2nd dimension as the context vectors of the source
             # sequence is always the same regardless of the decoding process.
             # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, _, next_state, alpha_txt = self.f_next(next_w, tiled_ctx, next_state)
+            next_log_p, next_state, alpha_txt = self.f_next(next_w, next_state, tiled_ctx)
 
             # For each f_next, we obtain a new set of alpha's for the next_w
             # for each hypothesis in the beam search
-
             if suppress_unks:
                 next_log_p[:, 1] = -np.inf
 
@@ -481,10 +480,14 @@ class Model(BaseModel):
 
         # Sample from the softmax distribution
         next_probs = tensor.exp(next_log_probs)
-        next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
+
+        # NOTE: We never use sampling and it incurs performance penalty
+        # let's disable it for now
+        #next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
 
         # compile a function to do the whole thing above
         # next hidden state to be used
-        inputs = [y, ctx, init_state]
-        outs = [next_log_probs, next_word, next_state, alphas]
+        inputs = [y, init_state, ctx]
+
+        outs = [next_log_probs, next_state, alphas]
         self.f_next = theano.function(inputs, outs, name='f_next')
