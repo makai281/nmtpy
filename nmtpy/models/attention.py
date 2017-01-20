@@ -184,7 +184,7 @@ class Model(BaseModel):
             # the size of the 2nd dimension as the context vectors of the source
             # sequence is always the same regardless of the decoding process.
             # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, _, next_state, alphas = self.f_next(*[next_w, tiled_ctx, next_state])
+            next_log_p, _, next_state, alpha_txt = self.f_next(*[next_w, tiled_ctx, next_state])
 
             # For each f_next, we obtain a new set of alpha's for the next_w
             # for each hypothesis in the beam search
@@ -223,7 +223,7 @@ class Model(BaseModel):
             for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
                 # Form the new hypothesis by appending new word to the left hyp
                 new_hyp = hyp_samples[ti] + [wi]
-                new_ali = hyp_alignments[ti] + [alphas[ti]]
+                new_ali = hyp_alignments[ti] + [alpha_txt[ti]]
 
                 if wi == 0:
                     # <eos> found, separate out finished hypotheses
