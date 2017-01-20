@@ -34,7 +34,7 @@ Logger.setup()
 log = Logger.get()
 
 """Worker process which does beam search."""
-def translate_model(queue, rqueue, pid, model, beam_size, nbest,
+def translate_model(rqueue, wqueue, pid, model, beam_size, nbest,
                     suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
 
     # Build the sampler of the model
@@ -52,7 +52,7 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest,
 
     while True:
         # Get a sample
-        req = queue.get()
+        req = rqueue.get()
 
         # NOTE: We should avoid this
         if req is None:
@@ -76,7 +76,7 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest,
             align = np.array(align)[best_idxs]
 
         # Send response back
-        rqueue.put((sample_idx, trans, score[best_idxs], align))
+        wqueue.put((sample_idx, trans, score[best_idxs], align))
 
 class Translator(object):
     """Starts worker processes and waits for the results."""
