@@ -72,12 +72,11 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest,
         trans = np.array(trans)[best_idxs]
 
         # Check for attention weights
-        if align:
+        if align is not None:
             align = np.array(align)[best_idxs]
-            rqueue.put((sample_idx, trans, score[best_idxs], align))
-        else:
-            rqueue.put((sample_idx, trans, score[best_idxs]))
 
+        # Send response back
+        rqueue.put((sample_idx, trans, score[best_idxs], align))
 
 class Translator(object):
     """Starts worker processes and waits for the results."""
@@ -249,12 +248,12 @@ class Translator(object):
             # This is the sample id of the processed sample
             sample_idx = resp[0]
 
-            # Get the hypotheses and scores
-            hyps, self.scores[sample_idx] = resp[1], resp[2]
+            # Get the hypotheses, scores and attention weights if any
+            hyps, self.scores[sample_idx], attw = resp[1:]
 
             # Did we receive attention weights from beam search?
-            if len(resp) == 4:
-                self.att_weights[sample_idx] = resp[3][0]
+            if attw is not None:
+                self.att_weights[sample_idx] = attw[0]
 
             outs = []
 
