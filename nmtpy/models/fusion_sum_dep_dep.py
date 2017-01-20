@@ -489,11 +489,6 @@ class Model(BaseModel):
 
         return cost
 
-    def get_alpha_regularizer(self, alpha_c):
-        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
-        alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
-        return alpha_reg
-
     def build_sampler(self):
         x               = tensor.matrix('x', dtype=INT)
         n_timesteps     = x.shape[0]
@@ -603,8 +598,6 @@ class Model(BaseModel):
         # text_ctx: the set of context vectors leading to the next_state
         # with an initial shape of (n_src_words x 1 x ctx_dim)
 
-        # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
-        # shape of (1 x rnn_dim)
         next_state, text_ctx, img_ctx = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
@@ -702,8 +695,13 @@ class Model(BaseModel):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
             final_alignments.append(hyp_alignments[idx])
-        
+
         if not kwargs.get('get_att_alphas', False):
             # Don't send back alignments for nothing
             final_alignments = None
         return final_sample, final_score, final_alignments
+
+    def get_alpha_regularizer(self, alpha_c):
+        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
+        alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
+        return alpha_reg
