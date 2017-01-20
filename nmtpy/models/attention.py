@@ -142,12 +142,10 @@ class Model(BaseModel):
         return alpha_reg
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-        get_att = kwargs.get('get_att_alphas', False)
-
         # Final results and their scores
         final_sample        = []
         final_score         = []
-        final_alignments    = [] if get_att else None
+        final_alignments    = []
 
         # Initially we have one empty hypothesis with a score of 0
         hyp_alignments  = [[]]
@@ -160,7 +158,7 @@ class Model(BaseModel):
 
         # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
         # shape of (1 x rnn_dim)
-        next_state, text_ctx = self.f_init(inputs[0])
+        next_state, text_ctx = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,), dtype=INT)
@@ -184,7 +182,7 @@ class Model(BaseModel):
             # the size of the 2nd dimension as the context vectors of the source
             # sequence is always the same regardless of the decoding process.
             # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, _, next_state, alpha_txt = self.f_next(*[next_w, tiled_ctx, next_state])
+            next_log_p, _, next_state, alpha_txt = self.f_next(next_w, tiled_ctx, next_state)
 
             # For each f_next, we obtain a new set of alpha's for the next_w
             # for each hypothesis in the beam search
@@ -229,8 +227,7 @@ class Model(BaseModel):
                     # <eos> found, separate out finished hypotheses
                     final_sample.append(new_hyp)
                     final_score.append(costs[idx])
-                    if get_att:
-                        final_alignments.append(new_ali)
+                    final_alignments.append(new_ali)
                 else:
                     # Add formed hypothesis to the new hypotheses list
                     new_hyp_samples.append(new_hyp)
@@ -257,9 +254,11 @@ class Model(BaseModel):
         for idx in xrange(live_beam):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
-            if get_att:
-                final_alignments.append(hyp_alignments[idx])
+            final_alignments.append(hyp_alignments[idx])
 
+        if not kwargs.get('get_att_alphas', False):
+            # Don't send back alignments for nothing
+            final_alignments = None
         return final_sample, final_score, final_alignments
 
     ###################################################################
