@@ -586,8 +586,6 @@ class Model(BaseModel):
         self.f_next = theano.function(inputs, outs, name='f_next')
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-        get_att = kwargs.get('get_att_alphas', False)
-
         # Final results and their scores
         final_sample        = []
         final_score         = []
@@ -599,10 +597,12 @@ class Model(BaseModel):
         hyp_scores      = np.zeros(1, dtype=FLOAT)
 
         # get initial state of decoder rnn and encoder context vectors
-        # ctx0: the set of context vectors leading to the next_state
+        # text_ctx: the set of context vectors leading to the next_state
         # with an initial shape of (n_src_words x 1 x ctx_dim)
 
-        text_ctx, img_ctx, next_state = self.f_init(*inputs)
+        # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
+        # shape of (1 x rnn_dim)
+        next_state, text_ctx, img_ctx = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,), dtype=INT)
@@ -611,7 +611,7 @@ class Model(BaseModel):
         maxlen = min(maxlen, inputs[0].shape[0] * 3)
 
         # Always starts with the initial tstep's context vectors
-        # e.g. we have a ctx0 of shape (n_words x 1 x ctx_dim)
+        # e.g. we have a text_ctx of shape (n_words x 1 x ctx_dim)
         # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
         # thus we create sth like a batch of live_beam size with every word duplicated
         # for further state expansion.
@@ -699,8 +699,8 @@ class Model(BaseModel):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
             final_alignments.append(hyp_alignments[idx])
-
-        if get_att:
-            return final_sample, final_score, final_alignments
-        else:
-            return final_sample, final_score
+        
+        if not kwargs.get('get_att_alphas', False):
+            # Don't send back alignments for nothing
+            final_alignments = None
+        return final_sample, final_score, final_alignments
