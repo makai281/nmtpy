@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """Translates a source file using a translation model."""
+# Speed up beam search a little bit more with memory consumption tradeoff
+import gc
+gc.disable()
 
 import os
 import sys
