@@ -418,7 +418,7 @@ if __name__ == "__main__":
         os.environ["MKL_NUM_THREADS"] = "1"
 
     # Force CPU
-    os.environ["THEANO_FLAGS"] = "device=cpu"
+    os.environ["THEANO_FLAGS"] = "device=cpu,optimizer_including=local_remove_all_assert"
 
     # Print some informations
     log.info("%d CPU processes - beam size = %2d" % (args.n_jobs, args.beam_size))
