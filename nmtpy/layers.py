@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import numpy as np
 
 import theano
@@ -21,6 +20,27 @@ def tensor_slice(_x, n, dim):
     elif _x.ndim == 2:
         return _x[:, n*dim:(n+1)*dim]
     return _x[n*dim:(n+1)*dim]
+
+###############################################
+# Returns the initializer and the layer itself
+###############################################
+def get_new_layer(name):
+    # Layer type: (initializer, layer)
+    layers = {
+                # Convolutional layer (not-tested)
+                'conv'              : ('param_init_conv'        , 'conv_layer'),
+                # Feedforward Layer
+                'ff'                : ('param_init_fflayer'     , 'fflayer'),
+                # GRU
+                'gru'               : ('param_init_gru'         , 'gru_layer'),
+                # Conditional GRU
+                'gru_cond'          : ('param_init_gru_cond'    , 'gru_cond_layer'),
+                # LSTM
+                'lstm'              : ('param_init_lstm'        , 'lstm_layer'),
+             }
+
+    init, layer = layers[name]
+    return (eval(init), eval(layer))
 
 #################
 # Forward dropout
@@ -114,27 +134,6 @@ def gru_step(m_, x_, xx_, h_, U, Ux):
     h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
     return h
-
-###############################################
-# Returns the initializer and the layer itself
-###############################################
-def get_new_layer(name):
-    # Layer type: (initializer, layer)
-    layers = {
-                # Convolutional layer (not-tested)
-                'conv'              : ('param_init_conv'        , 'conv_layer'),
-                # Feedforward Layer
-                'ff'                : ('param_init_fflayer'     , 'fflayer'),
-                # GRU
-                'gru'               : ('param_init_gru'         , 'gru_layer'),
-                # Conditional GRU
-                'gru_cond'          : ('param_init_gru_cond'    , 'gru_cond_layer'),
-                # LSTM
-                'lstm'              : ('param_init_lstm'        , 'lstm_layer'),
-             }
-
-    init, layer = layers[name]
-    return (eval(init), eval(layer))
 
 #####################
 # Convolutional layer
@@ -473,9 +472,10 @@ def gru_cond_layer(tparams, state_below, context, prefix='gru_cond',
                                     strict=True)
     return rval
 
-#################
-# LSTM (from SAT)
-#################
+#############################################
+# LSTM
+# https://github.com/kelvinxu/arctic-captions
+#############################################
 def param_init_lstm(params, nin, dim, forget_bias=0, scale=0.01, prefix='lstm'):
     """
      Stack the weight matrices for all the gates
