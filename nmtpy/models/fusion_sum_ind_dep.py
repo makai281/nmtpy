@@ -590,7 +590,8 @@ class Model(BaseModel):
         # get initial state of decoder rnn and encoder context vectors
         # text_ctx: the set of context vectors leading to the next_state
         # with an initial shape of (n_src_words x 1 x ctx_dim)
-
+        # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
+        # shape of (1 x rnn_dim)
         next_state, text_ctx, img_ctx = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
