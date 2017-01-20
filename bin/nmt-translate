@@ -61,9 +61,6 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest,
         # Unpack sample idx and data_dict
         sample_idx, data_dict = req[0], req[1]
 
-        # Do decoding
-        result = eval(func_call)
-
         # Get the translation, its score and alignments
         trans, score, align = eval(func_call)
 
