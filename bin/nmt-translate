@@ -64,21 +64,20 @@ def translate_model(queue, rqueue, pid, model, beam_size, nbest,
         # Do decoding
         result = eval(func_call)
 
-        # Get the translation and its score
-        trans, score = result[0], result[1]
+        # Get the translation, its score and alignments
+        trans, score, align = eval(func_call)
 
         # normalize scores according to sequence lengths
-        lengths = np.array([len(s) for s in trans])
-        score = score / lengths
+        score = score / np.array([len(s) for s in trans])
 
         # Sort the scores and take the best(s) idx(s)
         best_idxs = np.argsort(score)[:nbest]
         trans = np.array(trans)[best_idxs]
 
         # Check for attention weights
-        if len(result) == 3:
-            alignments = np.array(result[2])[best_idxs]
-            rqueue.put((sample_idx, trans, score[best_idxs], alignments))
+        if align:
+            align = np.array(align)[best_idxs]
+            rqueue.put((sample_idx, trans, score[best_idxs], align))
         else:
             rqueue.put((sample_idx, trans, score[best_idxs]))
 
