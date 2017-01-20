@@ -514,7 +514,7 @@ class Model(ParentModel):
         # Build f_init()
         ################
         inps            = [x, x_img]
-        outs            = [text_ctx, img_ctx, text_init_state]
+        outs            = [text_init_state, text_ctx, img_ctx]
         self.f_init     = theano.function(inps, outs, name='f_init')
 
         ###################
