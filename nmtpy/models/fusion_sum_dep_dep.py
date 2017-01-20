@@ -576,13 +576,16 @@ class Model(BaseModel):
 
         # Sample from the softmax distribution
         next_probs = tensor.exp(next_log_probs)
-        next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
+
+        # NOTE: We never use sampling and it incurs performance penalty
+        # let's disable it for now
+        #next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
 
         ################
         # Build f_next()
         ################
         inputs = [y, text_init_state, text_ctx, img_ctx]
-        outs = [next_log_probs, next_word, h] + alphas
+        outs = [next_log_probs, h] + alphas
         self.f_next = theano.function(inputs, outs, name='f_next')
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
@@ -626,7 +629,7 @@ class Model(BaseModel):
             # the size of the 2nd dimension as the context vectors of the source
             # sequence is always the same regardless of the decoding process.
             # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, _, next_state, alpha_txt, alpha_img = self.f_next(next_w, next_state, tiled_ctx, img_ctx)
+            next_log_p, next_state, alpha_txt, alpha_img = self.f_next(next_w, next_state, tiled_ctx, img_ctx)
 
             # For each f_next, we obtain a new set of alpha's for the next_w
             # for each hypothesis in the beam search
