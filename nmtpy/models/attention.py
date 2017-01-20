@@ -155,12 +155,12 @@ class Model(BaseModel):
         hyp_scores      = np.zeros(1, dtype=FLOAT)
 
         # get initial state of decoder rnn and encoder context vectors
-        # ctx0: the set of context vectors leading to the next_state
+        # text_ctx: the set of context vectors leading to the next_state
         # with an initial shape of (n_src_words x 1 x ctx_dim)
 
-        # next_state: mean context vector (ctx0.mean()) passed through FF with a final
+        # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
         # shape of (1 x rnn_dim)
-        next_state, ctx0 = self.f_init(inputs[0])
+        next_state, text_ctx = self.f_init(inputs[0])
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,), dtype=INT)
@@ -169,11 +169,11 @@ class Model(BaseModel):
         maxlen = min(maxlen, inputs[0].shape[0] * 3)
 
         # Always starts with the initial tstep's context vectors
-        # e.g. we have a ctx0 of shape (n_words x 1 x ctx_dim)
+        # e.g. we have a text_ctx of shape (n_words x 1 x ctx_dim)
         # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
         # thus we create sth like a batch of live_beam size with every word duplicated
         # for further state expansion.
-        tiled_ctx = np.tile(ctx0, [1, 1])
+        tiled_ctx = np.tile(text_ctx, [1, 1])
         live_beam = beam_size
 
         for ii in xrange(maxlen):
@@ -251,7 +251,7 @@ class Model(BaseModel):
             # Take the idxs of each hyp's last word
             next_w      = np.array([w[-1] for w in hyp_samples])
             next_state  = np.array(hyp_states, dtype=FLOAT)
-            tiled_ctx   = np.tile(ctx0, [live_beam, 1])
+            tiled_ctx   = np.tile(text_ctx, [live_beam, 1])
 
         # dump every remaining hypotheses
         for idx in xrange(live_beam):
