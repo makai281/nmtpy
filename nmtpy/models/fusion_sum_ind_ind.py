@@ -17,7 +17,7 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from ..layers import param_init_gru_cond
+from ..layers import *
 from ..defaults import INT, FLOAT
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
