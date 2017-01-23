@@ -22,7 +22,7 @@ from ..defaults import INT, FLOAT
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from .basemodel import BaseModel
+from .attention import Model as ParentModel
 
 ########## Define layers here ###########
 def init_gru_decoder_multisum(params, nin, dim, dimctx, scale=0.01, prefix='gru_decoder_multisum'):
@@ -232,31 +232,10 @@ def gru_decoder_multisum(tparams, state_below,
 
 
 
-class Model(BaseModel):
+class Model(ParentModel):
     def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
-        super(Model, self).__init__(**kwargs)
-
-        # We need both dictionaries
-        dicts = kwargs['dicts']
-
-        # We'll use both dictionaries
-        self.src_dict, src_idict = load_dictionary(dicts['src'])
-        self.trg_dict, trg_idict = load_dictionary(dicts['trg'])
-        self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) if self.n_words_trg > 0 else len(self.trg_dict)
-        self.n_words_src = min(self.n_words_src, len(self.src_dict)) if self.n_words_src > 0 else len(self.src_dict)
-
-        # Collect options
-        self.set_options(self.__dict__)
-
-        # Set these here to not clutter options
-        self.trg_idict = trg_idict
-        self.src_idict = src_idict
-
-        self.ctx_dim = 2 * self.rnn_dim
-        self.set_trng(seed)
-        self.set_dropout(False)
-        self.logger = logger
+        super(Model, self).__init__(seed, logger, **kwargs)
 
     def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)
@@ -575,125 +554,6 @@ class Model(BaseModel):
         inputs = [y, text_init_state, text_ctx, img_ctx]
         outs = [next_log_probs, h, alphas]
         self.f_next = theano.function(inputs, outs, name='f_next')
-
-    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-        # Final results and their scores
-        final_sample        = []
-        final_score         = []
-        final_alignments    = []
-
-        # Initially we have one empty hypothesis with a score of 0
-        hyp_alignments  = [[]]
-        hyp_samples     = [[]]
-        hyp_scores      = np.zeros(1, dtype=FLOAT)
-
-        # get initial state of decoder rnn and encoder context vectors
-        # text_ctx: the set of context vectors leading to the next_state
-        # with an initial shape of (n_src_words x 1 x ctx_dim)
-        # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
-        # shape of (1 x rnn_dim)
-        next_state, text_ctx, img_ctx = self.f_init(*inputs)
-
-        # Beginning-of-sentence indicator is -1
-        next_w = -1 * np.ones((1,), dtype=INT)
-
-        # maxlen or 3 times source length
-        maxlen = min(maxlen, inputs[0].shape[0] * 3)
-
-        # Always starts with the initial tstep's context vectors
-        # e.g. we have a text_ctx of shape (n_words x 1 x ctx_dim)
-        # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
-        # thus we create sth like a batch of live_beam size with every word duplicated
-        # for further state expansion.
-        tiled_ctx = np.tile(text_ctx, [1, 1])
-        live_beam = beam_size
-
-        for ii in xrange(maxlen):
-            # Get next states
-            # In the first iteration, we provide -1 and obtain the log_p's for the
-            # first word. In the following iterations tiled_ctx becomes a batch
-            # of duplicated left hypotheses. tiled_ctx is always the same except
-            # the size of the 2nd dimension as the context vectors of the source
-            # sequence is always the same regardless of the decoding process.
-            # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, next_state, alpha_txt, alpha_img = self.f_next(next_w, next_state, tiled_ctx, img_ctx)
-
-            # For each f_next, we obtain a new set of alpha's for the next_w
-            # for each hypothesis in the beam search
-
-            if suppress_unks:
-                next_log_p[:, 1] = -np.inf
-
-            # Compute sum of log_p's for the current hypotheses
-            cand_scores = hyp_scores[:, None] - next_log_p
-
-            # Flatten by modifying .shape (faster)
-            cand_scores.shape = cand_scores.size
-
-            # Take the best live_beam hypotheses
-            # argpartition makes a partial sort which is faster than argsort
-            # (Idea taken from https://github.com/rsennrich/nematus)
-            ranks_flat = cand_scores.argpartition(live_beam-1)[:live_beam]
-
-            # Get the costs
-            costs = cand_scores[ranks_flat]
-
-            # New states, scores and samples
-            live_beam           = 0
-            new_hyp_scores      = []
-            new_hyp_samples     = []
-            new_hyp_alignments  = []
-
-            # This will be the new next states in the next iteration
-            hyp_states          = []
-
-            # Find out to which initial hypothesis idx this was belonging
-            # Find out the idx of the appended word
-            trans_idxs  = ranks_flat / self.n_words_trg
-            word_idxs   = ranks_flat % self.n_words_trg
-            # Iterate over the hypotheses and add them to new_* lists
-            for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
-                # Form the new hypothesis by appending new word to the left hyp
-                new_hyp = hyp_samples[ti] + [wi]
-                new_ali = hyp_alignments[ti] + [[alpha_txt[ti], alpha_img[ti]]]
-
-                if wi == 0:
-                    # <eos> found, separate out finished hypotheses
-                    final_sample.append(new_hyp)
-                    final_score.append(costs[idx])
-                    final_alignments.append(new_ali)
-                else:
-                    # Add formed hypothesis to the new hypotheses list
-                    new_hyp_samples.append(new_hyp)
-                    # Cumulated cost of this hypothesis
-                    new_hyp_scores.append(costs[idx])
-                    # Hidden state of the decoder for this hypothesis
-                    hyp_states.append(next_state[ti])
-                    new_hyp_alignments.append(new_ali)
-                    live_beam += 1
-
-            hyp_scores  = np.array(new_hyp_scores, dtype=FLOAT)
-            hyp_samples = new_hyp_samples
-            hyp_alignments = new_hyp_alignments
-
-            if live_beam == 0:
-                break
-
-            # Take the idxs of each hyp's last word
-            next_w      = np.array([w[-1] for w in hyp_samples])
-            next_state  = np.array(hyp_states, dtype=FLOAT)
-            tiled_ctx   = np.tile(text_ctx, [live_beam, 1])
-
-        # dump every remaining hypotheses
-        for idx in xrange(live_beam):
-            final_sample.append(hyp_samples[idx])
-            final_score.append(hyp_scores[idx])
-            final_alignments.append(hyp_alignments[idx])
-
-        if not kwargs.get('get_att_alphas', False):
-            # Don't send back alignments for nothing
-            final_alignments = None
-        return final_sample, final_score, final_alignments
 
     def get_alpha_regularizer(self, alpha_c):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
