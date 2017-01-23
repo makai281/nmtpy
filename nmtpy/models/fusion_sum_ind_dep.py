@@ -559,5 +559,3 @@ class Model(ParentModel):
         alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
         alpha_reg = alpha_c * ((1.-self.alphas[1].sum(0))**2).sum(0).mean()
         return alpha_reg
-
-
