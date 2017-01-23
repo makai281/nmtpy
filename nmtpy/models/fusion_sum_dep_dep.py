@@ -553,7 +553,7 @@ class Model(BaseModel):
                                         init_state=text_init_state)
         h      = dec_mult[0]
         sumctx = dec_mult[1]
-        alphas = list(dec_mult[2:])
+        alphas = tensor.concatenate(dec_mult[2:], axis=-1)
 
         ########
         # Fusion
@@ -580,7 +580,7 @@ class Model(BaseModel):
         # Build f_next()
         ################
         inputs = [y, text_init_state, text_ctx, img_ctx]
-        outs = [next_log_probs, h] + alphas
+        outs = [next_log_probs, h, alphas]
         self.f_next = theano.function(inputs, outs, name='f_next')
 
     def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
