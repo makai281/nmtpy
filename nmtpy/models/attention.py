@@ -158,7 +158,8 @@ class Model(BaseModel):
 
         # next_state: mean context vector (text_ctx.mean()) passed through FF with a final
         # shape of (1 x rnn_dim)
-        next_state, text_ctx = self.f_init(*inputs)
+        result = list(self.f_init(*inputs))
+        next_state, text_ctx, aux_ctx = result[0], result[1], result[2:]
 
         # Beginning-of-sentence indicator is -1
         next_w = -1 * np.ones((1,), dtype=INT)
@@ -182,7 +183,7 @@ class Model(BaseModel):
             # the size of the 2nd dimension as the context vectors of the source
             # sequence is always the same regardless of the decoding process.
             # next_state's shape is (live_beam, rnn_dim)
-            next_log_p, next_state, alpha_txt = self.f_next(next_w, next_state, tiled_ctx)
+            next_log_p, next_state, alphas = self.f_next(*([next_w, next_state, tiled_ctx] + aux_ctx))
 
             # For each f_next, we obtain a new set of alpha's for the next_w
             # for each hypothesis in the beam search
@@ -220,7 +221,7 @@ class Model(BaseModel):
             for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
                 # Form the new hypothesis by appending new word to the left hyp
                 new_hyp = hyp_samples[ti] + [wi]
-                new_ali = hyp_alignments[ti] + [alpha_txt[ti]]
+                new_ali = hyp_alignments[ti] + [alphas[ti]]
 
                 if wi == 0:
                     # <eos> found, separate out finished hypotheses
