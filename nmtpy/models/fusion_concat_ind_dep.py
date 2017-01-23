@@ -28,7 +28,7 @@ from .attention import Model as ParentModel
 ########################################################
 # IND-DEP Attention (att shared, dec distinct) Mechanism
 ########################################################
-def init_multigru_concat_ind_dep(params, nin, dim, dimctx, scale=0.01, prefix='gru_decoder_multiconcat'):
+def init_gru_decoder_multi(params, nin, dim, dimctx, scale=0.01, prefix='gru_decoder_multi'):
     # Init with usual gru_cond function
     params = param_init_gru_cond(params, nin, dim, dimctx, scale, prefix)
 
@@ -43,10 +43,10 @@ def init_multigru_concat_ind_dep(params, nin, dim, dimctx, scale=0.01, prefix='g
     params[pp(prefix, 'W_comb_att2')] = norm_weight(dim, dimctx, scale=scale)
     return params
 
-def multigru_concat_ind_dep(tparams, state_below,
-                            ctx1, ctx2, prefix='gru_decoder_multiconcat',
-                            input_mask=None, one_step=False,
-                            init_state=None, ctx1_mask=None):
+def gru_decoder_multi(tparams, state_below,
+                      ctx1, ctx2, prefix='gru_decoder_multi',
+                      input_mask=None, one_step=False,
+                      init_state=None, ctx1_mask=None):
     if one_step:
         assert init_state, 'previous state must be provided'
 
@@ -239,11 +239,6 @@ def multigru_concat_ind_dep(tparams, state_below,
                                     strict=True)
     return rval
 
-# This is the fusion model with concatenation
-# and IND-DEP attention.
-init_gru_decoder_multiconcat = init_multigru_concat_ind_dep
-gru_decoder_multiconcat      = multigru_concat_ind_dep
-
 class Model(ParentModel):
     def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
@@ -328,8 +323,8 @@ class Model(ParentModel):
         params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
 
         # GRU cond decoder
-        params = init_gru_decoder_multiconcat(params, prefix='decoder_multi', nin=self.embedding_dim,
-                                              dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
+        params = init_gru_decoder_multi(params, prefix='decoder_multi', nin=self.embedding_dim,
+                                        dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
         # NOTE: In the text NMT, we also have logit_prev that is applied onto emb_trg
@@ -432,13 +427,13 @@ class Model(ParentModel):
         # GRU Cond
         ##########
         # decoder - pass through the decoder conditional gru with attention
-        dec_mult = gru_decoder_multiconcat(self.tparams, emb_trg,
-                                           prefix='decoder_multi',
-                                           input_mask=y_mask,
-                                           ctx1=text_ctx, ctx1_mask=x_mask,
-                                           ctx2=img_ctx,
-                                           one_step=False,
-                                           init_state=text_init_state) # NOTE: init_state only text
+        dec_mult = gru_decoder_multi(self.tparams, emb_trg,
+                                     prefix='decoder_multi',
+                                     input_mask=y_mask,
+                                     ctx1=text_ctx, ctx1_mask=x_mask,
+                                     ctx2=img_ctx,
+                                     one_step=False,
+                                     init_state=text_init_state) # NOTE: init_state only text
 
         # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
         h       = dec_mult[0]    # (n_timesteps_trg, batch_size, rnn_dim)
@@ -528,13 +523,13 @@ class Model(ParentModel):
         ##########
         # Text GRU
         ##########
-        dec_mult = gru_decoder_multiconcat(self.tparams, emb,
-                                           prefix='decoder_multi',
-                                           input_mask=None,
-                                           ctx1=text_ctx, ctx1_mask=None,
-                                           ctx2=img_ctx,
-                                           one_step=True,
-                                           init_state=text_init_state)
+        dec_mult = gru_decoder_multi(self.tparams, emb,
+                                     prefix='decoder_multi',
+                                     input_mask=None,
+                                     ctx1=text_ctx, ctx1_mask=None,
+                                     ctx2=img_ctx,
+                                     one_step=True,
+                                     init_state=text_init_state)
         h      = dec_mult[0]
         sumctx = dec_mult[1]
         alphas = tensor.concatenate(dec_mult[2:], axis=-1)
