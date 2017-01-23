@@ -316,7 +316,7 @@ class Model(ParentModel):
         params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
 
         # GRU cond decoder
-        params = init_gru_decoder(params, prefix='decoder_multi', nin=self.embedding_dim,
+        params = init_gru_decoder_multi(params, prefix='decoder_multi', nin=self.embedding_dim,
                                   dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
