@@ -1,0 +1,386 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Translates a source file using an ensemble of NMT models."""
+
+import os
+import sys
+import time
+import json
+import atexit
+import inspect
+import argparse
+import importlib
+from multiprocessing import Process, Queue, cpu_count
+
+from collections import OrderedDict
+
+import numpy as np
+
+from nmtpy.logger           import Logger
+from nmtpy.config           import Config
+from nmtpy.nmtutils         import idx_to_sent
+from nmtpy.textutils        import reduce_to_best
+from nmtpy.sysutils         import *
+from nmtpy.filters          import get_filter
+from nmtpy.iterators.bitext import BiTextIterator
+from nmtpy.defaults         import INT, FLOAT
+
+import nmtpy.cleanup as cleanup
+
+# Setup the logger
+Logger.setup()
+log = Logger.get()
+
+def beam_search(models, inputs, beam_size=12, maxlen=50, suppress_unks=False):
+    """A copy of attention.py:beam_search with alignments removed suitable for ensembling."""
+    # Final results and their scores
+    final_sample        = []
+    final_score         = []
+
+    # Initially we have one empty hypothesis with a score of 0
+    hyp_samples     = [[]]
+    hyp_scores      = np.zeros(1, dtype=FLOAT)
+
+    next_states     = []
+    text_ctxs       = []
+    aux_ctxs        = []
+    tiled_ctxs      = []
+    next_log_ps     = [None] * len(models)
+
+    # maxlen or 3 times source length
+    maxlen = min(maxlen, inputs[0].shape[0] * 3)
+
+    n_words_trg = models[-1].n_words_trg
+
+    for model in models:
+        # Get next_state's of each model
+        result = list(model.f_init(*inputs))
+        next_state, text_ctx, aux_ctx = result[0], result[1], result[2:]
+
+        # Save them
+        next_states.append(next_state)
+        text_ctxs.append(text_ctx)
+
+        # Auxiliary context can be image context for multimodal architectures
+        # or empty for monomodal ones
+        aux_ctxs.append(aux_ctx)
+        tiled_ctxs.append(np.tile(text_ctx, [1, 1]))
+
+    # Beginning-of-sentence indicator is -1
+    next_w = -1 * np.ones((1,), dtype=INT)
+
+    live_beam = beam_size
+
+    for ii in xrange(maxlen):
+        for m, model in enumerate(models):
+            # We will not care about alphas (last return value) in ensembling mode
+            # for keeping simplicity
+            next_log_ps[m], next_states[m], _ = model.f_next(*([next_w, next_states[m], tiled_ctxs[m]] + aux_ctxs[m]))
+
+            if suppress_unks:
+                next_log_ps[m][:, 1] = -np.inf
+
+        # Compute sum of log_p's for the current hypotheses
+        cand_scores = hyp_scores[:, None] - sum(next_log_ps)
+
+        # Flatten by modifying .shape (faster)
+        cand_scores.shape = cand_scores.size
+
+        # Take the best live_beam hypotheses
+        # argpartition makes a partial sort which is faster than argsort
+        # (Idea taken from https://github.com/rsennrich/nematus)
+        ranks_flat = cand_scores.argpartition(live_beam-1)[:live_beam]
+
+        # Get the costs
+        costs = cand_scores[ranks_flat]
+
+        # New states, scores and samples
+        live_beam           = 0
+        new_hyp_scores      = []
+        new_hyp_samples     = []
+
+        # This will be the new next states in the next iteration
+        hyp_states          = []
+
+        # Find out to which initial hypothesis idx this was belonging
+        # Find out the idx of the appended word
+        trans_idxs  = ranks_flat / n_words_trg
+        word_idxs   = ranks_flat % n_words_trg
+        # Iterate over the hypotheses and add them to new_* lists
+        for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
+            # Form the new hypothesis by appending new word to the left hyp
+            new_hyp = hyp_samples[ti] + [wi]
+
+            if wi == 0:
+                # <eos> found, separate out finished hypotheses
+                final_sample.append(new_hyp)
+                final_score.append(costs[idx])
+            else:
+                # Add formed hypothesis to the new hypotheses list
+                new_hyp_samples.append(new_hyp)
+                # Cumulated cost of this hypothesis
+                new_hyp_scores.append(costs[idx])
+                # Hidden state of the decoders for this hypothesis
+                hyp_states.append([next_state[ti] for next_state in next_states])
+                live_beam += 1
+
+        hyp_scores  = np.array(new_hyp_scores, dtype=FLOAT)
+        hyp_samples = new_hyp_samples
+
+        if live_beam == 0:
+            break
+
+        # Take the idxs of each hyp's last word
+        next_w      = np.array([w[-1] for w in hyp_samples])
+        next_states = [np.array(st, dtype=FLOAT) for st in zip(*hyp_states)]
+        tiled_ctxs  = [np.tile(ctx, [live_beam, 1]) for ctx in text_ctxs]
+
+    # dump every remaining hypotheses
+    for idx in xrange(live_beam):
+        final_sample.append(hyp_samples[idx])
+        final_score.append(hyp_scores[idx])
+
+    return final_sample, final_score
+
+"""Worker process which does beam search."""
+def translate_model(queue, rqueue, pid, models, beam_size, nbest, suppress_unks):
+
+    while True:
+        # Get a sample
+        req = queue.get()
+
+        # NOTE: We should avoid this
+        if req is None:
+            break
+
+        # Unpack sample idx and data_dict
+        sample_idx, data_dict = req[0], req[1]
+
+        # Do decoding and get the translation and its score
+        trans, score = beam_search(models, data_dict.values(), beam_size=beam_size, suppress_unks=suppress_unks)
+
+        # normalize scores according to sequence lengths
+        lengths = np.array([len(s) for s in trans])
+        score = score / lengths
+
+        # Sort the scores and take the best(s) idx(s)
+        best_idxs = np.argsort(score)[:nbest]
+        trans = np.array(trans)[best_idxs]
+
+        # Send back the result
+        rqueue.put((sample_idx, trans, score[best_idxs]))
+
+class Translator(object):
+    """Starts worker processes and waits for the results."""
+    def __init__(self, args):
+        self.beam_size = args.beam_size
+
+        # Always lists provided by argparse (nargs:'+')
+        self.src_files = args.src_files
+
+        # Fetch other arguments
+        self.utf8           = False
+        self.first          = args.first
+        self.nbest          = args.nbest
+        self.n_jobs         = args.n_jobs
+        self.model_files    = args.models
+        self.suppress_unks  = args.suppress_unks
+        self.models         = []
+
+        # Post-processing filters
+        self.filters = []
+
+        # Create worker process pool
+        self.processes = [None] * self.n_jobs
+
+    def set_model_options(self):
+        """Prepare the models by instantiating them."""
+        for mfile in self.model_files:
+            log.info('Initializing model %s' % os.path.basename(mfile))
+            model_options = dict(np.load(mfile)['opts'].tolist())
+
+            # Import the module
+            self.__class = importlib.import_module("nmtpy.models.%s" % model_options['model_type']).Model
+
+            # Create the model
+            model = self.__class(seed=1234, logger=None, **model_options)
+            model.load(mfile)
+            model.set_dropout(False)
+            model.build_sampler()
+
+            self.models.append(model)
+
+        # Check for post-processing filter
+        # NOTE: Uses leaked model_options from local scope
+        if "filter" in model_options:
+            log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
+            self.filters.append(get_filter(model_options['filter']))
+
+        # NOTE: We assume that all models are equivalent
+
+        # Pass the files to the model
+        self.models[-1].data['valid_src'] = self.src_files[0]
+        self.models[-1].load_valid_data(from_translate=True)
+
+        # Get inverted dictionary from the model itself
+        self.trg_idict = self.models[-1].trg_idict
+
+        # Be compatible for both utf-8 and normal dictionaries
+        if isinstance(self.trg_idict[2], unicode):
+            self.utf8 = True
+
+        # Set self.iterator to one of the iterators
+        self.iterator = self.models[-1].valid_iterator
+
+        # Full or partial decoding given by -f argument
+        if self.first > 0:
+            # Only first self.first sentences
+            self.n_sentences = self.first
+        else:
+            # All sentences
+            self.n_sentences = self.iterator.n_samples
+
+        log.info('I will translate %d samples' % self.n_sentences)
+
+        # Print information
+        log.info("Source file(s)")
+        for f in self.src_files:
+            log.info("  %s" % f)
+
+    def start(self):
+        # create input and output queues for processes
+        write_queue = Queue()
+        read_queue  = Queue()
+
+        # Create processes
+        for idx in xrange(self.n_jobs):
+            self.processes[idx] = Process(target=translate_model,
+                                          args=(write_queue, read_queue, idx, self.models, self.beam_size,
+                                          self.nbest, self.suppress_unks))
+            # Start process and register for cleanup
+            self.processes[idx].start()
+            cleanup.register_proc(self.processes[idx].pid)
+
+        cleanup.register_handler()
+
+        # Send data to worker processes
+        for idx in xrange(self.n_sentences):
+            write_queue.put((idx, next(self.iterator)))
+
+        log.info("Distributed %d sentences to worker processes." % self.n_sentences)
+
+        # Receive the results
+        self.trans       = [None] * self.n_sentences
+        self.scores      = [None] * self.n_sentences
+
+        # Performance computation stuff
+        start_time = per100_time = time.time()
+
+        for i in xrange(self.n_sentences):
+            # Get response from worker
+            resp = read_queue.get()
+
+            # This is the sample id of the processed sample
+            sample_idx = resp[0]
+
+            # Get the hypotheses and scores
+            hyps, self.scores[sample_idx] = resp[1], resp[2]
+
+            outs = []
+
+            for hyp in hyps:
+                hyp = idx_to_sent(self.trg_idict, hyp)
+
+                # Apply post-processing filters like compound stitching
+                for filt in self.filters:
+                    hyp = filt(hyp)
+
+               # Append the actual hypothesis
+                outs.append(hyp)
+
+            # Place the hypotheses into their relevant places
+            self.trans[sample_idx] = outs
+
+            # Print progress
+            if (i+1) % 100 == 0:
+                per100_time = time.time() - per100_time
+                log.info("%4d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, per100_time))
+                per100_time = time.time()
+
+        # Total time spent during beam search
+        total_time = time.time() - start_time
+        t_per_sent = total_time / self.n_sentences
+
+        log.info("-------------------------------------------")
+        log.info("Total decoding time: %3.3f seconds (~%3.3f seconds / sentence)" % (total_time, t_per_sent))
+
+        # Compute word-based time statistics as well
+        if self.nbest == 1:
+            n_words = float(sum([len(s[0].split(' ')) for s in self.trans]))
+            t_per_word = total_time / n_words
+            log.info("~%d words / second" % int((60. / t_per_word)))
+
+        # Stop workers
+        for pidx in xrange(self.n_jobs):
+            write_queue.put(None)
+            self.processes[pidx].terminate()
+            cleanup.unregister_proc(self.processes[pidx].pid)
+
+    def write_hyps(self, filename):
+        def __encode(s):
+            return s.encode('utf-8') if self.utf8 else s
+
+        # Write file
+        with open(filename, 'w') as f:
+            if self.nbest > 1:
+                # We have n hypotheses and n scores for each sentence
+                for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
+                    for tr, sc in zip(trs, scs):
+                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr, sc)))
+            else:
+                # Prepare and dump
+                self.hyps = [s[0] for s in self.trans]
+                hyps = "\n".join(self.hyps) + "\n"
+                f.write(__encode(hyps))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='nmt-translate')
+    parser.add_argument('-f', '--first'         , type=int, default=0,      help="How many sentences should be translated, useful for debugging.")
+    parser.add_argument('-j', '--n-jobs'        , type=int, default=12,     help="Number of processes")
+    parser.add_argument('-b', '--beam-size'     , type=int, default=12,     help="Beam size")
+    parser.add_argument('-n', '--nbest'         , type=int, default=1,      help="N for N-best output")
+    parser.add_argument('-u', '--suppress-unks' , action='store_true',      help="Don't produce <unk>'s in beam search")
+    parser.add_argument('-o', '--saveto'        , type=str, required=True,  help="Output file")
+    parser.add_argument('-s', '--src-files'     , nargs='+', required=True, help="Source file(s) in order: text,image")
+    parser.add_argument('-m', '--models'        , nargs='+', required=True, help="Model files")
+
+    args = parser.parse_args()
+
+
+    if args.n_jobs == 0:
+        # Auto infer CPU number
+        args.n_jobs = (cpu_count() / 2) - 1
+
+    if args.n_jobs > 1:
+        # This is to avoid thread explosion. Allow
+        # each process to use a single thread.
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
+
+    # Force CPU
+    os.environ["THEANO_FLAGS"] = "device=cpu"
+
+    # Print some informations
+    log.info("%d CPU processes - beam size = %2d" % (args.n_jobs, args.beam_size))
+    log.info('Ensembling %d models' % len(args.models))
+
+    # Create translator object
+    translator = Translator(args)
+    translator.set_model_options()
+    translator.start()
+
+    # Dump hypotheses
+    translator.write_hyps(args.saveto)
+
+    sys.exit(0)
