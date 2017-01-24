@@ -56,7 +56,7 @@ def adadelta(tparams, grads, inp, cost, lr0=1., rho=0.95, eps=1e-6):
 
 def adam(tparams, grads, inp, cost, lr0=0.0001, b1=0.9, b2=0.999, eps=1e-8):
     """ADAM optimizer."""
-    i = theano.shared(np.float32(0.))
+    i = theano.shared(np.float64(0.).astype(FLOAT))
     i_t = i + 1.
 
     # Running learning-rate
