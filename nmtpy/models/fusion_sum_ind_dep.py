@@ -230,8 +230,6 @@ def gru_decoder_multi(tparams, state_below,
                                     strict=True)
     return rval
 
-
-
 class Model(ParentModel):
     def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
@@ -252,14 +250,14 @@ class Model(ParentModel):
         # Load training data
         self.train_iterator = WMTIterator(
                 batch_size=self.batch_size,
+                shuffle_mode=self.smode,
+                logger=self.logger,
                 pklfile=self.data['train_src'],
                 imgfile=self.data['train_img'],
                 trgdict=self.trg_dict,
                 srcdict=self.src_dict,
                 n_words_trg=self.n_words_trg, n_words_src=self.n_words_src,
-                mode=self.options.get('data_mode', 'pairs'),
-                shuffle_mode=self.options.get('shuffle_mode', 'trglen'),
-                logger=self.logger)
+                mode=self.options.get('data_mode', 'pairs'))
         self.train_iterator.read()
         self.load_valid_data()
 
@@ -317,7 +315,7 @@ class Model(ParentModel):
 
         # GRU cond decoder
         params = init_gru_decoder_multi(params, prefix='decoder_multi', nin=self.embedding_dim,
-                                  dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
+                                        dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
         # NOTE: In the text NMT, we also have logit_prev that is applied onto emb_trg
