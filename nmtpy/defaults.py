@@ -23,7 +23,7 @@ TRAIN_DEFAULTS = {
         'max_iteration':      int(1e6),       # Max number of updates to train
         'valid_metric':       'bleu',         # bleu, px, meteor
         'valid_start':        1,              # Epoch which validation will start
-        'valid_njobs':        10,             # # of parallel CPU tasks to do beam-search
+        'valid_njobs':        16,             # # of parallel CPU tasks to do beam-search
         'valid_beam':         12,             # Allow changing beam size during validation
         'valid_freq':         0,              # 0: End of epochs
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
