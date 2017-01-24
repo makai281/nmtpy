@@ -6,7 +6,8 @@ WMT16 Shared task on Multimodal Translation - Task 2
 
 ### Normalization and Tokenization
 
-`scripts/01-tokenize.sh` normalizes and tokenizes all the raw data under `data/` and saves the processed files:
+`scripts/01-tokenize.sh` normalizes and tokenizes all the raw data under `data/` and saves the processed files.
+(**Note:** You need to have `normalize-punctuation.perl` and `tokenizer.perl` from `moses` in your `$PATH`)
 ```
 # Where are we?
 $ pwd
