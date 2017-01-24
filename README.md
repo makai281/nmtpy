@@ -37,7 +37,7 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
     - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
     - Simple shuffle
   - Improved parallel translation decoding on CPU
-    - 620D/1000D NMT on 8 **Xeon E5-2690v2** using a beam size of 12: ~3800 words/sec
+    - 620D/1000D NMT on 8 **Xeon E5-2690v2** using a beam size of 12: ~3900 words/sec
   - Export decoding informations into `json` for further visualization of attention coefficients
   
 #### Deep Learning
