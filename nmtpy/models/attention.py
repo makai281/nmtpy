@@ -135,7 +135,7 @@ class Model(BaseModel):
         self.load_valid_data()
 
     def add_alpha_regularizer(self, alpha_c):
-        alpha_c = theano.shared(np.float32(alpha_c), name='alpha_c')
+        alpha_c = theano.shared(np.float64(alpha_c).astype(FLOAT), name='alpha_c')
         alpha_reg = alpha_c * (
             (tensor.cast(self.inputs['y_mask'].sum(0) // self.inputs['x_mask'].sum(0), FLOAT)[:, None] -
              self.alphas.sum(0))**2).sum(1).mean()
