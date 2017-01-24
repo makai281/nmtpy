@@ -67,7 +67,7 @@ class BaseModel(object):
     def set_dropout(self, val):
         """Set dropout indicator for activation scaling if dropout is available through configuration."""
         if self.use_dropout is None:
-            self.use_dropout = theano.shared(np.float32(0.))
+            self.use_dropout = theano.shared(np.float64(0.).astype(FLOAT))
         else:
             self.use_dropout.set_value(float(val))
 
@@ -134,7 +134,7 @@ class BaseModel(object):
 
     def get_l2_weight_decay(self, decay_c, skip_bias=True):
         """Return l2 weight decay regularization term."""
-        decay_c = theano.shared(np.float32(decay_c), name='decay_c')
+        decay_c = theano.shared(np.float64(decay_c).astype(FLOAT), name='decay_c')
         weight_decay = 0.
         for kk, vv in self.tparams.iteritems():
             # Skip biases for L2 regularization
@@ -194,7 +194,7 @@ class BaseModel(object):
 
         # Create theano shared variable for learning rate
         # self.lrate comes from **kwargs / nmt-train params
-        self.learning_rate = theano.shared(np.float32(self.lrate), name='lrate')
+        self.learning_rate = theano.shared(np.float64(self.lrate).astype(FLOAT), name='lrate')
 
         # Get updates
         updates = opt(tparams, grads, self.inputs.values(), final_cost, lr0=self.learning_rate)
