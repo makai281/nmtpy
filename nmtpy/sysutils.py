@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import copy
 import gzip
 import tempfile
 import subprocess
@@ -29,6 +30,8 @@ def print_summary(train_args, model_args, print_func=None):
             res += (templ % k) + str(v) + '\n'
         return res
 
+    train_args = copy.deepcopy(train_args)
+    model_args = copy.deepcopy(model_args)
     max_width = _get_max_width(train_args.__dict__.keys() +
                                model_args.__dict__.keys())
 
