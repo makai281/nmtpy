@@ -25,6 +25,7 @@ setup(
                     'bin/nmt-train',
                     'bin/nmt-extract',
                     'bin/nmt-translate',
+                    'bin/nmt-translate-ens',
                     'bin/nmt-build-dict',
                     'bin/nmt-coco-metrics',
                     'bin/nmt-bpe-apply',
