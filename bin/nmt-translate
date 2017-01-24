@@ -40,9 +40,6 @@ log = Logger.get()
 def translate_model(rqueue, wqueue, pid, model, beam_size, nbest,
                     suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
 
-    # Build the sampler of the model
-    model.build_sampler()
-
     # Get function call string
     if mode == "beamsearch":
         func_call = 'model.beam_search(data_dict.values(), beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
@@ -123,8 +120,10 @@ class Translator(object):
 
         # Create the model
         self.model = self.__class(seed=self.seed, logger=None, **model_options)
+        log.info('Initializing model...')
         self.model.load(self.model_file)
         self.model.set_dropout(False)
+        self.model.build_sampler()
 
         # Check for post-processing filter
         if "filter" in model_options:
