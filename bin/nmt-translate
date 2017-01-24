@@ -283,7 +283,7 @@ class Translator(object):
         t_per_sent = total_time / self.n_sentences
 
         log.info("-------------------------------------------")
-        log.info("Total decoding time: %3.3f seconds (~%3.3f seconds / sentence)" % (total_time, t_per_sent))
+        log.info("Total decoding time: %3.3f seconds (~%3.4f seconds / sentence)" % (total_time, t_per_sent))
 
         # Compute word-based time statistics as well
         if self.nbest == 1:
