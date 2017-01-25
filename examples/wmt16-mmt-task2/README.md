@@ -3,6 +3,19 @@ WMT16 Shared task on Multimodal Translation - Task 2
 
  - `data/`: This folder contains Multi30k dataset of the competition.
  - `scripts/`: This folder contains the necessary preprocessing and preparation scripts for nmtpy.
+ 
+### Getting Image Features
+
+In order to train the networks, you will need the convolutional features extracted from ResNet-50. You can download them from the links below:
+ 
+ - [flickr30k_ResNets50_blck4_train.npy.xz](http://)
+ - [flickr30k_ResNets50_blck4_val.npy.xz](http://)
+ - [flickr30k_ResNets50_blck4_test.npy.xz](http://)
+ 
+ After downloading the files under `data/`, extract them using the following command:
+ ```
+ $ xz -d <downloaded xz file>
+ ```
 
 ### Normalization and Tokenization
 
