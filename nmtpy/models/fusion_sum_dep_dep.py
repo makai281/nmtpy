@@ -25,11 +25,9 @@ from ..iterators.wmt import WMTIterator
 from .attention import Model as ParentModel
 
 ########## Define layers here ###########
-def init_gru_decoder_multi(params, nin, dim, dimctx,
-                           scale=0.01, prefix='gru_decoder_multi',
-                           nin_nonlin=None, dim_nonlin=None):
+def init_gru_decoder_multi(params, nin, dim, dimctx, scale=0.01, prefix='gru_decoder_multi'):
     # Init with usual gru_cond function
-    params = param_init_gru_cond(params, nin, dim, dimctx, scale, prefix, nin_nonlin, dim_nonlin)
+    params = param_init_gru_cond(params, nin, dim, dimctx, scale, prefix)
 
     # Add separate attention weights for the 2nd modality
     params[pp(prefix, 'Wc_att2')] = norm_weight(dimctx, dimctx, scale=scale)
