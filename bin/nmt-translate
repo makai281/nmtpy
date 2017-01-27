@@ -279,17 +279,17 @@ class Translator(object):
                 per100_time = time.time()
 
         # Total time spent during beam search
-        total_time = time.time() - start_time
-        t_per_sent = total_time / self.n_sentences
+        total_time      = time.time() - start_time
+        sent_per_sec    = int(self.n_sentences / total_time)
 
         log.info("-------------------------------------------")
-        log.info("Total decoding time: %3.3f seconds (~%3.4f seconds / sentence)" % (total_time, t_per_sent))
+        log.info("Total decoding time: %3.3f seconds (%d sentences / sec)" % (total_time, sent_per_sec))
 
         # Compute word-based time statistics as well
         if self.nbest == 1:
-            n_words = float(sum([len(s[0].split(' ')) for s in self.trans]))
-            t_per_word = total_time / n_words
-            log.info("~%d words / second" % int((60. / t_per_word)))
+            n_words         = float(sum([len(s[0].split(' ')) for s in self.trans]))
+            word_per_sec    = int(n_words / total_time)
+            log.info("~%d words / sec" % word_per_sec)
 
         # Stop workers
         for pidx in xrange(self.n_jobs):
