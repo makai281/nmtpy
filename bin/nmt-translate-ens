@@ -32,119 +32,12 @@ import nmtpy.cleanup as cleanup
 Logger.setup()
 log = Logger.get()
 
-def beam_search(models, inputs, beam_size=12, maxlen=50, suppress_unks=False):
-    """A copy of attention.py:beam_search with alignments removed suitable for ensembling."""
-    # Final results and their scores
-    final_sample        = []
-    final_score         = []
-
-    # Initially we have one empty hypothesis with a score of 0
-    hyp_samples     = [[]]
-    hyp_scores      = np.zeros(1, dtype=FLOAT)
-
-    next_states     = []
-    text_ctxs       = []
-    aux_ctxs        = []
-    tiled_ctxs      = []
-    next_log_ps     = [None] * len(models)
-
-    # maxlen or 3 times source length
-    maxlen = min(maxlen, inputs[0].shape[0] * 3)
-
-    n_words_trg = models[-1].n_words_trg
-
-    for model in models:
-        # Get next_state's of each model
-        result = list(model.f_init(*inputs))
-        next_state, text_ctx, aux_ctx = result[0], result[1], result[2:]
-
-        # Save them
-        next_states.append(next_state)
-        text_ctxs.append(text_ctx)
-
-        # Auxiliary context can be image context for multimodal architectures
-        # or empty for monomodal ones
-        aux_ctxs.append(aux_ctx)
-        tiled_ctxs.append(np.tile(text_ctx, [1, 1]))
-
-    # Beginning-of-sentence indicator is -1
-    next_w = -1 * np.ones((1,), dtype=INT)
-
-    live_beam = beam_size
-
-    for ii in xrange(maxlen):
-        for m, model in enumerate(models):
-            # We will not care about alphas (last return value) in ensembling mode
-            # for keeping simplicity
-            next_log_ps[m], next_states[m], _ = model.f_next(*([next_w, next_states[m], tiled_ctxs[m]] + aux_ctxs[m]))
-
-            if suppress_unks:
-                next_log_ps[m][:, 1] = -np.inf
-
-        # Compute sum of log_p's for the current hypotheses
-        cand_scores = hyp_scores[:, None] - sum(next_log_ps)
-
-        # Flatten by modifying .shape (faster)
-        cand_scores.shape = cand_scores.size
-
-        # Take the best live_beam hypotheses
-        # argpartition makes a partial sort which is faster than argsort
-        # (Idea taken from https://github.com/rsennrich/nematus)
-        ranks_flat = cand_scores.argpartition(live_beam-1)[:live_beam]
-
-        # Get the costs
-        costs = cand_scores[ranks_flat]
-
-        # New states, scores and samples
-        live_beam           = 0
-        new_hyp_scores      = []
-        new_hyp_samples     = []
-
-        # This will be the new next states in the next iteration
-        hyp_states          = []
-
-        # Find out to which initial hypothesis idx this was belonging
-        # Find out the idx of the appended word
-        trans_idxs  = ranks_flat / n_words_trg
-        word_idxs   = ranks_flat % n_words_trg
-        # Iterate over the hypotheses and add them to new_* lists
-        for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
-            # Form the new hypothesis by appending new word to the left hyp
-            new_hyp = hyp_samples[ti] + [wi]
-
-            if wi == 0:
-                # <eos> found, separate out finished hypotheses
-                final_sample.append(new_hyp)
-                final_score.append(costs[idx])
-            else:
-                # Add formed hypothesis to the new hypotheses list
-                new_hyp_samples.append(new_hyp)
-                # Cumulated cost of this hypothesis
-                new_hyp_scores.append(costs[idx])
-                # Hidden state of the decoders for this hypothesis
-                hyp_states.append([next_state[ti] for next_state in next_states])
-                live_beam += 1
-
-        hyp_scores  = np.array(new_hyp_scores, dtype=FLOAT)
-        hyp_samples = new_hyp_samples
-
-        if live_beam == 0:
-            break
-
-        # Take the idxs of each hyp's last word
-        next_w      = np.array([w[-1] for w in hyp_samples])
-        next_states = [np.array(st, dtype=FLOAT) for st in zip(*hyp_states)]
-        tiled_ctxs  = [np.tile(ctx, [live_beam, 1]) for ctx in text_ctxs]
-
-    # dump every remaining hypotheses
-    for idx in xrange(live_beam):
-        final_sample.append(hyp_samples[idx])
-        final_score.append(hyp_scores[idx])
-
-    return final_sample, final_score
-
 """Worker process which does beam search."""
 def translate_model(queue, rqueue, pid, models, beam_size, nbest, suppress_unks):
+    # Get the method handle
+    beam_search = models[0].beam_search
+    f_inits     = [m.f_init for m in models]
+    f_nexts     = [m.f_next for m in models]
 
     while True:
         # Get a sample
@@ -158,7 +51,7 @@ def translate_model(queue, rqueue, pid, models, beam_size, nbest, suppress_unks)
         sample_idx, data_dict = req[0], req[1]
 
         # Do decoding and get the translation and its score
-        trans, score = beam_search(models, data_dict.values(), beam_size=beam_size, suppress_unks=suppress_unks)
+        trans, score, _ = beam_search(data_dict.values(), f_inits, f_nexts, beam_size=beam_size, suppress_unks=suppress_unks)
 
         # normalize scores according to sequence lengths
         lengths = np.array([len(s) for s in trans])
