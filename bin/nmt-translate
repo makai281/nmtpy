@@ -37,11 +37,15 @@ Logger.setup()
 log = Logger.get()
 
 """Worker process which does beam search."""
-def translate_model(rqueue, wqueue, pid, model, beam_size, nbest, suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
+def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
+    # Get the method handle
+    beam_search = models[0].beam_search
 
     # Get function call string
     if mode == "beamsearch":
-        func_call = 'model.beam_search(data_dict.values(), model.f_init, model.f_next, beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
+        f_inits     = [m.f_init for m in models]
+        f_nexts     = [m.f_next for m in models]
+        func_call = 'beam_search(data_dict.values(), f_inits, f_nexts, beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
 
     elif mode in ["forced", "sample"]:
         func_call = 'model.gen_sample(data_dict)'
@@ -102,7 +106,12 @@ class Translator(object):
         self.mode           = args.decoder
         self.n_jobs         = args.n_jobs
         self.valid_mode     = args.validmode
-        self.model_file     = args.model
+
+        self.models         = []
+        self.model_files    = args.models
+        self.model_options  = []
+        self.n_models       = len(self.model_files)
+
         self.suppress_unks  = args.suppress_unks
 
         # Post-processing filters
@@ -112,25 +121,33 @@ class Translator(object):
         self.processes = [None] * self.n_jobs
 
     def set_model_options(self):
-        model_options = dict(np.load(self.model_file)['opts'].tolist())
+        for mfile in self.model_files:
+            log.info('Initializing model %s' % os.path.basename(mfile))
+            model_options = dict(np.load(mfile)['opts'].tolist())
 
-        # Import the module
-        self.__class = importlib.import_module("nmtpy.models.%s" % model_options['model_type']).Model
+            # Import the module
+            self.__class = importlib.import_module("nmtpy.models.%s" % model_options['model_type']).Model
 
-        # Create the model
-        self.model = self.__class(seed=self.seed, logger=None, **model_options)
-        log.info('Initializing model...')
-        self.model.load(self.model_file)
-        self.model.set_dropout(False)
-        self.model.build_sampler()
+            # Create the model
+            model = self.__class(seed=self.seed, logger=None, **model_options)
+            model.load(mfile)
+            model.set_dropout(False)
+            model.build_sampler()
+
+            self.models.append(model)
+            self.model_options.append(model_options)
+
+        # Sanity check for target vocabularies: they should all be same
+        if self.n_models > 1:
+            assert len(set([len(mopts['trg_dict']) for mopts in self.model_options])) == 1
 
         # Check for post-processing filter
-        if "filter" in model_options:
+        if "filter" in self.model_options[0]:
             log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
             self.filters.append(get_filter(model_options['filter']))
 
         # Get inverted dictionary from the model itself
-        self.trg_idict = self.model.trg_idict
+        self.trg_idict = self.models[0].trg_idict
 
         # Be compatible for both utf-8 and normal dictionaries
         if isinstance(self.trg_idict[2], unicode):
@@ -143,10 +160,10 @@ class Translator(object):
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
             self.iterator = BiTextIterator(
                                         batch_size=1,
-                                        srcfile=self.src_files[0], srcdict=self.model.src_dict,
-                                        trgfile=self.ref_files[0], trgdict=self.model.trg_dict,
-                                        n_words_src=self.model.n_words_src,
-                                        n_words_trg=self.model.n_words_trg,
+                                        srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
+                                        trgfile=self.ref_files[0], trgdict=self.models[0].trg_dict,
+                                        n_words_src=self.models[0].n_words_src,
+                                        n_words_trg=self.models[0].n_words_trg,
                                         trg_name='y_true')
             self.iterator.read()
 
@@ -157,22 +174,22 @@ class Translator(object):
             if self.src_files is not None:
                 # Pass the files to the model
                 # NOTE: Not quite model agnostic way of doing things.
-                self.model.data['valid_src'] = self.src_files[0]
-                if 'valid_img' in self.model.data:
-                    self.model.data['valid_img'] = self.src_files[1]
+                self.models[0].data['valid_src'] = self.src_files[0]
+                if 'valid_img' in self.models[0].data:
+                    self.models[0].data['valid_img'] = self.src_files[1]
 
                 if self.ref_files is not None:
-                    self.model.data['valid_trg'] = self.ref_files
+                    self.models[0].data['valid_trg'] = self.ref_files
 
             # Initialize model's validation data iterator
             # NOTE: data_mode is for best-source-selection decoding for multimodal systems
-            if 'data_mode' in inspect.getargspec(self.model.load_valid_data).args:
-                self.model.load_valid_data(from_translate=True, data_mode=self.valid_mode)
+            if 'data_mode' in inspect.getargspec(self.models[0].load_valid_data).args:
+                self.models[0].load_valid_data(from_translate=True, data_mode=self.valid_mode)
             else:
-                self.model.load_valid_data(from_translate=True)
+                self.models[0].load_valid_data(from_translate=True)
 
-            # Set self.iterator to self.model.valid_iterator
-            self.iterator = self.model.valid_iterator
+            # Set self.iterator to self.models[0].valid_iterator
+            self.iterator = self.models[0].valid_iterator
 
             # Full or partial decoding given by -f argument
             if self.first > 0:
@@ -188,16 +205,16 @@ class Translator(object):
             if self.src_files is None:
                 log.info("No test data given, assuming validation dataset.")
 
-                self.src_files = listify(self.model.data['valid_src'])
+                self.src_files = listify(self.models[0].data['valid_src'])
 
                 # User may provide another reference set in 'valid_trg_orig' for example
                 # with compound splitting reverted so that we can compute
                 # the metrics correctly.
                 # NOTE: May be avoided by using filters on reference sentences.
-                if "valid_trg_orig" in self.model.data:
-                    self.ref_files = listify(self.model.data['valid_trg_orig'])
+                if "valid_trg_orig" in self.models[0].data:
+                    self.ref_files = listify(self.models[0].data['valid_trg_orig'])
                 else:
-                    self.ref_files = listify(self.model.valid_ref_files)
+                    self.ref_files = listify(self.models[0].valid_ref_files)
 
         # Print information
         log.info("Source file(s)")
@@ -217,7 +234,7 @@ class Translator(object):
         # Create processes
         for idx in xrange(self.n_jobs):
             self.processes[idx] = Process(target=translate_model,
-                                          args=(write_queue, read_queue, idx, self.model, self.beam_size,
+                                          args=(write_queue, read_queue, idx, self.models, self.beam_size,
                                           self.nbest, self.suppress_unks, self.get_att_alphas,
                                           self.seed, self.mode))
             # Start process and register for cleanup
@@ -347,7 +364,7 @@ class Translator(object):
         for i in range(self.n_sentences):
             data = next(self.iterator)
             if 'x' in data:
-                srcs.append(idx_to_sent(self.model.src_idict, data['x'].flatten()))
+                srcs.append(idx_to_sent(self.models[0].src_idict, data['x'].flatten()))
 
         # Save metadata
         data = {'metadata' : metadata}
@@ -392,7 +409,6 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--validmode'     , default='single',         help="Validation mode for WMT16 MMT Task2: all/pairs/single")
     parser.add_argument('-D', '--decoder'       , default='beamsearch',     choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
-    parser.add_argument('-m', '--model'         , type=str, required=True,  help="Model file")
     parser.add_argument('-M', '--metrics'       , type=str, default='bleu', help="Comma separated list of metrics (bleu or bleu,meteor)")
     parser.add_argument('-o', '--saveto'        , type=str, default=None,   help="Output translations file (if not given, only metrics will be printed)")
     parser.add_argument('-e', '--export'        , action='store_true',      help="Export all decoding process to json for visualization")
@@ -401,6 +417,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-S', '--src-files'     , type=str, nargs='+', default=None, help="Source data(s) in order: text,image (default: validation set)")
     parser.add_argument('-R', '--ref-files'     , type=str, nargs='+', default=None, help="One or multiple reference files (default: validation set)")
+    parser.add_argument('-m', '--models'        , nargs='+', required=True, help="Model files")
 
     args = parser.parse_args()
 
@@ -412,17 +429,17 @@ if __name__ == "__main__":
         # Auto infer CPU number
         args.n_jobs = (cpu_count() / 2) - 1
 
-    if args.n_jobs > 1:
-        # This is to avoid thread explosion. Allow
-        # each process to use a single thread.
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
+    # This is to avoid thread explosion. Allow
+    # each process to use a single thread.
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
 
     # Force CPU
     os.environ["THEANO_FLAGS"] = "device=cpu,optimizer_including=local_remove_all_assert"
 
     # Print some informations
     log.info("%d CPU processes - beam size = %2d" % (args.n_jobs, args.beam_size))
+    log.info("Using %d model(s) for translation" % len(args.models))
 
     # Create translator object
     translator = Translator(args)
