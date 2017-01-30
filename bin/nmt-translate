@@ -37,12 +37,11 @@ Logger.setup()
 log = Logger.get()
 
 """Worker process which does beam search."""
-def translate_model(rqueue, wqueue, pid, model, beam_size, nbest,
-                    suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
+def translate_model(rqueue, wqueue, pid, model, beam_size, nbest, suppress_unks, get_att_alphas=False, seed=1234, mode="beamsearch"):
 
     # Get function call string
     if mode == "beamsearch":
-        func_call = 'model.beam_search(data_dict.values(), beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
+        func_call = 'model.beam_search(data_dict.values(), model.f_init, model.f_next, beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
 
     elif mode in ["forced", "sample"]:
         func_call = 'model.gen_sample(data_dict)'
