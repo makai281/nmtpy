@@ -56,6 +56,11 @@ class BaseModel(object):
         # A theano shared variable for lrate annealing
         self.learning_rate  = None
 
+    @staticmethod
+    def beam_search(inputs, f_inits, f_nexts, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
+        # Override this from your classes
+        pass
+
     def set_options(self, optdict):
         """Filter out None's and save option dict."""
         self.options = OrderedDict([(k,v) for k,v in optdict.items() if v is not None])
@@ -282,16 +287,6 @@ class BaseModel(object):
     def get_alpha_regularizer(self, alpha_c):
         # This should be implemented in attentional models if necessary.
         return 0.
-
-    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-        # Beam search can change a lot based on the RNN
-        # layer, types of input etc. Look at the attention model
-        # and copy it into your class and modify it correctly if necessary.
-
-        # nmt-translate will also use the relevant beam_search() based on model type.
-
-        # You can pass additional arguments to beam_search through kwargs.
-        pass
 
     ##########################################################
     # For all the abstract methods below, you can take a look
