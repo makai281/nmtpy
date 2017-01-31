@@ -20,8 +20,7 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
 
 #### General/API
   - No shell script, everything is in Python 
-  - Overhaul object-oriented refactoring of the code
-    - Clear separation of API and scripts that interface with the API
+  - Overhaul object-oriented refactoring of the code: clear separation of API and scripts that interface with the API
   - INI style configuration files to define everything regarding a training experiment
   - Transparent cleanup mechanism to kill stale processes, remove temporary files
   - Simultaneous logging of training details to stdout and log file
@@ -36,8 +35,8 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
   - Single `.npz` file to store everything about a training experiment
   - Automatic free GPU selection and reservation using `nvidia-smi`
   - Shuffling support between epochs:
-    - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
     - Simple shuffle
+    - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
   - Improved parallel translation decoding on CPU
   - Export decoding informations into `json` for further visualization of attention coefficients
   
