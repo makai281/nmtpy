@@ -32,7 +32,7 @@ class Model(ParentModel):
 
         self.data_mode = kwargs.get('data_mode', 'pairs')
 
-    def load_valid_data(self, from_translate=False, data_mode='all'):
+    def load_valid_data(self, from_translate=False, data_mode='single'):
         if from_translate:
             self.valid_ref_files = self.data['valid_trg']
             if isinstance(self.valid_ref_files, str):
@@ -43,7 +43,7 @@ class Model(ParentModel):
                     batch_size=1,
                     pklfile=self.data['valid_src'],
                     srcdict=self.src_dict, n_words_src=self.n_words_src,
-                    mode='single') # Override the given parameter
+                    mode=data_mode)
         else:
             # Take the first validation item for NLL computation
             self.valid_iterator = WMTIterator(
