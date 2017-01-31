@@ -143,7 +143,7 @@ $ python -c 'import theano; print theano.config.blas.ldflags'
 -L/home/ozancag/miniconda/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -lm -Wl,-rpath,/home/ozancag/miniconda/lib
 ```
 
-### Acknowledgements
+## Acknowledgements
 
 **nmtpy** includes code from the following projects:
 
