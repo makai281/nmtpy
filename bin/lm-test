@@ -1,14 +1,9 @@
 #!/usr/bin/env python
-from __future__ import print_function
-
 """Score a source file using a model."""
 
 import os
 import sys
 import time
-import json
-import atexit
-import inspect
 import argparse
 import importlib
 from multiprocessing import Process, Queue, cpu_count
@@ -19,10 +14,7 @@ import numpy as np
 
 from nmtpy.logger import Logger
 from nmtpy.config import Config
-from nmtpy.metrics import get_scorer
-from nmtpy.nmtutils import idx_to_sent
 from nmtpy.sysutils import *
-from nmtpy.filters import get_filter
 from nmtpy.iterators.bitext import BiTextIterator
 import nmtpy.cleanup as cleanup
 
@@ -30,8 +22,7 @@ Logger.setup()
 log = Logger.get()
 
 """Worker process which does calculate logprobs from data send through the model."""
-def test_model(queue, rqueue, pid, model, beam_size, nbest,
-                    suppress_unks, get_att_alphas=False, seed=1234, mode="argmax"):
+def test_model(queue, rqueue, pid, model):
 
     while True:
         req = queue.get()
@@ -56,18 +47,14 @@ class Tester(object):
         self.src_files = args.src_files
         self.ref_files = args.ref_files
 
-        # Collect processed source sentences in here
-        # for further exporting to json
-        self.export = args.export
-
-        self.nbest = args.nbest
         self.n_jobs = args.n_jobs
-        self.seed = args.seed
         self.mode = args.decoder
         self.model_file = args.model
 
+        # Not used
+        self.seed = 1234
+
         self.utf8 = False
-        self.filters = []
 
         # Create worker process pool
         self.processes = [None] * self.n_jobs
@@ -83,18 +70,12 @@ class Tester(object):
         self.model.load(self.model_file)
         self.model.set_dropout(False)
 
-        # Check for post-processing filter
-        if "filter" in model_options:
-            log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
-            self.filters.append(get_filter(model_options['filter']))
-
         # invert dictionary
         self.ref_idict = dict([[v,k] for k,v in self.model.src_dict.iteritems()])
 
             # Normal test mode
         if self.src_files is not None:
             self.model.data['valid_src'] = self.src_files[0]
-
 
         self.model.load_valid_data()
         self.iterator = self.model.valid_iterator
@@ -104,7 +85,6 @@ class Tester(object):
         if self.src_files is None:
             self.src_files = listify(self.model.data['valid_src'])
             log.info("No test data given, assuming validation dataset.")
-
 
         # Print information
         log.info("Source file(s)")
@@ -124,12 +104,8 @@ class Tester(object):
         # Create processes
         self.model.build_sampler()
         self.model.build()
-        self.model.set_dropout(False)
         for idx in xrange(self.n_jobs):
-            self.processes[idx] = Process(target=test_model,
-                    args=(write_queue, read_queue, idx, self.model,
-                        self.nbest,
-                        self.seed, self.mode))
+            self.processes[idx] = Process(target=test_model, args=(write_queue, read_queue, idx, self.model))
             self.processes[idx].start()
             cleanup.register_proc(self.processes[idx].pid)
 
@@ -145,25 +121,21 @@ class Tester(object):
         # Receive the results
         self.sentences = [None] * self.n_sentences
         self.log_probs = [None] * self.n_sentences
-        self.sum_logprob = 0.0
+
         t = time.time()
-        logprobs=0
-        sentlens=0
-        sum_sentlen=0
-        sum_logprob=0
+        sum_sentlen = 0
+        sum_logprob = 0.
+
         for i in xrange(self.n_sentences):
             # Get response from worker
             resp = read_queue.get()
 
             # This is the sample id of the processed sample
             idx = resp[0]
-            print("progress = ",idx+1,"/",self.n_sentences)
             sentlens, logprobs = resp[2], resp[3]
+
             sum_sentlen += sentlens
-
-            for i in logprobs:
-                self.sum_logprob+=i
-
+            sum_logprob += sum(logprobs)
             self.log_probs[idx] = logprobs
 
             # Print progress
@@ -171,11 +143,8 @@ class Tester(object):
                 t = time.time() - t
                 log.info("%d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, t))
                 t = time.time()
-        print("########## END ###########")
-        #print("sum_logprob : ",self.sum_logprob)
-        #print("sum_sentlen : ",sum_sentlen)
-        print("Test Perplexity : ", np.exp(self.sum_logprob/sum_sentlen))
-        self.model.set_dropout(True)
+
+        log.info("Test Perplexity: ", np.exp(sum_logprob/sum_sentlen))
         # Stop workers
         for idx in xrange(self.n_jobs):
             write_queue.put(None)
@@ -188,41 +157,23 @@ class Tester(object):
             return s.encode('utf-8') if self.utf8 else s
 
         with open(filename, 'w') as f:
-            print("Writing output file ...")
+            log.info("Writing output file...")
             for idx, lp in enumerate(self.log_probs):
-                #print("idx = ",idx," lp = ",lp,"lp_len = ",len(lp))
                 logprobs_array=''.join(map(str,' '.join(str(i[0]) for i in lp)))
                 f.write(__encode("%d ||| %s ||| %f\n"%(idx, logprobs_array,sum(lp))))
-
-    def compute_score(self, hyp_file, scorers):
-        results = {}
-        for scorer in scorers:
-            c = get_scorer(scorer)()
-            score = c.compute(self.ref_files, hyp_file)
-            results[scorer] = (str(score), score.score)
-        self.results = results
-        return results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='lm-test')
     parser.add_argument('-j', '--n-jobs'        , type=int, default=8,
                                                   help="Number of processes (default: 8, 0: Auto)")
-    parser.add_argument('-b', '--beam-size'     , type=int, default=12,
-                                                  help="Beam size (only for beam-search case)")
-    parser.add_argument('-N', '--nbest'         , type=int, default=1,
-                                                  help="Output n-best list size (only for beam-search)")
-    parser.add_argument('-r', '--seed'          , type=int, default=1234,
-                                                  help="Random number seed for sampling mode (default: 1234)")
     parser.add_argument('-D', '--decoder'        ,default='beamsearch', choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-m', '--model'         , type=str, help="Model file", required=True)
     parser.add_argument('-o', '--saveto'        , type=str, help="Output test file (if not given, only metrics will be printed)",
                                                   default=None)
-    parser.add_argument('-e', '--export'        , action='store_true', help="Export all decoding process to json for visualization")
-
-    parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence even nbest == 1")
+    parser.add_argument('-s', '--score'         , action='store_true', help="Print scores of each sentence")
     
-    parser.add_argument('-S', '--src-files'     , type=str, help="Source data(s) in order: text,image (default: validation set)",
+    parser.add_argument('-S', '--src-files'     , type=str, help="Source data file (default: validation set)",
                                                   nargs='+', default=None)
     parser.add_argument('-R', '--ref-files'     , type=str, help="One or multiple reference files (default: validation set)",
                                                   nargs='+',
@@ -230,19 +181,19 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # TODO: Do we have forced decoding mode for lm-test?
     if args.decoder == "forced" and (args.src_files is None or args.ref_files is None):
-        print("Error: Forced decoding requires that you give src and ref files explicitly.")
+        log.info("Error: Forced decoding requires that you give src and ref files explicitly.")
         sys.exit(1)
 
     if args.n_jobs == 0:
         # Auto infer CPU number
         args.n_jobs = (cpu_count() / 2) - 1
 
-    if args.n_jobs > 1:
-        # This is to avoid thread explosion. Allow
-        # each process to use a single thread.
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
+    # This is to avoid thread explosion. Allow
+    # each process to use a single thread.
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
 
     # Force CPU
     os.environ["THEANO_FLAGS"] = "device=cpu"
@@ -254,17 +205,5 @@ if __name__ == "__main__":
     out_file = args.saveto
 
     tester.write_logprobs(out_file, args.score)
-    print("DONE")
-    if args.export and args.saveto:
-        # Export attentional informations if -o and -e are given
-        tester.dump_json("%s.json" % out_file)
-
-    # No need to compute metrics with nbest style files
-    if args.decoder != "forced" and args.nbest == 1 \
-            and tester.ref_files and not args.score:
-        # Compute all metrics
-        results = tester.compute_score(out_file, args.metrics.split(","))
-        # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
-        print(results)
 
     sys.exit(0)
