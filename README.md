@@ -142,3 +142,16 @@ Recent Theano versions can automatically detect correct MKL flags. You should ob
 $ python -c 'import theano; print theano.config.blas.ldflags'
 -L/home/ozancag/miniconda/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -lm -Wl,-rpath,/home/ozancag/miniconda/lib
 ```
+
+### Acknowledgements
+
+**nmtpy** includes code from the following projects:
+
+ - [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial)
+ - Scripts from [subword-nmt](https://github.com/rsennrich/subword-nmt)
+ - `multi-bleu.perl` from [mosesdecoder](https://github.com/moses-smt/mosesdecoder)
+ - METEOR v1.5 JAR from [meteor](https://github.com/cmu-mtlab/meteor)
+ - Sorted data iterator, coco eval script and LSTM from [arctic-captions](https://github.com/kelvinxu/arctic-captions)
+ - `pycocoevalcap` from [coco-caption](https://github.com/tylin/coco-caption)
+
+See [LICENSE](LICENSE.md) file for license information.
