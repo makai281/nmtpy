@@ -28,7 +28,7 @@ file as well.
 
 ### BPE Processing
 
-Run `scripts/02.bpe.sh ~/nmtpy/data/wmt16-task1` to learn a joint BPE model on both
+Run `scripts/02-bpe.sh ~/nmtpy/data/wmt16-task1` to learn a joint BPE model on both
 sides with 20k merge operations and apply it to train, val and test files. The new BPE
 processed files will have a `.bpe` in their names.
 
