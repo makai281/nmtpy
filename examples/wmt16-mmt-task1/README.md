@@ -63,3 +63,24 @@ Bleu_1: 0.67390 Bleu_2: 0.54240 Bleu_3: 0.44846 Bleu_4: 0.37333 CIDEr: 3.55837 M
 ```
 
 ### Train a Multimodal NMT
+
+Before training a multimodal system, we need to store the sentence pairs and
+their relevant image IDs in pickled files so that `WMTIterator` can read them.
+
+```
+$ scripts/03-raw2pkl.py -i data/split_train.txt \
+                        -l ~/nmtpy/data/wmt16-task1/train.lines \
+                        -s ~/nmtpy/data/wmt16-task1/train.norm.max50.tok.lc.bpe.en \
+                        -t ~/nmtpy/data/wmt16-task1/train.norm.max50.tok.lc.bpe.de \
+                        -o ~/nmtpy/data/wmt16-task1/train.pkl
+
+$ scripts/03-raw2pkl.py -i data/split_val.txt \
+                        -s ~/nmtpy/data/wmt16-task1/val.norm.tok.lc.bpe.en \
+                        -t ~/nmtpy/data/wmt16-task1/val.norm.tok.lc.bpe.de \
+                        -o ~/nmtpy/data/wmt16-task1/val.pkl
+
+$ scripts/03-raw2pkl.py -i data/split_test.txt \
+                        -s ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
+                        -t ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.de \
+                        -o ~/nmtpy/data/wmt16-task1/test.pkl
+```
