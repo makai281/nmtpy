@@ -38,6 +38,7 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
     - Simple shuffle
     - [Homogeneous batches of same-length samples](https://github.com/kelvinxu/arctic-captions) to improve training speed
   - Improved parallel translation decoding on CPU
+  - Forced decoding i.e. rescoring using NMT
   - Export decoding informations into `json` for further visualization of attention coefficients
   
 #### Deep Learning
