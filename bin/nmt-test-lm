@@ -144,7 +144,7 @@ class Tester(object):
                 log.info("%d/%d sentences completed (%.2f seconds)" % ((i+1), self.n_sentences, t))
                 t = time.time()
 
-        log.info("Test Perplexity: ", np.exp(sum_logprob/sum_sentlen))
+        log.info("Test Perplexity: %.4f" % np.exp(sum_logprob/sum_sentlen))
         # Stop workers
         for idx in xrange(self.n_jobs):
             write_queue.put(None)
