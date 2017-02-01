@@ -4,7 +4,7 @@
 #   lowercase.perl
 #   tokenizer.perl
 #   normalize-punctuation.perl
-#   clean-corpus-n-frac.perl
+#   clean-corpus-n-ratio.perl
 export LC_ALL=en_US.UTF_8
 
 OUT=$1
