@@ -46,5 +46,20 @@ Please cite the following article if you use this baseline in your work:
 @article{}
 
 ```
+When the training is over, you can translate the test set using the following command:
+```
+$ nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/attention-e100-r100-adam_4e-04-bs32-meteor-each1000-l2_1e-05-do_0.2_0.4_0.4-gc5-init_xavier-s1235.1.npz \
+                -S ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
+                -o test.tok.de
+```
+
+This will produced a tokenized hypothesis file cleaned from BPE segmentations automatically. Let's score this using `nmt-coco-metrics`:
+
+```
+$ nmt-coco-metrics -p -l de test.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
+Language: de
+The number of references is 1
+Bleu_1: 0.65901 Bleu_2: 0.52521 Bleu_3: 0.42928 Bleu_4: 0.35334 CIDEr: 3.34549 METEOR: 0.55340 METEOR(norm): 0.55370 ROUGE_L: 0.66009
+```
 
 ### Train a Multimodal NMT
