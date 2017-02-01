@@ -1,8 +1,10 @@
-WMT16 Shared task on Multimodal Translation - Task 1 (Monomodal)
+WMT16 Shared task on Multimodal Translation
 ---
 
- - `data/`: This folder contains Multi30k dataset of the competition.
- - `scripts/`: This folder contains the necessary preprocessing and preparation scripts for nmtpy.
+### Multi30k Translation Data
+
+A copy of the untouched/original text files are available under `data/`. These files are downloaded
+from [WMT16 Multimodal Task](http://www.statmt.org/wmt16/multimodal-task.html) webpage.
 
 ### Normalization and Tokenization
 
