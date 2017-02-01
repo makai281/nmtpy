@@ -53,13 +53,13 @@ $ nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/attention-e100-r100-
                 -o test.tok.de
 ```
 
-This will produced a tokenized hypothesis file cleaned from BPE segmentations automatically. Let's score this using `nmt-coco-metrics`:
+This will produce a tokenized hypothesis file cleaned from BPE segmentations. Let's score this using `nmt-coco-metrics`:
 
 ```
 $ nmt-coco-metrics -p -l de test.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
 Language: de
 The number of references is 1
-Bleu_1: 0.65901 Bleu_2: 0.52521 Bleu_3: 0.42928 Bleu_4: 0.35334 CIDEr: 3.34549 METEOR: 0.55340 METEOR(norm): 0.55370 ROUGE_L: 0.66009
+Bleu_1: 0.67390 Bleu_2: 0.54240 Bleu_3: 0.44846 Bleu_4: 0.37333 CIDEr: 3.55837 METEOR: 0.57024 METEOR(norm): 0.57058 ROUGE_L: 0.67121
 ```
 
 ### Train a Multimodal NMT
