@@ -39,6 +39,12 @@ This script will also create `nmtpy` vocabulary files under the same output fold
 ### Train a Monomodal NMT
 
 Run `nmt-train -c wmt16-task1-monomodal.conf -t` to train a monomodal NMT on this
-corpus.
+corpus. This small-sized monomodal NMT achieves state-of-the-art performance on this corpus.
+Please cite the following article if you use this baseline in your work:
+
+```
+@article{}
+
+```
 
 ### Train a Multimodal NMT
