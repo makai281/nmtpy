@@ -14,15 +14,17 @@ Make sure that the following scripts from the `mosesecoder` project are in your 
   - normalize-punctuation.perl
   - clean-corpus-n-ratio.perl
 
-Run `scripts/01-tokenize.sh ~/nmtpy/data/wmt16-task1` second being the output folder for the
-processed files. This script will:
+Run `scripts/01-tokenize.sh ~/nmtpy/data/wmt16-task1` to:
 
   - Normalize punctuations
   - Tokenize
-  - Filter sentences with length &lt;2 and &gt;50 (only for training corpus)
+  - Filter out sentences with length **&lt; 2** and **&gt; 50** (only for training corpus)
   - Lowercase
 
-for train, val and test files from `data/`.
+train, val and test files from `data/` and save them under `~/nmtpy/data/wmt16-task1`.
+**Note that** the output folder is in accordance with the configuration file
+`wmt16-task1-monomodal.conf` so if you use another output folder, change the configuration
+file as well.
 
 ### BPE Processing
 
