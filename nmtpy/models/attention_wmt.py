@@ -22,10 +22,10 @@ from ..defaults import INT, FLOAT
 from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
 
-from .attention import Model as ParentModel
+from .attention import Model as Attention
 
 # Same model as attention but using WMTIterator
-class Model(ParentModel):
+class Model(Attention):
     def __init__(self, seed, logger, **kwargs):
         # Call parent's init first
         super(Model, self).__init__(seed, logger, **kwargs)
