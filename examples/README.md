@@ -21,7 +21,3 @@ and can be downloaded from [here](http://www.statmt.org/wmt16/multimodal-task.ht
  year      = 2016
 }
 ```
-
-## WMT15 English-> German
-
-## Factored NMT
