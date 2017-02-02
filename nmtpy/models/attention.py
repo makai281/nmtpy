@@ -349,8 +349,6 @@ class Model(BaseModel):
                                                   prefix='deepencoder_%d' % i,
                                                   mask=x_mask, layernorm=self.lnorm)
 
-
-
         # Apply dropout
         ctx = dropout(ctx[0], self.trng, self.ctx_dropout, self.use_dropout)
 
@@ -384,7 +382,7 @@ class Model(BaseModel):
         ctxs = proj[1]
 
         # weights (alignment matrix)
-        alphas = proj[2]
+        self.alphas = proj[2]
 
         # compute word probabilities
         logit_gru  = get_new_layer('ff')[1](self.tparams, proj_h, prefix='ff_logit_gru', activ='linear')
@@ -408,21 +406,20 @@ class Model(BaseModel):
         y_flat_idx = tensor.arange(y_flat.shape[0]) * self.n_words_trg + y_flat
 
         cost = log_probs.flatten()[y_flat_idx]
-        cost = cost.reshape([y.shape[0], y.shape[1]])
+        cost = cost.reshape([n_timesteps_trg, n_samples])
         cost = (cost * y_mask).sum(0)
 
         self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         # For alpha regularization
-        self.alphas = alphas
 
         return cost
 
     def build_sampler(self):
-        x = tensor.matrix('x', dtype=INT)
-        xr = x[::-1]
+        x           = tensor.matrix('x', dtype=INT)
+        xr          = x[::-1]
         n_timesteps = x.shape[0]
-        n_samples = x.shape[1]
+        n_samples   = x.shape[1]
 
         # word embedding (source), forward and backward
         emb = self.tparams['Wemb_enc'][x.flatten()]
