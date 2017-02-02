@@ -40,23 +40,19 @@ This script will also create `nmtpy` vocabulary files under the same output fold
 
 Run `nmt-train -c wmt16-task1-monomodal.conf -t` to train a monomodal NMT on this
 corpus. This small-sized monomodal NMT achieves state-of-the-art performance on this corpus.
-Please cite the following article if you use this baseline in your work:
-
-```
-@article{}
 
 ```
 When the training is over, you can translate the test set using the following command:
 ```
-$ nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/attention-e100-r100-adam_4e-04-bs32-meteor-each1000-l2_1e-05-do_0.2_0.4_0.4-gc5-init_xavier-s1235.1.npz \
-                -S ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
-                -o test.tok.de
+nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/attention-e100-r100-adam_4e-04-bs32-meteor-each1000-l2_1e-05-do_0.2_0.4_0.4-gc5-init_xavier-s1235.1.npz \
+              -S ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
+              -o test.tok.de
 ```
 
 This will produce a tokenized hypothesis file cleaned from BPE segmentations. Let's score this using `nmt-coco-metrics`:
 
 ```
-$ nmt-coco-metrics -p -l de test.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
+nmt-coco-metrics -p -l de test.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
 Language: de
 The number of references is 1
 Bleu_1: 0.67390 Bleu_2: 0.54240 Bleu_3: 0.44846 Bleu_4: 0.37333 CIDEr: 3.55837 METEOR: 0.57024 METEOR(norm): 0.57058 ROUGE_L: 0.67121
@@ -65,22 +61,22 @@ Bleu_1: 0.67390 Bleu_2: 0.54240 Bleu_3: 0.44846 Bleu_4: 0.37333 CIDEr: 3.55837 M
 ### Train a Multimodal NMT
 
 Before training a multimodal system, we need to store the sentence pairs and
-their relevant image IDs in pickled files so that `WMTIterator` can read them.
+their relevant image IDs in pickled files so that `WMTIterator` can read them:
 
 ```
-$ scripts/03-raw2pkl.py -i data/split_train.txt \
-                        -l ~/nmtpy/data/wmt16-task1/train.lines \
-                        -s ~/nmtpy/data/wmt16-task1/train.norm.max50.tok.lc.bpe.en \
-                        -t ~/nmtpy/data/wmt16-task1/train.norm.max50.tok.lc.bpe.de \
-                        -o ~/nmtpy/data/wmt16-task1/train.pkl
+scripts/03-raw2pkl.py -i data/split_train.txt \
+                      -l ~/nmtpy/data/wmt16-task1/train.lines \
+                      -s ~/nmtpy/data/wmt16-task1/train.norm.max50.tok.lc.bpe.en \
+                      -t ~/nmtpy/data/wmt16-task1/train.norm.max50.tok.lc.bpe.de \
+                      -o ~/nmtpy/data/wmt16-task1/train.pkl
 
-$ scripts/03-raw2pkl.py -i data/split_val.txt \
-                        -s ~/nmtpy/data/wmt16-task1/val.norm.tok.lc.bpe.en \
-                        -t ~/nmtpy/data/wmt16-task1/val.norm.tok.lc.bpe.de \
-                        -o ~/nmtpy/data/wmt16-task1/val.pkl
+scripts/03-raw2pkl.py -i data/split_val.txt \
+                      -s ~/nmtpy/data/wmt16-task1/val.norm.tok.lc.bpe.en \
+                      -t ~/nmtpy/data/wmt16-task1/val.norm.tok.lc.bpe.de \
+                      -o ~/nmtpy/data/wmt16-task1/val.pkl
 
-$ scripts/03-raw2pkl.py -i data/split_test.txt \
-                        -s ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
-                        -t ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.de \
-                        -o ~/nmtpy/data/wmt16-task1/test.pkl
+scripts/03-raw2pkl.py -i data/split_test.txt \
+                      -s ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
+                      -t ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.de \
+                      -o ~/nmtpy/data/wmt16-task1/test.pkl
 ```
