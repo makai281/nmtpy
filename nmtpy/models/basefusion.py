@@ -138,15 +138,15 @@ class Model(Attention):
 
     def build(self):
         # Source sentences: n_timesteps, n_samples
-        x = tensor.matrix('x', dtype=INT)
-        x_mask = tensor.matrix('x_mask', dtype=FLOAT)
+        x       = tensor.matrix('x', dtype=INT)
+        x_mask  = tensor.matrix('x_mask', dtype=FLOAT)
 
-        # Image: 196 (n_annotations) x n_samples x 512 (ctxdim)
-        x_img = tensor.tensor3('x_img', dtype=FLOAT)
+        # Image: 196 (n_annotations) x n_samples x 1024 (conv_dim)
+        x_img   = tensor.tensor3('x_img', dtype=FLOAT)
 
         # Target sentences: n_timesteps, n_samples
-        y = tensor.matrix('y', dtype=INT)
-        y_mask = tensor.matrix('y_mask', dtype=FLOAT)
+        y       = tensor.matrix('y', dtype=INT)
+        y_mask  = tensor.matrix('y_mask', dtype=FLOAT)
 
         # Some shorthands for dimensions
         n_samples       = x.shape[1]
@@ -154,7 +154,7 @@ class Model(Attention):
         n_timesteps_trg = y.shape[0]
 
         # Store tensors
-        self.inputs = OrderedDict()
+        self.inputs             = OrderedDict()
         self.inputs['x']        = x         # Source words
         self.inputs['x_mask']   = x_mask    # Source mask
         self.inputs['x_img']    = x_img     # Image features
@@ -269,14 +269,16 @@ class Model(Attention):
         ################
         # Image features
         ################
-        # 196 x 512
+        # 196 x 1024
         x_img           = tensor.matrix('x_img', dtype=FLOAT)
         # Convert to 196 x 2000 (2*rnn_dim)
         img_ctx         = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
         # Broadcast middle dimension to make it 196 x 1 x 2000
         img_ctx         = img_ctx[:, None, :]
+
+        # NOTE: Not used
         # Take the mean over the first dimension: 1 x 2000
-        img_ctx_mean    = img_ctx.mean(0)
+        #img_ctx_mean    = img_ctx.mean(0)
         # Give the mean to compute the initial state: 1 x 1000
         #img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx_mean, prefix='ff_img_state_init', activ='tanh')
 
@@ -330,9 +332,9 @@ class Model(Attention):
         ########
         # Fusion
         ########
-        logit       = emb
-        logit       += get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
-        logit       += get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
+        logit = emb
+        logit += get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
+        logit += get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
         logit = tanh(logit)
 
         logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
