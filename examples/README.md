@@ -1,5 +1,4 @@
-Examples
---
+# Examples
 
 In this folder you can find ready-to-train baseline models for several tasks/architectures.
 
@@ -35,6 +34,18 @@ After downloading the files, extract them using the following command:
 
 ```
 xz -d <downloaded xz file>
+```
+
+Each `.npy` file contains 14x14x1024 convolutional feature maps for each image
+which are extracted from **res4f_relu** layer of a ResNet-50 trained on ImageNet:
+
+```
+>> valfeats = numpy.load('flickr30k_ResNets50_blck4_val.fp16.npy')
+>> valfeats.shape
+(1014, 196, 1024)
+# 1014: n_samples
+#  196: flattened 14x14 into 196 for convenience
+# 1024: n_feature_maps
 ```
 
 For more information about the image features, please refer to:
