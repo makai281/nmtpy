@@ -1,7 +1,7 @@
-WMT16 Shared Task on Multimodal Translation
----
+# WMT16 Shared Task on Multimodal Machine Translation
+## Task 1 - Multimodal Machine Translation
 
-### Multi30k Translation Data
+### Multi30k Dataset
 
 A copy of the original text files are available under `data/`. These files are downloaded
 from [WMT16 Multimodal Task](http://www.statmt.org/wmt16/multimodal-task.html) webpage.
@@ -38,11 +38,10 @@ This script will also create `nmtpy` vocabulary files under the same output fold
 
 ### Train a Monomodal NMT
 
-Run `nmt-train -c wmt16-task1-monomodal.conf -t` to train a monomodal NMT on this
+Run `nmt-train -c wmt16-task1-monomodal.conf` to train a monomodal NMT on this
 corpus. This small-sized monomodal NMT achieves state-of-the-art performance on this corpus.
-
-```
 When the training is over, you can translate the test set using the following command:
+
 ```
 nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/attention-e100-r100-adam_4e-04-bs32-meteor-each1000-l2_1e-05-do_0.2_0.4_0.4-gc5-init_xavier-s1235.1.npz \
               -S ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
@@ -60,8 +59,26 @@ Bleu_1: 0.67390 Bleu_2: 0.54240 Bleu_3: 0.44846 Bleu_4: 0.37333 CIDEr: 3.55837 M
 
 ### Train a Multimodal NMT
 
-Before training a multimodal system, we need to store the sentence pairs and
-their relevant image IDs in pickled files so that `WMTIterator` can read them:
+If you use `fusion_*` multimodal architectures in your work, please cite the following
+article:
+
+```
+@article{caglayan2016multimodal,
+  title={Multimodal Attention for Neural Machine Translation},
+  author={Caglayan, Ozan and Barrault, Lo{\"\i}c and Bougares, Fethi},
+  journal={arXiv preprint arXiv:1609.03976},
+  year={2016}
+}
+```
+
+#### Image Features
+
+You need to download ResNet-50 convolutional feature files, uncompress them and save
+under `~/nmtpy/data/wmt16-task1`.
+
+#### Creating PKL Files
+We need to store the sentence pairs and their relevant image IDs in
+pickled `.pkl` files so that `WMTIterator` can read them:
 
 ```
 scripts/03-raw2pkl.py -i data/split_train.txt \
@@ -80,3 +97,6 @@ scripts/03-raw2pkl.py -i data/split_test.txt \
                       -t ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.de \
                       -o ~/nmtpy/data/wmt16-task1/test.pkl
 ```
+
+Now that the files are ready, run `nmt-train -c wmt16-task1-multimodal.conf` to train
+a `fusion_concat_dep_ind` architecture.
