@@ -13,4 +13,5 @@ The files are organized as follows:
   - `test.[1-5].{en,de}`: 5 splits of test set each having 1000 sentences
   - `split_*.txt`: Text files containing sentence to image name mapping for each sets.
 
-The patch file `fix-corpus-bugs.patch` is applied on top of these files to fix some weird noise in the dataset.
+(The patch file `fix-corpus-bugs.patch` can be applied on top of these files to fix some bugs
+in the corpus.)
