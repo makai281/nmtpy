@@ -58,21 +58,20 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
 
 ## Requirements
 
-You need the following libraries installed in order to use nmtpy:
+You need the following Python libraries installed in order to use **nmtpy**:
   - numpy
-  - Theano >= 0.8 (or a GIT checkout with `tensor.nnet.logsoftmax` available)
+  - Theano >= 0.8 (0.9.x would be better)
   - six
 
-We recommend using Anaconda Python distribution which is equipped with Intel MKL (Math Kernel Library) greatly
-improving CPU decoding speeds during beam search. With a correct compilation and installation, you should achieve
-similar performance with OpenBLAS as well but the setup procedure may be difficult to follow for inexperienced ones.
-
-nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in the future.
+- We recommend using Anaconda Python distribution which is equipped with Intel MKL (Math Kernel Library) greatly
+  improving CPU decoding speeds during beam search. With a correct compilation and installation, you should achieve
+  similar performance with OpenBLAS as well but the setup procedure may be difficult to follow for inexperienced ones.
+- nmtpy currently **only** supports Python 2.7 but we plan to move towards Python 3 in the future.
+- Please note that METEOR requires a Java runtime so `java` should be in your `$PATH`.
 
 #### Additional data for METEOR
 
-- Before installing nmtpy package, you need to run `scripts/get-meteor-data.sh` script from the root folder to fetch METEOR paraphrase files.
-- Please note that METEOR requires a Java runtime so `java` should be in your `$PATH`.
+Before installing **nmtpy**, you need to run `scripts/get-meteor-data.sh` to download METEOR paraphrase files.
 
 #### Installation
 
@@ -80,28 +79,23 @@ nmtpy currently only supports Python 2.7 but we plan to move towards Python 3 in
 $ python setup.py install
 ```
 
-**Installation Note:** When you add a new model under `models/` it will not be directly available in runtime
-as it needs to be installed as well. To avoid re-installing each time, you can use development mode with `python setup.py develop`
-which will directly add the `git` repository to `PYTHONPATH`.
+**Note:** When you add a new model under `models/` it will not be directly available in runtime
+as it needs to be installed as well. To avoid re-installing each time, you can use development mode with `python setup.py develop` which will directly make Python see the `git` folder as the library content.
 
 ## Ensuring Reproducibility in Theano
 
-When we started to work on **dl4mt-tutorial**, we noticed an annoying reproducibility problem:
-Multiple runs of the same experiment (same seed, same machine, same GPU) were not producing exactly
+When we started to work on **dl4mt-tutorial**, we noticed an annoying reproducibility problem where
+multiple runs of the same experiment (same seed, same machine, same GPU) were not producing exactly
 the same training and validation losses after a few iterations.
 
 The first solution that was [discussed](https://github.com/Theano/Theano/issues/3029) in Theano
 issues was to replace a non-deterministic GPU operation with its deterministic equivalent. To achieve this,
-you should **patch** your local Theano installation using [this patch](patches/00-theano-advancedinctensor.patch) unless upstream developers add
-a configuration option to `.theanorc`.
+you should **patch** your local Theano installation using [this patch](patches/00-theano-advancedinctensor.patch) (or [this one](patches/00-theanov0.9-advancedinctensor.patch) for the recent master which approaches v0.9) unless upstream developers add a configuration option to `.theanorc`.
 
 But apparently this was not enough to obtain reproducible models. After debugging ~2 months, we discovered and
 [fixed](https://github.com/Theano/Theano/commit/8769382ff661aab15dda474a4c74456037f73cc6) a very insidious bug involving back-propagation in Theano.
 
-So if you care (and you absolutely should) about reproducibility, make sure your Theano copy has above changes applied. If you use
-Theano from `master` branch and your clone is newer than *17 August 2016*, the second fix is probably available in your copy.
-
-Finally just to give some numbers, this irreproducibility was causing a deviation of **1 to 1.5** BLEU between multiple runs of the same experiment.
+So if you care (and you absolutely should) about reproducibility, make sure your Theano copy has above changes applied. If your Theano copy is newer than *17 August 2016*, the second fix should be available in your copy.
 
 ## Configuring Theano
 
