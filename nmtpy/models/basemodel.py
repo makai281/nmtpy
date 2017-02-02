@@ -51,7 +51,6 @@ class BaseModel(object):
         # Iterators
         self.train_iterator = None
         self.valid_iterator = None
-        self.test_iterator  = None
 
         # A theano shared variable for lrate annealing
         self.learning_rate  = None
