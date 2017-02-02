@@ -8,7 +8,7 @@ from [WMT16 Multimodal Task](http://www.statmt.org/wmt16/multimodal-task.html) w
 
 ### Normalization and Tokenization
 
-Make sure that the following scripts from the `mosesecoder` project are in your `$PATH`:
+Make sure that the following scripts from the `mosesdecoder` project are in your `$PATH`:
   - lowercase.perl
   - tokenizer.perl
   - normalize-punctuation.perl
