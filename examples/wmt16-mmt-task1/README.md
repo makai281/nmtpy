@@ -73,7 +73,7 @@ article:
 
 #### Image Features
 
-You need to download ResNet-50 convolutional feature files, uncompress them and save
+You need to [download](../README.md) ResNet-50 convolutional feature files, uncompress them and save
 under `~/nmtpy/data/wmt16-task1`.
 
 #### Creating PKL Files
