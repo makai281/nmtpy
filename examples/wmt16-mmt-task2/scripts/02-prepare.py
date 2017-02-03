@@ -17,7 +17,7 @@ import argparse
 # [ssplit, tsplit, imgid, imgname, swords, twords]
 
 puncs = list(string.punctuation)
-#puncs += ["..", "...", "&amp;", "&apos;", "&gt;", "&lt;", "&quot;"]
+puncs += ["..", "...", "&amp;", "&apos;", "&gt;", "&lt;", "&quot;"]
 
 _ = os.path.expanduser
 
