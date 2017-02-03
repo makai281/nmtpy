@@ -35,6 +35,8 @@ article:
 
 ### Getting the Image Features
 
+(Files are not uploaded yet!)
+
 For multimodal baselines, you will need the convolutional features extracted
 from a pre-trained ResNet-50. You can download these files from the links below:
 
