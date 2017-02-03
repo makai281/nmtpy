@@ -103,10 +103,26 @@ Run `nmt-train -c wmt16-task2-monomodal.conf` to train a monomodal NMT on this
 corpus. When the training is over, you can translate the test set using the following command:
 
 ```
-nmt-translate -m ~/nmtpy/models/wmt16-mmt-task2-monomodal/attention_wmt-e100-r100-adam_4e-04-bs32-meteor-eachepoch-l2_1e-05-gc5-init_xavier-s1234.1.npz
+nmt-translate -m ~/nmtpy/models/wmt16-mmt-task2-monomodal/<your model file>
               -S ~/nmtpy/data/wmt16-task2/flickr_30k_align.test.pkl -v pairs \
-              -o test.tok.de
+              -o test_monomodal.tok.de
 ```
 
 The flag `-v pairs` will generate 5 hypotheses for each image using each source description and
 pick the one having the maximum likelihood based on NMT score.
+
+### Train a Multimodal NMT
+
+#### Image Features
+
+You need to [download](../README.md) ResNet-50 convolutional feature files, uncompress them and save
+under `~/nmtpy/data/wmt16-task2`.
+
+Run `nmt-train -c wmt16-task2-multimodal.conf` to train a `fusion_concat_dep_ind` architecture.
+When the training is over, you can translate the test set with the following command:
+
+```
+nmt-translate -m ~/nmtpy/models/wmt16-mmt-task2-multimodal/<your model file> \
+              -S ~/nmtpy/data/wmt16-task2/flickr_30k_align.test.pkl \
+                 ~/nmtpy/data/wmt16-task2/flickr30k_ResNets50_blck4_test.fp16.npy -v pairs \
+              -o test_multimodal.tok.de
