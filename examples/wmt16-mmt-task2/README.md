@@ -89,7 +89,7 @@ A clarification should be made about the number of samples in a set: since we ha
 
 During training, you can select whether you would like to use:
  - All 25 comparable pairs for an image (`data_mode:all`)
- - 5 comparable pairs for an image (`data_mode:pairs`)
+ - 5 comparable pairs for an image (**default:** `data_mode:pairs`)
    - `(.1.en, .1.de), (.2.en, .2.de), ..., (.5.en, .5.de)`
  - Just one pair from the first pair of files: `.1.en -> .1.de` (`data_mode:single`)
  
