@@ -5,6 +5,8 @@
 
 A copy of the original text files for Task 2 are available under `data/`. These files are downloaded
 from [WMT16 Multimodal Task](http://www.statmt.org/wmt16/multimodal-task.html) webpage.
+
+(**Note:** If you would like to fix some mistakes in the corpora, you can apply [this patch](data/fix-corpus-bugs.patch) before proceeding.
  
 ### Normalization and Tokenization
 
