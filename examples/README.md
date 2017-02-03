@@ -2,6 +2,18 @@
 
 In this folder you can find ready-to-train baseline models for several tasks/architectures.
 
+If you use `fusion_*` multimodal architectures in your work, please cite the following
+article:
+
+```
+@article{caglayan2016multimodal,
+  title={Multimodal Attention for Neural Machine Translation},
+  author={Caglayan, Ozan and Barrault, Lo{\"\i}c and Bougares, Fethi},
+  journal={arXiv preprint arXiv:1609.03976},
+  year={2016}
+}
+```
+
 ## WMT16 Shared Task on Multimodal Translation
 
  - [Multimodal Translation (Task 1)](wmt16-mmt-task1) : Monomodal and Multimodal
