@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from six.moves import range
 from six.moves import zip
 
@@ -8,8 +8,9 @@ from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import mask_data, idx_to_sent, load_dictionary
-from ..typedef  import INT, FLOAT
+from ..nmtutils import idx_to_sent, load_dictionary
+from ..defaults import INT, FLOAT
+from .iterator import Iterator
 
 class FlickrIterator(object):
     """Iterator for Karpathy's DeepSent dataset."""
@@ -107,7 +108,7 @@ class FlickrIterator(object):
 
         for idxs in batches:
             x = np.vstack(self.feats[self.__seqs[i][0]] for i in idxs)
-            y, y_mask = mask_data([self.__seqs[i][1] for i in idxs])
+            y, y_mask = Iterator.mask_data([self.__seqs[i][1] for i in idxs])
             self.__minibatches.append((x, y, y_mask))
 
         self.__iter = iter(self.__minibatches)
@@ -122,25 +123,3 @@ class FlickrIterator(object):
             raise Exception("You need to call prepare_batches() first.")
         else:
             return OrderedDict([(k,data[i]) for i,k in enumerate(self.__return_keys)])
-
-### Test
-if __name__ == '__main__':
-    import os
-    vocab, ivocab = load_dictionary(os.path.expanduser("~/data/flickr30k/tok/dictionary.pkl"))
-
-    feats_pkl = os.path.expanduser("~/data/flickr30k/features-karpathy.pkl")
-    it = FlickrIterator(feats_pkl, "train", 32, vocab)
-    it.prepare_batches(shuffle=True)
-
-    bs = []
-    for b in it:
-        assert b['x_img'].shape[0] == b['y'].shape[1]
-        bs.append(b['x_img'].shape[0])
-
-    assert sum(bs) == it.n_samples
-    bsizes = sorted(list(set(bs)), reverse=True)
-    assert bsizes[0] == it.batch_size
-    assert bsizes[1] == it.n_samples % it.batch_size
-
-    tit = FlickrIterator(feats_pkl, "test", 1, vocab)
-    tit.prepare_batches(shuffle=False)

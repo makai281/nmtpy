@@ -1,23 +1,18 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import cPickle
 
 from collections import OrderedDict
-from .typedef import *
+from .defaults import INT, FLOAT
 
-class DotDict(dict):
-    def __init__(self, *args, **kwargs):
-        super(DotDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
+def invert_dictionary(d):
+    return OrderedDict([(v,k) for k,v in d.iteritems()])
 
 def load_dictionary(fname):
-    ivocab = {}
     with open(fname, "rb") as f:
         vocab = cPickle.load(f)
 
-    for k,v in vocab.iteritems():
-        ivocab[v] = k
-
-    return vocab, ivocab
+    return vocab, invert_dictionary(vocab)
 
 # Function to convert idxs to sentence
 def idx_to_sent(ivocab, idxs, join=True):
@@ -54,30 +49,13 @@ def unzip(zipped):
         new_params[kk] = vv.get_value()
     return new_params
 
-# get the list of parameters: Note that tparams must be OrderedDict
-def itemlist(tparams):
-    return [vv for kk, vv in tparams.iteritems()]
-
 # make prefix-appended name
 def pp(prefix, name):
     return '%s_%s' % (prefix, name)
 
 def get_param_dict(path):
-    pp = np.load(path)
-    p = {}
-    for k,v in pp.iteritems():
-        p[k] = v
-    return p
-
-# load parameters
-def load_params(path, params):
-    pp = np.load(path)
-    for kk, vv in params.iteritems():
-        if kk not in pp:
-            raise Exception('%s is not in the archive' % kk)
-        params[kk] = pp[kk]
-
-    return params
+    """Fetch parameter dictionary from .npz file."""
+    return np.load(path)['tparams'].tolist()
 
 # orthogonal initialization for weights
 # Saxe, Andrew M., James L. McClelland, and Surya Ganguli.
@@ -107,24 +85,3 @@ def norm_weight(nin, nout, scale=0.01, ortho=True):
     else:
         W = scale * np.random.randn(nin, nout)
     return W.astype(FLOAT)
-
-################
-def mask_data(seqs):
-    lengths = [len(s) for s in seqs]
-    n_samples = len(seqs)
-
-    # For ff-enc, we need fixed tsteps in the input
-    maxlen = np.max(lengths) + 1
-
-    # Shape is (t_steps, samples)
-    x = np.zeros((maxlen, n_samples)).astype(INT)
-    x_mask = np.zeros_like(x).astype(FLOAT)
-
-    for idx, s_x in enumerate(seqs):
-        x[:lengths[idx], idx] = s_x
-        x_mask[:lengths[idx] + 1, idx] = 1.
-
-    if n_samples == 1:
-        x_mask = None
-
-    return x, x_mask

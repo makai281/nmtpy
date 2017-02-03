@@ -1,25 +1,25 @@
+# -*- coding: utf-8 -*-
 import os
+import pkg_resources
 from subprocess import check_output
 
-from ..sysutils import real_path, get_temp_file
+from ..sysutils import get_temp_file
 from .metric import Metric
+
+METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'external/meteor-1.5.jar')
 
 class METEORScore(Metric):
     def __init__(self, score=None):
         super(METEORScore, self).__init__(score)
         self.name = "METEOR"
-        self.score = score if score else 0.
-        self.score_str = "%.3f" % self.score
+        self.score = (100*score) if score else 0.
+        self.score_str = "%.5f" % self.score
 
 class METEORScorer(object):
     def __init__(self):
-        self.path = real_path(os.environ.get('METEOR_JAR', None))
-        if self.path is None or not os.path.exists(self.path):
-            raise Exception("METEOR jar file not found.")
+        self.__cmdline = ["java", "-Xmx2G", "-jar", METEOR_JAR]
 
-        self.__cmdline = ["java", "-Xmx2G", "-jar", self.path]
-
-    def compute(self, refs, hyps, language="auto", norm=True):
+    def compute(self, refs, hyps, language="auto", norm=False):
         cmdline = self.__cmdline[:]
 
         if isinstance(hyps, list):

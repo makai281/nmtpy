@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from six.moves import range
 from six.moves import zip
 
@@ -8,99 +8,65 @@ import random
 import numpy as np
 
 from ..sysutils import fopen
-from ..nmtutils import mask_data
+from .iterator import Iterator
 
-"""Single side text iterator for monolingual data."""
-class TextIterator(object):
-    def __init__(self, data, _dict, batch_size, n_words=0, data_name='x', do_mask=False):
+"""Text iterator for monolingual data."""
+class TextIterator(Iterator):
+    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, logger=None, **kwargs):
+        super(TextIterator, self).__init__(batch_size, seed, mask, shuffle_mode, logger)
 
-        random.seed(1234)
+        assert 'file'   in kwargs, "Missing argument file"
+        assert 'dict'   in kwargs, "Missing argument dict"
+        
+        self.__file = kwargs['file']
+        self.__dict = kwargs['dict']
+        self.__n_words = kwargs.get('n_words', 0)
+        self.name = kwargs.get('name', 'x')
 
-        self.data = data
-        self.dict = _dict
-        self.batch_size = batch_size
-        self.n_words = n_words
-        self.data_name = data_name
-
-        self.n_samples = 0
-
-        self.__seqs = []
-        self.__idxs = []
-        self.__minibatches = []
-        self.__return_keys = [data_name]
-        self.__iter = None
-
-        self.do_mask = do_mask
-        if self.do_mask:
-            self.__return_keys.append("%s_mask" % data_name)
-
-        # Directly read it
-        self.read()
-
-    def __repr__(self):
-        return self.data
-
-    def set_batch_size(self, bs):
-        self.batch_size = bs
-        self.prepare_batches()
-
-    def rewind(self):
-        self.__iter = iter(self.__minibatches)
-
-    def __iter__(self):
-        return self
-
-    def get_idxs(self):
-        return self.__idxs
-
-    def set_blackout(self, prob):
-        pass
+        self._keys = [self.name]
+        if self.mask:
+            self._keys.append('%s_mask' % self.name)
 
     def read(self):
-        self.__seqs = []
-        self.__idxs = []
-        #self.__max_filt = 0
-        with fopen(self.data, 'r') as f:
+        seqs = []
+        with fopen(self.__file, 'r') as f:
             for idx, line in enumerate(f):
                 line = line.strip()
 
                 # Skip empty lines
-                if line != "":
+                if line == "":
+                    print 'Warning: empty line in %s' % self.__file
+                else:
                     line = line.split(" ")
 
-                    seq = [self.dict.get(w, 1) for w in line]
+                    seq = [self.__dict.get(w, 1) for w in line]
 
                     # if given limit vocabulary
-                    if self.n_words > 0:
-                        seq = [w if w < self.n_words else 1 for w in seq]
-
+                    if self.__n_words > 0:
+                        seq = [w if w < self.__n_words else 1 for w in seq]
                     # Append the sequence
-                    self.__seqs += [seq]
+                    seqs += [seq]
 
-                    # Keep line order of the accepted phrases in a list
-                    self.__idxs += [idx]
+        self._seqs = seqs
+        self.n_samples = len(self._seqs)
+        self._idxs = np.arange(self.n_samples)
 
-        self.n_samples = len(self.__idxs)
+        if not self._minibatches:
+            self.prepare_batches()
+        self.rewind()
 
     def prepare_batches(self):
-        sample_idxs = np.arange(self.n_samples)
-        self.__minibatches = []
+        self._minibatches = []
 
         for i in range(0, self.n_samples, self.batch_size):
-            batch_idxs = sample_idxs[i:i + self.batch_size]
-            x, x_mask = mask_data([self.__seqs[i] for i in batch_idxs])
-            self.__minibatches.append((batch_idxs, x, x_mask))
+            batch_idxs = self._idxs[i:i + self.batch_size]
+            x, x_mask = Iterator.mask_data([self._seqs[i] for i in batch_idxs])
+            self._minibatches.append((x, x_mask))
 
-        self.__iter = iter(self.__minibatches)
-        self.__idxs = sample_idxs
+    def rewind(self):
+        """Recreate the iterator."""
+        if self.shuffle_mode == 'simple':
+            self._idxs = np.random.permutation(self.n_samples)
+            self.prepare_batches()
 
-    def next(self):
-        try:
-            data = next(self.__iter)
-        except StopIteration as si:
-            self.rewind()
-            raise
-        except AttributeError as ae:
-            raise Exception("You need to call prepare_batches() first.")
-        else:
-            return OrderedDict([(k,data[i+1]) for i,k in enumerate(self.__return_keys)])
+        self._iter = iter(self._minibatches)

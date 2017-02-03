@@ -1,21 +1,23 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import copy
 
+from .iterator  import Iterator
 # Iterator that randomly fetches samples with same target
 # length to be efficient in terms of RNN underlyings.
 # Code from https://github.com/kelvinxu/arctic-captions
 class HomogeneousData(object):
-    def __init__(self, data, batch_size, target_func):
+    def __init__(self, data, batch_size, trg_pos):
         self.batch_size = batch_size
         self.data = data
-        self.get_trg = target_func
+        self.trg_pos = trg_pos
 
         self.prepare()
         self.reset()
 
     def prepare(self):
         # find all target sequence lengths
-        self.lengths = [len(self.get_trg(cc)) for cc in self.data]
+        self.lengths = [len(cc[self.trg_pos]) for cc in self.data]
 
         # Compute unique lengths
         self.len_unique = np.unique(self.lengths)
@@ -79,6 +81,7 @@ class HomogeneousData(object):
         # Decrement used sample count
         self.len_curr_counts[self.cur_len] -= curr_batch_size
 
+        # Return batch indices from here
         return curr_indices
 
     def __iter__(self):

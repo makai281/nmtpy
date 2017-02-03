@@ -1,369 +1,220 @@
 #!/usr/bin/env python
-
+# -*- coding: utf-8 -*-
 import os
+
+# Avoid thread explosion
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 import sys
-import time
-import math
-import shutil
 import logging
 import argparse
 import platform
+import textwrap
 import importlib
 
-import numpy as np
-
-# Our classes
 from nmtpy.config import Config
 from nmtpy.logger import Logger
 from nmtpy.sysutils import *
-from nmtpy.nmtutils import unzip, get_param_dict
-import nmtpy.cleanup as cleanup
+from nmtpy.nmtutils import get_param_dict
+from nmtpy.mainloop import MainLoop
 
+# Ensure cleaning up temp files and processes
+import nmtpy.cleanup as cleanup
 cleanup.register_handler()
 
-DEFAULTS = {
-        'weight_init':        0.01,           # Scale of the uniform distribution for weight initialization.
-                                              # Can be a float, "xavier" or "he".
-        'batch_size':         32,             # Training batch size
-        'lrate':              0.0001,         # lrate for SGD
-        'optimizer':          'adadelta',     # adadelta, sgd, rmsprop, adam
-        'profile':            False,          # Profile Theano
-        'nanguard':           False,          #
-        }
+# Import defaults
+from nmtpy.defaults import TRAIN_DEFAULTS as trdefs
+from nmtpy.defaults import MODEL_DEFAULTS as mddefs
 
-TRAIN_DEFAULTS = {
-        'decay_c':            0.0005,         # L2 penalty factor
-        'clip_c':             5.,             # Clip gradients above clip_c
-        'alpha_c':            0.,             # Alpha regularization for attentional models
-        'seed':               1234,           # RNG seed
-        'suffix':             "",             # Model suffix
-        'save_iter':          False,          # Save each best valid weights to separate file
-        'restore':            False,          # NOTE: NOT FUNCTIONAL RIGHT NOW
-        'device_id':          'auto',         #
-        'patience':           10,             # Early stopping patience
-        'max_epochs':         100,            # Max number of epochs to train
-        'max_iteration':      1e6,            # Max number of updates to train
-        'valid_start':        1,              # Epoch which validation will start
-        'valid_freq':         0,              # 0: End of epochs
-        'valid_metric':       'bleu',         # bleu, px, meteor
-        'sample_freq':        0,              # Sampling frequency during training (0: disabled)
-        'njobs':              10,             # # of parallel CPU tasks to do beam-search
-        'decoder_mode':       "beamsearch",
-        'model':              None,
-        'stop_embedding':     0,              # Stop updating embeddings after this epoch
-        }
-
-##########
-# main() #
-##########
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='nmt-train')
+    # Pretty print defaults
+    defs  = '\n' + pretty_dict(trdefs, 'Training defaults') + '\n\n'
+    defs += pretty_dict(mddefs, 'Model defaults')
 
-    parser.add_argument('-c', '--config'        , type=str,   help="Path to model configuration file.", required=True)
-    parser.add_argument('-s', '--suffix'        , type=str,   help="Optional suffix to append to model name.")
-    parser.add_argument('-m', '--model'         , type=str,   help="Optional pretrained model to fetch weights from.")
-    parser.add_argument('-w', '--decay-c'       , type=float, help="Weight decay factor")
-    parser.add_argument('-a', '--alpha-c'       , type=float, help="Alpha regularization factor")
-    parser.add_argument('-g', '--clip-c'        , type=float, help="Gradient clipping factor")
-    parser.add_argument('-b', '--batch-size'    , type=int  , help="Training batch size")
-    parser.add_argument('-V', '--valid-freq'    , type=int  , help="Validation frequency in terms of updates")
-    parser.add_argument('-M', '--valid-metric'  , type=str  , help="Validation metric: px, bleu, meteor")
-    parser.add_argument('-R', '--seed'          , type=int  , help="Random seed")
-    parser.add_argument('-o', '--optimizer'     , type=str  , help="Optimizer: sgd, adadelta, rmsprop, adam")
-    parser.add_argument('-l', '--lrate'         , type=str  , help="Learning rate for SGD")
-    parser.add_argument('-j', '--njobs'         , type=str  , help="# of CPU jobs for beam-search")
-    parser.add_argument('-D', '--device-id'     , type=str  , help="Device to use")
-    parser.add_argument('-N', '--nanguard'      , default=argparse.SUPPRESS, action='store_true', help="Debug NaN values")
-    pargs = parser.parse_args()
+    parser = argparse.ArgumentParser(prog='nmt-train',
+                                     formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description=textwrap.dedent('''\
+                                        nmt-train trains the given model on a free GPU.
+                                        All the details regarding the model and the hyper-parameters
+                                        are given through -c/--config flag.
 
-    # First parse configuration file for arguments
-    args = Config(pargs.config).get()
-    args['model_path_suffix'] = os.path.splitext(os.path.basename(pargs.config))[0]
-    del pargs.__dict__['config']
+                                        A list of sane defaults are defined in nmtpy/defaults.py and
+                                        listed below. These defaults are used if you did not override
+                                        them in the configuration file.
 
-    # Update args by reading cmdline args
-    args.update([(k,v) for k,v in pargs.__dict__.items() if v is not None])
+                                        A final way of overriding parameters are through the variable
+                                        length 'extra' arguments.
 
-    # Bring default values for arguments which are not set
-    all_defaults = dict(DEFAULTS)
-    all_defaults.update(TRAIN_DEFAULTS)
-    for k,v in all_defaults.iteritems():
-        if k not in args:
-            args[k] = v
+                                        Example:
+                                          $ nmt-train -c sample.conf
+                                          # Change seed and model_type by overriding them
+                                          $ nmt-train -c sample.conf "seed:1235" "model_type:att"
+                                          ''') + defs,
+                                     argument_default=argparse.SUPPRESS)
 
-    ###################
-    # Setup arguments
-    ###################
-    args, log_file = setup_train_args(args)
+    # Mandatory argument pointing to the configuration file
+    parser.add_argument('-c', '--config'        , help="Path to model configuration file",
+                                                  type=str, required=True)
 
-    ######################################################
+    # Override the model-type given in configuration file to experiment with
+    # a different model by fixing every other parameter given in the configuration
+    parser.add_argument('-m', '--model-type'    , help="Override the model type given in the configuration",
+                                                  type=str)
+
+    parser.add_argument('-s', '--suffix'        , help="Model file suffix",
+                                                  type=str, default=None)
+    parser.add_argument('-i', '--init'          , help="Pretrained model .npz",
+                                                  type=str)
+    parser.add_argument('-t', '--timestamp'     , help="Add timestamp to log messages.",
+                                                  action="store_true", default=False)
+
+    parser.add_argument('-v', '--verbose'       , help="Dump Theano graph and inspect optimization.",
+                                                  action="store_true", default=False)
+
+    # You can basically override everything by passing 'lrate: 0.1' style strings at the end
+    # of command-line arguments
+    parser.add_argument('extra'                 , help="List of 'key:value' to override configuration",
+                                                  nargs="*", default=[])
+
+    ####################################
+    # Parse command-line arguments first
+    ####################################
+    cargs   = parser.parse_args()
+
+    # Pop config filename, verbose flag and extra
+    cfname  = cargs.__dict__.pop('config')
+    verbose = cargs.__dict__.pop('verbose')
+    extra   = cargs.__dict__.pop('extra')
+    suffix  = cargs.__dict__.pop('suffix')
+    tstamp  = cargs.__dict__.pop('timestamp')
+
+    # Take the remaining command line arguments (model_type and/or init if any)
+    cmd_args = cargs.__dict__
+
+    # Split and convert extra arguments to dict
+    ext_args = dict([e.split(':', 1) for e in extra])
+
+    # Merge by prioritizing extra arguments
+    cmd_args.update(ext_args)
+
+    # Parse configuration file and merge with the rest
+    conf = Config(cfname, trdefs=trdefs, mddefs=mddefs, override=cmd_args)
+    train_args, model_args = conf.parse()
+
+    # Create a folder named as conf file
+    folder_name = os.path.splitext(os.path.basename(cfname))[0]
+    model_args.save_path = os.path.join(model_args.save_path, folder_name)
+    ensure_dirs([model_args.save_path])
+
+    # Create a unique experience identifier string
+    exp_id = get_exp_identifier(train_args, model_args, suffix=suffix)
+    # Get unique run identifier (starts from 1)
+    run_id = get_next_runid(model_args.save_path, exp_id)
+    # Get log file name
+    log_fname = os.path.join(model_args.save_path,
+                             "%s.%d.log" % (exp_id, run_id))
+    # Update save_path
+    model_args.save_path = os.path.join(model_args.save_path,
+                                        "%s.%d" % (exp_id, run_id))
+    ###################################
+
     # Start logging module (both to terminal and to file)
-    ######################################################
-    Logger.set_file(log_file)
-    log = Logger._logger
+    Logger.setup(log_file=log_fname, timestamp=tstamp)
+    log = Logger.get()
 
-    #############
-    # Reserve GPU
-    #############
+    # Set device for Theano
     if 'THEANO_FLAGS' not in os.environ:
-        args.device_id = get_gpu(args.device_id)
-        os.environ['THEANO_FLAGS'] = "device=%s" % args.device_id
+        train_args.device_id = get_device(train_args.device_id)
+
+        # Check for GPUARRAY to switch to new Theano backend
+        if train_args.device_id.startswith('gpu') and "GPUARRAY" in os.environ:
+            train_args.device_id = train_args.device_id.replace('gpu', 'cuda')
+
+        os.environ['THEANO_FLAGS'] = "device=%s" % train_args.device_id
+
     log.info("THEANO_FLAGS = %s" % os.environ['THEANO_FLAGS'])
 
-    ###############
     # Import theano
-    ###############
     import theano
-    import theano.tensor as tensor
-    log.info("Using device: %s (on machine %s)" % (args.device_id, platform.node()))
+    import numpy as np
+    log.info("Using device: %s (on machine %s)" % (train_args.device_id, platform.node()))
 
-    ##################
-    # Dump parameters
-    ##################
-    log.info("Model options:")
-    log.info("**************")
-    for p in sorted(args.keys()):
-        log.info(" %20s -> %s" % (p, args[p]))
+    # Set numpy random seed before everything else
+    if train_args.seed != 0:
+        np.random.seed(train_args.seed)
 
-    ########
-    # Seed #
-    ########
-    # Don't seed numpy if seed == 0
-    # But we need to seed theano.
-    if args.seed == 0:
-        args.seed = 1234
-    else:
-        # Set numpy random seed before everything else
-        np.random.seed(args.seed)
+    # Print options
+    print_summary(train_args, model_args, print_func=log.info)
 
-    #############################################
-    # Import the class from between nmtpy.models
-    #############################################
+    # Import the model
     try:
-       Model = importlib.import_module("nmtpy.models.%s" % args.model_type).Model
+       Model = importlib.import_module("nmtpy.models.%s" % train_args.model_type).Model
     except ImportError as e:
-        log.error("Error while importing %s" % args.model_type)
+        log.error("Error while importing %s" % train_args.model_type)
         log.error(e)
         sys.exit(1)
 
     # Create model object
-    # Pass parameters not in TRAIN_DEFAULTS as they are for this mainloop
-    model_args = dict([(k,v) for k,v in args.items() if k not in TRAIN_DEFAULTS])
-    model = Model(seed=args.seed, **model_args)
-
-    log.info("Early stopping metric is %s" % args.valid_metric)
-    log.info("Preparing data")
-    model.load_data()
-
-    # If valid_freq == 0, do validation at end of epochs
-    if args.valid_freq == 0:
-        args.valid_freq = math.ceil(model.train_iterator.n_samples / float(args.batch_size))
-
-    # Dump model information
-    model.info(log)
-
-    # Save model options
-    model.save_options()
+    # Save model_type into the model as well
+    model = Model(seed=train_args.seed, logger=log,
+                  model_type=train_args.model_type, **(model_args.__dict__))
 
     # Initialize parameters
     log.info("Initializing parameters")
     model.init_params()
-    model.init_shared_variables()
+
+    # Load pre-trained model weights if requested
+    init_params = None
+    if train_args.init:
+        log.info('Overriding parameters from pre-trained model')
+        log.info('  %s' % os.path.basename(train_args.init))
+        init_params = get_param_dict(train_args.init)
+
+    # Create theano shared variables
+    log.info('Creating shared variables')
+    model.init_shared_variables(_from=init_params)
+
+    # Print number of parameters
     log.info("Number of parameters: %s" % model.get_nb_params())
 
-    # Use pretrained weights if any
-    if args.model:
-        log.info("Loading embeddings from pretrained model")
-        pretrained = get_param_dict(args.model)
-        # Switch embeddings
-        embeddings = {
-                        'Wemb_dec': pretrained['Wemb_enc'],
-                        'Wemb_enc': pretrained['Wemb_dec'],
-                     }
-        model.init_shared_variables(_from=embeddings)
+    # Load data
+    log.info("Loading data")
+    model.load_data()
+
+    # Dump model information
+    model.info()
 
     # Build the model
     log.info("Building model")
-    cost = model.build()
+    data_loss = model.build()
 
     log.info("Input tensor order: ")
     log.info(model.inputs.values())
 
-    if args.sample_freq > 0:
+    if train_args.sample_freq > 0:
         log.info('Building sampler')
         model.build_sampler()
 
-    # Get regularized training cost
-    cost = model.get_regularized_cost(cost, args.decay_c, args.alpha_c)
+    # Compute regularized loss
+    reg_loss = []
+    if train_args.decay_c > 0:
+        reg_loss.append(model.get_l2_weight_decay(train_args.decay_c))
+    if train_args.alpha_c > 0:
+        reg_loss.append(model.get_alpha_regularizer(train_args.alpha_c))
+
+    reg_loss = sum(reg_loss) if len(reg_loss) > 0 else None
 
     # Build optimizer
-    log.info('Building "%s" optimizer' % args.optimizer)
-    model.build_optimizer(cost, args.clip_c)
+    log.info('Building optimizer %s (initial lr=%.5f)' % (model_args.optimizer, model_args.lrate))
+    model.build_optimizer(data_loss, reg_loss, train_args.clip_c, debug=verbose)
 
-    # Enable dropout in training (if requested)
-    model.set_dropout(True)
+    # Save graph
+    if verbose:
+        theano.printing.debugprint(model.train_batch, file=open('%s.graph' % log_file.replace(".log", ""), 'w'))
 
-    # Loop parameters
-    early_stop      = False
-    uidx            = 0
-    bad_counter     = 0
-    cur_lrate       = args.lrate
-    valid_losses    = []
-    metric_history  = []
-    metric_results  = []
-    opt_recompiled  = False
+    # Reseed to retain the order of shuffle operations
+    np.random.seed(train_args.seed)
 
-    # Helper method for validation summary
-    def dump_val_summary():
-        if len(valid_losses) > 0:
-            best_valid_idx = np.argmin(np.array(valid_losses))
-            best_vloss = valid_losses[best_valid_idx]
-            best_px = np.exp(best_vloss)
-            log.info('[Validation %3d] Current Best Loss %5.5f (PX: %4.5f)' % (best_valid_idx + 1,
-                                                                               best_vloss, best_px))
-
-        if len(metric_history) > 0:
-            best_metric_idx = np.argmax(np.array(metric_history))
-            best_valid = metric_results[best_metric_idx]
-            for _, v in sorted(best_valid.iteritems()):
-                log.info("[Validation %3d] Current Best %s" % (best_metric_idx + 1, v[0]))
-
-    ################
-    # Training loop
-    ################
-    for eidx in xrange(1, args.max_epochs + 1):
-        msg = 'Starting epoch %d' % eidx
-        log.info(msg)
-        log.info('-' * len(msg))
-
-        if args.stop_embedding > 0 and not opt_recompiled and args.stop_embedding == eidx - 1:
-            log.info('Rebuilding "%s" optimizer to fix embeddings' % args.optimizer)
-            model.build_optimizer(cost, args.clip_c, dont_update=['Wemb_enc', 'Wemb_dec'])
-            opt_recompiled = True
-
-        # Train error list
-        train_losses = []
-
-        for batch_dict in model.train_iterator:
-            uidx += 1
-
-            # compute cost, grads and copy grads to shared variables
-            ud_start = time.time()
-            train_losses.append(model.f_grad_shared(*batch_dict.values()))
-            if np.isnan(train_losses[-1]):
-                raise Exception("NaN in cost")
-            model.f_update(cur_lrate)
-            ud = time.time() - ud_start
-
-            if uidx % 10 == 0:
-                log.info("Epoch: %4d, update: %7d, Cost: %10.5f, Time: %.3f" % (eidx, uidx, train_losses[-1], ud))
-
-            # sample?
-            if args.sample_freq > 0 and uidx % args.sample_freq == 0:
-                samples = model.generate_samples(batch_dict, n_samples=5)
-                if samples is not None:
-                    for src, truth, sample in samples:
-                        if src:
-                            log.info("Source: %s" % src)
-                        log.info(" Truth: %s" % truth)
-                        log.info("Sample: %s" % sample)
-
-           ###############################################################
-            # Validate model on validation set and early stop if necessary
-            ###############################################################
-            if eidx >= args.valid_start and uidx % args.valid_freq == 0:
-                # Compute validation loss
-                valid_losses.append(model.val_loss())
-
-                if np.isnan(valid_losses[-1]):
-                    raise Exception("NaN in validation loss")
-
-                # Start beam-search if validation metric is different from NLL/PX
-                if args.valid_metric != 'px':
-                    t = time.time()
-                    log.info("Starting translation")
-                    results = model.run_beam_search(beam_size=12,
-                                                    n_jobs=args.njobs,
-                                                    metric=args.valid_metric,
-                                                    mode=args.decoder_mode)
-                    log.info("Done: %.2f seconds" % (time.time() - t))
-
-                    # We'll receive the requested metrics in a dict
-                    metric_results.append(results)
-                    for _, v in sorted(results.iteritems()):
-                        log.info("[Validation %3d] %s" % (len(metric_history)+1, v[0]))
-
-                    # Pick the one selected as valid_metric and add it to metric_history
-                    metric_history.append(results[args.valid_metric][1])
-
-                # Print validation loss
-                log.info("[Validation %3d] LOSS = %5.5f (PX: %4.5f)" % (len(valid_losses), valid_losses[-1], np.exp(valid_losses[-1])))
-
-                # Is this the best model?
-                # Also save if we have no models saved so far.
-                best = (len(metric_history) == 1)
-                if len(metric_history) > 1 and metric_history[-1] > np.array(metric_history[:-1]).max():
-                    best = True
-                elif len(valid_losses) > 1 and args.valid_metric == 'px' and \
-                        valid_losses[-1] < np.array(valid_losses[:-1]).min():
-                    best = True
-
-                if best:
-                    log.info('Saving the best model')
-                    bad_counter = 0
-
-                    # Save the best model or the current model if no best model is found so far
-                    model.save_params(args.model_path,
-                                      valid_losses=valid_losses,
-                                      metric_history=metric_history,
-                                      uidx=uidx, **unzip(model.tparams))
-
-                    # save with uidx as well
-                    if args.save_iter:
-                        log.info('Saving the model at iteration %d' % (uidx))
-                        model_path_uidx = '%s.iter%d.npz' % (os.path.splitext(args.model_path)[0], uidx)
-                        shutil.copy(args.model_path, model_path_uidx)
-
-                elif len(valid_losses) > args.patience:
-                    # We passed the limit for checking patience
-                    is_bad = False
-                    if args.valid_metric == 'px':
-                        if valid_losses[-1] >= np.array(valid_losses)[:-args.patience].min():
-                            is_bad = True
-                    else:
-                        if metric_history[-1] <= np.array(metric_history)[:-args.patience].max():
-                            is_bad = True
-
-                    if is_bad:
-                        bad_counter += 1
-                        log.info("No validation improvement, bad-counter = %d (patience %d)" % (bad_counter, args.patience))
-
-                # Remember who we are
-                msg = "Model is --> %s" % model.name
-                log.info('-' * len(msg))
-                log.info(msg)
-                dump_val_summary()
-
-                if bad_counter > args.patience:
-                    early_stop = True
-                    break
-
-            # finish after this many updates
-            if uidx >= args.max_iteration:
-                log.info('Training stopped after %d iterations.' % uidx)
-                early_stop = True
-                break
-
-        # Epoch finished
-        train_losses = np.array(train_losses)
-        log.info("Epoch %d finished with mean batch loss: %.5f" % (eidx, train_losses.mean()))
-
-        if early_stop:
-            log.info('Early Stopped.')
-            break
-
-    ################################
-    # Dump final validation results
-    ################################
-    dump_val_summary()
-    sys.exit(0)
+    # Create mainloop
+    MainLoop(model, log, train_args).run()

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """Extract several features from a trained model."""
 
 import os
@@ -8,7 +9,7 @@ import argparse
 import numpy as np
 
 from nmtpy.sysutils import *
-
+from nmtpy.nmtutils import get_param_dict
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-extract')
@@ -22,11 +23,25 @@ if __name__ == "__main__":
                                                   help="Extract source word embeddings")
 
     args = parser.parse_args()
+    if not args.output.endswith(('npy', 'tsv')):
+        print "Output file should end with .npy or .tsv"
+        sys.exit(1)
 
-    params = np.load(args.model)
+    try:
+        params = get_param_dict(args.model)
+    except KeyError as ke:
+        print '%s does not contain model parameters. Did you train your model long enough?' % args.model
+        sys.exit(1)
+
     if args.target:
+        if 'Wemb_dec' not in params:
+            print 'Target embeddings must be called Wemb_dec in order for nmt-extract to work.'
+            sys.exit(1)
         embs = params['Wemb_dec']
     elif args.source:
+        if 'Wemb_enc' not in params:
+            print 'Source embeddings must be called Wemb_enc in order for nmt-extract to work.'
+            sys.exit(1)
         embs = params['Wemb_enc']
 
     print "Embedding size: %d, Vocabulary size: %d" % (embs.shape[1], embs.shape[0])

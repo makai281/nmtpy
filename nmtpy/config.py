@@ -1,91 +1,97 @@
-#!/usr/bin/env python
-
+# -*- coding: utf-8 -*-
 import os
 import glob
-from string import digits
-from .nmtutils import DotDict
-from .sysutils import real_path
 
-is_path = lambda p: p.startswith(('~', '/', '../', './'))
+from ConfigParser import RawConfigParser
+from argparse import Namespace
+from ast import literal_eval
 
-def check_get_path(p):
-    if is_path(p):
-        paths = glob.glob(real_path(p))
-        if len(paths) == 0:
-            raise Exception("%s doesn't match a file." % p)
+def _parse_value(value):
+    # Check for boolean or None
+    if value.capitalize().startswith(('False', 'True', 'None')):
+        return eval(value.capitalize(), {}, {})
 
-        p = paths[0] if len(paths) == 1 else paths
-    return p
+    # Check for path, files
+    elif value.startswith(('~', '/', '../', './')):
+        real_path = os.path.realpath(os.path.expanduser(value))
+        if '*' in real_path:
+            # Resolve wildcards if any
+            files = glob.glob(real_path)
+            if len(files) == 0:
+                raise Exception('%s did not match any file.' % value)
+            # Return list if multiple, single file if not
+            return sorted(files) if len(files) > 1 else files[0]
+        else:
+            return real_path
 
-def parse_config_option(k, v):
-    k = k.strip().replace("-", "_")
-    v = v.strip()
-
-    # list, tuple, dict
-    if v.startswith(("[", "(", "{")):
-        v = eval(v)
-        if isinstance(v, list) or isinstance(v, tuple):
-            v = [check_get_path(e) for e in v]
-        elif isinstance(v, dict):
-            for key, value in v.iteritems():
-                if not isinstance(value, list):
-                    v[key] = check_get_path(value)
-                else:
-                    v[key] = [check_get_path(e) for e in value]
-    # Boolean
-    elif v.lower().startswith(("false", "true")):
-        v = eval(v.capitalize())
-    # Path
-    elif is_path(v):
-        v = real_path(v)
-    # Empty
-    elif not v.strip('"\''):
-        v = ""
-    # Numbers
-    elif v[0].startswith(tuple(digits)) or v[0] == '-' and v[1].startswith(tuple(digits)):
-        v = float(v) if "." in v or "," in v else int(v)
-
-    return {k: v}
-
-class Config(object):
-    def __init__(self, filename):
-        # Load file content
+    else:
+        # Detect strings, floats and ints
         try:
-            with open(filename, 'rb') as f:
-                content = f.read().strip().split("\n")
-        except Exception as e:
-            raise(e)
+            # If this fails, this is a string
+            literal = literal_eval(value)
+        except ValueError as ve:
+            return value
+        else:
+            # Did not fail => literal is a float or int now
+            return literal
 
-        # Read and strip lines
-        lines = [line.strip() for line in content]
-        # Filter out empty and comment lines
-        lines = [line for line in lines if line and line[0] != '#']
+def _get_section_dict(l):
+    """l is a list of key-value tuples returned by ConfigParser.items().
+    Convert it to a dictionary after inferring value types."""
+    return {key : _parse_value(value) for key,value in l}
 
-        buffered_k = None
-        buffered_v = ""
+def _update_dict(d, defs):
+    """Update d with key-values from defs IF key misses from d."""
+    for k,v in defs.items():
+        if k not in d:
+            d[k] = v
+    return d
 
-        for line in lines:
-            if line.endswith("\\"):
-                # The data will continue
-                if buffered_k is None:
-                    buffered_k, buffered_v = line.split(":", 1)
-                    buffered_v = buffered_v.rstrip("\\")
-                else:
-                    buffered_v += line.rstrip("\\")
-            elif buffered_k:
-                # A multiline option was processed. Handle it.
-                buffered_v += line.rstrip("\\")
-                k = buffered_k
-                v = buffered_v.strip()
-                buffered_k = None
+class Config(RawConfigParser, object):
+    """Custom parser inheriting from RawConfigParser."""
+
+    def __init__(self, filename, trdefs=None, mddefs=None, override=None):
+        # Call parent's __init__()
+        super(self.__class__, self).__init__()
+
+        # Use values from defaults.py when missing
+        self._trdefs    = trdefs if trdefs else {}
+        self._mddefs    = mddefs if mddefs else {}
+
+        # dict that will override
+        # this can contain both model and training args unfortunately.
+        self._override  = _get_section_dict(override.items()) \
+                                if override else {}
+
+        # Parse the file, raise if error
+        parsed = self.read(filename)
+        if len(self.read(filename)) == 0:
+            raise Exception('Could not parse configuration file.')
+
+    def parse(self):
+        """Parse everything and return 2 Namespace objects."""
+        # Convert training and model sections to dictionary
+        trdict = _get_section_dict(self.items('training')) \
+                    if 'training' in self.sections() else {}
+        mddict = _get_section_dict(self.items('model')) \
+                    if 'model' in self.sections() else {}
+
+        # Update parsed sections with missing defaults
+        trdict = _update_dict(trdict, self._trdefs)
+        mddict = _update_dict(mddict, self._mddefs)
+
+        for key, value in self._override.items():
+            assert not (key in trdict and key in mddict)
+            if key in trdict:
+                trdict[key] = value
             else:
-                k,v = line.split(":", 1)
+                # everything else goes to model args
+                mddict[key] = value
 
-            self.__dict__.update(parse_config_option(k,v))
+        # Finally merge model.* subsections into model
+        for section in self.sections():
+            if section.startswith('model.'):
+                subsection = section.split('.')[-1]
+                mddict[subsection] = _get_section_dict(self.items(section))
 
-    def get(self):
-        return DotDict(self.__dict__)
-
-if __name__ == '__main__':
-    import sys
-    c = Config(sys.argv[1])
+        return (Namespace(**trdict), Namespace(**mddict))

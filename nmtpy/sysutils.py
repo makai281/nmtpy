@@ -1,14 +1,91 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import os
 import sys
+import copy
 import gzip
 import tempfile
 import subprocess
 
 from . import cleanup
 
-"""System related utility functions."""
+def print_summary(train_args, model_args, print_func=None):
+    """Returns or prints a summary of training/model options."""
+    def _get_max_width(keys):
+        return max([len(k) for k in keys]) + 1
+
+    def _dict_str(d, maxlen):
+        res = ""
+        templ = '%' + str(maxlen) + 's : '
+        kvs = []
+        for k,v in d.items():
+            if isinstance(v, list):
+                kvs.append((k, v.pop(0)))
+                for l in v:
+                    kvs.append((k, l))
+            else:
+                kvs.append((k,v))
+
+        kvs = sorted(kvs, key=lambda x: x[0])
+        for k,v in kvs:
+            res += (templ % k) + str(v) + '\n'
+        return res
+
+    train_args = copy.deepcopy(train_args)
+    model_args = copy.deepcopy(model_args)
+    max_width = _get_max_width(train_args.__dict__.keys() +
+                               model_args.__dict__.keys())
+
+    # Add training options
+    result  = 'Training options:'
+    result += '\n' + ('-' * 35) + '\n'
+
+    result += _dict_str(train_args.__dict__, max_width)
+
+    # Copy
+    model_args = dict(model_args.__dict__)
+    # Remove these and treat them separately
+    model_data = model_args.pop('data')
+    model_dict = model_args.pop('dicts')
+
+    # Add model options
+    result += '\nModel options:'
+    result += '\n' + ('-' * 35) + '\n'
+
+    result += _dict_str(model_args, max_width)
+    result += ('%' + str(max_width) + 's =\n') % 'dicts'
+    result += _dict_str(model_dict, max_width)
+    result += ('%' + str(max_width) + 's =\n') % 'data'
+    result += _dict_str(model_data, max_width)
+
+    if print_func:
+        for line in result.split('\n'):
+            print_func(line)
+    else:
+        return result
+
+def pretty_dict(elem, msg=None, print_func=None):
+    """Returns a string representing elem optionally prepended by a message."""
+    result = ""
+    if msg:
+        # Add message
+        result += msg + '\n'
+        # Add trailing lines
+        result += ('-' * len(msg)) + '\n'
+
+    skeys = sorted(elem.keys())
+    maxlen = max([len(k) for k in skeys]) + 1
+    templ = '%' + str(maxlen) + 's : '
+    for k in skeys:
+        result += (templ % k) + str(elem[k]) + '\n'
+
+    if print_func:
+        for line in result.split('\n'):
+            print_func(line)
+    else:
+        return result
+
 def ensure_dirs(dirs):
+    """Create a list of directories if not exists."""
     try:
         for d in dirs:
             os.makedirs(d)
@@ -16,28 +93,15 @@ def ensure_dirs(dirs):
         pass
 
 def real_path(p):
-    return os.path.abspath(os.path.expanduser(p))
+    """Expand UNIX tilde and return real path."""
+    return os.path.realpath(os.path.expanduser(p))
 
 def listify(l):
-    if not isinstance(l, list):
-        return [l]
-    return l
-
-def fix_model_options(d):
-    """Removes old stuff to make old models work with latest code."""
-    # Remove fault theano trng object from dict
-    if "trng" in d:
-        del d["trng"]
-
-    data = d['data']
-    # Remove iterator types from data dict
-    for k, v in data.iteritems():
-        if isinstance(v, list) and v[0] in ["img_feats", "text", "bitext"]:
-            d['data'] = dict([[k, v[1]] for k,v in data.iteritems()])
-
-    return d
+    """Encapsulate l with list[] if not."""
+    return [l] if not isinstance(l, list) else l
 
 def readable_size(n):
+    """Return a readable size string."""
     sizes = ['K', 'M', 'G']
     fmt = ''
     size = n
@@ -51,8 +115,7 @@ def readable_size(n):
     return '%.1f%s' % (size, fmt)
 
 def get_temp_file(suffix="", name=None, delete=False):
-    """Creates a temporary file under /tmp. If name is not None
-    it will be used as the temporary file's name."""
+    """Creates a temporary file under /tmp."""
     if name:
         name = os.path.join("/tmp", name)
         t = open(name, "w")
@@ -66,32 +129,33 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(model_path, beam_size, n_jobs, metric, mode, pkl_path=None, out_file=None):
+def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode='single'):
+    """Run nmt-translate for validation during training."""
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
-           "-j", str(n_jobs), "-m", model_path, "-M", metric]
-    if pkl_path:
-        cmd.extend(["-p", pkl_path])
-    if out_file:
-        cmd.extend(["-o", out_file])
-    # nmt-translate prints a dict of metrics
+           "-j", str(n_jobs), "-m", save_path, "-M", metric, "-v", valid_mode]
+
+    # nmt-translate will print a dict of metrics
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=sys.stdout)
     cleanup.register_proc(p.pid)
     out, err = p.communicate()
     cleanup.unregister_proc(p.pid)
-    return eval(out.splitlines()[-1].strip())
+    results = eval(out.splitlines()[-1].strip())
+    return results[metric]
 
-### GPU & PBS related functions
 def create_gpu_lock(used_gpu):
+    """Create a lock file for GPU reservation."""
     name = "gpu_lock.pid%d.gpu%s" % (os.getpid(), used_gpu)
     lockfile = get_temp_file(name=name)
     lockfile.write("[nmtpy] %s\n" % name)
 
 def fopen(filename, mode='r'):
+    """GZIP-aware file opening function."""
     if filename.endswith('.gz'):
         return gzip.open(filename, mode)
     return open(filename, mode)
 
 def find_executable(fname):
+    """Find executable in PATH."""
     fname = os.path.expanduser(fname)
     if os.path.isabs(fname) and os.access(fname, os.X_OK):
         return fname
@@ -100,14 +164,17 @@ def find_executable(fname):
         if os.access(fpath, os.X_OK):
             return fpath
 
-def get_gpu(which='auto'):
+def get_device(which='auto'):
+    """Return Theano device to use by favoring GPUs first."""
+    # Use CPU
     if which == "cpu":
         return "cpu", None
+
+    # Use the requested GPU without looking for availability
     elif which.startswith("gpu"):
-        # Don't care about usage. Some cards don't
-        # provide that info in nvidia-smi as well.
         create_gpu_lock(int(which.replace("gpu", "")))
         return which
+
     # auto favors GPU in the first place
     elif which == 'auto':
         try:
@@ -118,6 +185,7 @@ def get_gpu(which='auto'):
 
         # Find out about GPU usage
         usage = ["None" in l for l in out.split("\n") if "Processes" in l]
+
         try:
             # Get first unused one
             which = usage.index(True)
@@ -128,72 +196,64 @@ def get_gpu(which='auto'):
         lock_file = create_gpu_lock(which)
         return ("gpu%d" % which)
 
-def setup_train_args(args):
-    # Check METEOR path
-    if args.valid_metric == "meteor":
-        if "meteor_path" in args:
-            os.environ['METEOR_JAR'] = args['meteor_path']
-        else:
-            raise Exception("You need to provide 'meteor-path' in your configuration.")
+def get_exp_identifier(train_args, model_args, suffix=None):
+    """Return a representative string for the experiment."""
 
-    # Find out dimensional information
-    dim_str = ""
-    for k in sorted(args):
+    names = [train_args.model_type]
+
+    for k in sorted(model_args.__dict__):
         if k.endswith("_dim"):
-            dim_str += "%s_%d-" % (k, args[k])
-    if len(dim_str) > 0:
-        dim_str = dim_str[:-1]
+            # Only the first letter should suffice for now, e for emb, r for rnn
+            names.append('%s%d' % (k[0], getattr(model_args, k)))
 
-    # Append learning rate only for the SGD case
-    args.lrate = float(args.lrate)
-    opt_string = args.optimizer
-    if args.optimizer == "sgd":
-        opt_string += "-lr_%.4f" % args.lrate
+    # Join so far
+    name = '-'.join(names)
 
-    # Set model name
-    name = "%s-%s-%s-bs_%d-valid_%s" % (args.model_type, dim_str, opt_string, args.batch_size, args.valid_metric)
+    # Append optimizer and learning rate
+    name += '-%s_%.e' % (model_args.optimizer, model_args.lrate)
 
-    if args.valid_freq > 0:
-        name += "-each_%d" % args.valid_freq
+    # Append batch size
+    name += '-bs%d' % model_args.batch_size
+
+    # Validation stuff
+    name += '-%s' % train_args.valid_metric
+
+    if train_args.valid_freq > 0:
+        name += "-each%d" % train_args.valid_freq
     else:
-        name += "-each_epoch"
+        name += "-eachepoch"
 
-    if args.decay_c > 0:
-        name += "-decay_%.5f" % args.decay_c
+    if train_args.decay_c > 0:
+        name += "-l2_%.e" % train_args.decay_c
 
-    if args.clip_c > 0:
-        name += "-gclip_%.1f" % args.clip_c
+    if 'emb_dropout' in model_args:
+        name += "-do_%.1f_%.1f_%.1f" % (model_args.emb_dropout,
+                                        model_args.ctx_dropout,
+                                        model_args.out_dropout)
 
-    if args.alpha_c > 0:
-        name += "-alpha_%.3f" % args.alpha_c
+    if train_args.clip_c > 0:
+        name += "-gc%d" % int(train_args.clip_c)
 
-    if isinstance(args.weight_init, str):
-        name += "-winit_%s" % args.weight_init
+    if train_args.alpha_c > 0:
+        name += "-alpha_%.e" % train_args.alpha_c
+
+    if isinstance(model_args.weight_init, str):
+        name += "-init_%s" % model_args.weight_init
     else:
-        name += "-winit_%.3f" % args.weight_init
+        name += "-init_%.2f" % model_args.weight_init
 
-    if args.seed != 1234:
-        name += "-seed_%d" % args.seed
+    # Append seed
+    name += "-s%d" % train_args.seed
 
-    if len(args.get('suffix', '')) > 0:
-        name = "%s-%s" % (name, args.suffix)
+    if suffix:
+        name = "%s-%s" % (name, suffix)
 
-    if 'suffix' in args:
-        del args['suffix']
+    return name
 
-    args.model_path = os.path.join(args.model_path, args.model_path_suffix)
-    del args['model_path_suffix']
-
-    ensure_dirs([args.model_path])
-
-    # Log file
+def get_next_runid(save_path, exp_id):
+    # Log file, runs start from 1, incremented if exists
     i = 1
-    log_file = os.path.join(args.model_path, "%s_run%d.log" % (name, i))
-
-    while os.path.exists(log_file):
+    while os.path.exists(os.path.join(save_path, "%s.%d.log" % (exp_id, i))):
         i += 1
-        log_file = os.path.join(args.model_path, "%s_run%d.log" % (name, i))
 
-    args.model_path = os.path.join(args.model_path, "%s_run%d.npz" % (name, i))
-
-    return args, log_file
+    return i

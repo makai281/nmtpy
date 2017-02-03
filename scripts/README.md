@@ -1,5 +1,4 @@
-scripts
----
+Scripts
+-------
 
-These are mostly experimental, task-specific, not well tested
-scripts. Use them at your own risk.
+ - `get-meteor-data.sh`: Used to download METEOR paraphrases prior to `nmtpy` installation.

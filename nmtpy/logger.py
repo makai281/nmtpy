@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import logging
 
 def singleton(cls):
@@ -11,7 +12,10 @@ def singleton(cls):
 @singleton
 class Logger(object):
     """Logs to stdout and to file simultaneously."""
-    def __init__(self, timestamp=True):
+    def __init__(self):
+        pass
+
+    def setup(self, log_file=None, timestamp=True):
         _format = '%(message)s'
         if timestamp:
             _format = '%(asctime)s ' + _format
@@ -23,10 +27,10 @@ class Logger(object):
         self._ch.setFormatter(self.formatter)
         self._logger.addHandler(self._ch)
 
-    def set_file(self, log_file):
-        self._fh = logging.FileHandler(log_file, mode='w')
-        self._fh.setFormatter(self.formatter)
-        self._logger.addHandler(self._fh)
+        if log_file:
+            self._fh = logging.FileHandler(log_file, mode='w')
+            self._fh.setFormatter(self.formatter)
+            self._logger.addHandler(self._fh)
 
     def get(self):
         return self._logger

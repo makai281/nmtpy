@@ -1,0 +1,313 @@
+diff --git a/examples/wmt16-mmt-task2/data/train.1.de b/examples/wmt16-mmt-task2/data/train.1.de
+index 5bbf5e4..46fe851 100644
+--- a/examples/wmt16-mmt-task2/data/train.1.de
++++ b/examples/wmt16-mmt-task2/data/train.1.de
+@@ -599,7 +599,7 @@ ein jung leckt 2 löffel ab
+ zwei menschen auf einen boot
+ Ein DJ steht auf einer Party hinter seinem Pult.
+ Ein Paar betrachtet einen Stand.
+-Zwei Hunde toben mit einander.Ein mann döst
++Zwei Hunde toben mit einander.
+ Mann mit karrierten Hemd beim Abwurf des Balles
+ ein arbeiter vermisst ein haus und ein anderer schaut ihm zu
+ Einen Tennisspieler beim retounieren.
+@@ -17128,7 +17128,7 @@ Ein Mann in blauer Schürze an einer Werkbank.
+ Einige Passanten gehen eine Gasse zwischen Häusern entlang.
+ Ene Frau reitet ein Unhängeeinhorn.
+ Der Mann im Anzug hält ein Glas in der Hand während andere vor ihm sitzen.
+-.Ein Mann steckt mit seinem Kopf in der Zimmerdecke.
++Ein Mann steckt mit seinem Kopf in der Zimmerdecke.
+ Ein Mann sitzt im Sand und hält ein Kamel an der Leine.
+ Zwei Jungs angeln am Steg.
+ Eine Frau spielt Bowling in der Bowlinghalle mit braunem Boden.
+@@ -21478,7 +21478,7 @@ Ein junger Mann mit Tachse am laufen.
+ Die Personen gehen über eine Straße.
+ Eine Frau mit blauen Shirt steht im Fenster.
+ Ein junger Mann spricht durch ein Mikrofon.
+-.Eine Frau in rot weiß gestreiften top umarmt den Jungen mit grauer Mütze.
++Eine Frau in rot weiß gestreiften top umarmt den Jungen mit grauer Mütze.
+ Mehrere Menschen sitzen auf einer Mauer mi vielen Graffitis.
+ viele Leute stehen und sitzen auf einer Mauer
+ Zwei Männer und eine Frau lehnen sich an ein Geländer und ein Mann sitzt auf einer Bank daneben.
+@@ -27403,7 +27403,7 @@ Läufer beim Wettkampf.
+ Ein Mann sitzt im freien an einem alten Tisch.
+ Ein kleiner Junge buddelt im Sand.
+ Ein älterer Mann mit Brille hält ein Baby auf dem Arm.
+-Mann bläst eine Trompete.q
++Mann bläst eine Trompete.
+ Eine Frau am Grill.
+ Eine Frau erledigt den Abwasch.
+ Ein Junge liegt mit seinem blauen offenem Shirt auf dem grünen Rasen.
+diff --git a/examples/wmt16-mmt-task2/data/train.1.en b/examples/wmt16-mmt-task2/data/train.1.en
+index c3f68ca..14f3ade 100644
+--- a/examples/wmt16-mmt-task2/data/train.1.en
++++ b/examples/wmt16-mmt-task2/data/train.1.en
+@@ -2097,7 +2097,7 @@ A young man dressed in blue swimming trunks and a red life jacket waterskiing in
+ A brown-haired boy is laughing with his eyese clothes while lying on a pile of clothes.
+ A girl stands next to a bike parked in front of a building while two men, one carrying a guitar, walk by.
+ A little Asian boy plays checkers on a table in a living room with another boy in a tye-dyed shirt.
+-A crowded busy dock with people standing next to a freight car either loading or unloading it .aa.
++A crowded busy dock with people standing next to a freight car either loading or unloading it.
+ A woman with short red-hair sitting on a rocky beach tossing a rock into the water.
+ A fisherman fishes at the bank of a foggy river.
+ A male is sitting down on the beach playing a guitar.
+@@ -9548,7 +9548,7 @@ A bird's eye view of people walking up and down cement steps, most in silhouette
+ A man listening to headphones is standing in front of a wall with American flags on it.
+ Two women are reaching with sticks for a ball during a sports game.
+ A group of speed skaters making a turn with a blue advertisement behind them.
+-A little girl in a swimsuit on the beach at the edge of the water between large rocks .A woman with.
++A little girl in a swimsuit on the beach at the edge of the water between large rocks.
+ A woman carrying a bag over her shoulder holds hands with a person wearing loose jeans while walking along side a row of trees towards a red sign.
+ There is a man in an orange shirt sitting down with a puppy and ladies in white in the background, facing the opposite direction.
+ Group class for martial arts, some in uniform and some not, taking place in an outdoor facility.
+@@ -15610,7 +15610,7 @@ A mother and daughter, help a young boy prepare the sale from the dock.
+ A round, white-bearded man with glasses surveys a paper from a meeting table which bears other papers and glasses and pitchers of water.
+ Nine women in blue and purple dresses and one man wearing a purple shirt and black pants, clap while a man dressed in black dances.
+ Three young girls are standing in a rock situated in the middle of a white sand desert
+-A man in a white striped shirt and blue jeans using a water hose to spray water on the ground of concrete ruins .Fo.
++A man in a white striped shirt and blue jeans using a water hose to spray water on the ground of concrete ruins.
+ Three people, two males and one female are happily skipping rocks into a lake.
+ An advanced age woman is standing up with a basket full of green grass standing in front of her
+ Two men are atop a white surface within a cloudy waterfront setting.
+@@ -22768,7 +22768,7 @@ A young man in red shoes is skateboarding on the rim of a skate bowl, while a yo
+ A woman is talking on her phone while walking toward an East Asian style gate over a street, while a man on the sidewalk is reading a newspaper.
+ Three street performers play and sing in the streets, one is playing an accordion, and the other two sing, as people walk past.
+ Three younger men dancing in front of a semi-circled crowd.
+-A young couple lay together on a large block of concrete, surrounded by other large blocks of concrete .An.
++A young couple lay together on a large block of concrete, surrounded by other large blocks of concrete.
+ A woman in a pink shirt and patterned skirt plays a violin beside a man wearing track pants and a black hat playing a black guitar on the street.
+ A man in a white tank top, bandanna and black pants does a handstand on the ground in front of a crowd of people.
+ A woman with tattoos who is wearing a black tank top looks at the ground.
+diff --git a/examples/wmt16-mmt-task2/data/train.2.de b/examples/wmt16-mmt-task2/data/train.2.de
+index c07af5f..47ae545 100644
+--- a/examples/wmt16-mmt-task2/data/train.2.de
++++ b/examples/wmt16-mmt-task2/data/train.2.de
+@@ -14346,7 +14346,7 @@ drei bunte boote mit überdachtung und außenbordmotoren an einem flussufer
+ Ein Mann in Hippie Kleidung.
+ Der Mann mit Glatze steht auf einer Bühne und spielt Gitarre.
+ Ein BMX-Fahrer springt in einem Pool.
+-Ein paar Leute, die an einem Strand spielen, auf dem ein altes Fahrzeug steh.t
++Ein paar Leute, die an einem Strand spielen, auf dem ein altes Fahrzeug steht.
+ Die zwei Hunde sitzen im Gras.
+ rennradfahrer in trikot in einer halle
+ radfahrer fahren auf rädern in einer halle
+@@ -17924,7 +17924,7 @@ ein mann schiebt einen rasenmäher und streckt seinen rechten arm hoch
+ Eine Frau in dunkler Hose und dunkler Jacke schiebt einen Buggy an einer weißen Mauer mit Schriftzeichen vorbei.
+ 2 Erwachsene und einige Jugendliche spielen Fußball.
+ zwei männer halten ein getränk in der hand
+-.Frauen und Männer sitzen zusammen auf weißen stühlen im Garten unter einem Baum.
++Frauen und Männer sitzen zusammen auf weißen stühlen im Garten unter einem Baum.
+ Eine Straße mit alten Backsteinbauten ist menschenleer
+ Mehrere Personen gehen bzw. stehen auf Bahnsteigen in einem Bahnhof.
+ Mehrere Personen sitzen in einer U-Bahn und lesen Zeitung.
+diff --git a/examples/wmt16-mmt-task2/data/train.2.en b/examples/wmt16-mmt-task2/data/train.2.en
+index f485f33..71d9f62 100644
+--- a/examples/wmt16-mmt-task2/data/train.2.en
++++ b/examples/wmt16-mmt-task2/data/train.2.en
+@@ -12277,7 +12277,7 @@ Two men walk along a busy city street with words printed on the sidewalk.
+ A man with a blue hoodie stands in a reading room, behind a chair with yellow-brown striped pattern.
+ A group of people stand sound outdoors, one wearing pink pants and a blue top.
+ A college baseball player runs the bases while a pitcher throws.
+-Two guys are on a baseball field and one is about to hit the base .a group
++Two guys are on a baseball field and one is about to hit the base.
+ A group of people eat outside the Utah Museum of Fine Arts.
+ With tall glittering white crowns a man and a woman pose together with palm tress and glittery red and white stars in the background.
+ A man in a black vest is riding a bucking horse at a rodeo.
+@@ -15418,7 +15418,7 @@ People gathered around a table looking at many pictures.
+ A woman rock dives feet first arms above head as another woman swims away.
+ Two cloaked Asian men are holding red tipped microphones to their mouths.
+ People walking on a wet deck carrying umbrellas.
+-Four men and two women socialize in a room with wood paneled walls .p.
++Four men and two women socialize in a room with wood paneled walls.
+ A white shirt with design of a lady can be seen hanging in a crowded market
+ A woman looks over a table of organic vegetables at a farmer's market.
+ A man with tools in both hands is focused on his work.
+diff --git a/examples/wmt16-mmt-task2/data/train.3.de b/examples/wmt16-mmt-task2/data/train.3.de
+index 4110bde..cb329ec 100644
+--- a/examples/wmt16-mmt-task2/data/train.3.de
++++ b/examples/wmt16-mmt-task2/data/train.3.de
+@@ -19152,7 +19152,7 @@ Turnerin steht Kopf.
+ Ein Mann mit einer selbstgemachten Rüstung aus bunten Putzschwämmen auf einer Wiese.
+ Mann mit Kind
+ Zwei Frauen in Leopardenkostümen spielen Xylophon.
+-Das Bild zeigt einen indianisch gekleideten jungen Mann neben einem sehr großen schwarzen Schlagzeug mit zwei Trommelschlägern in den Händen.D
++Das Bild zeigt einen indianisch gekleideten jungen Mann neben einem sehr großen schwarzen Schlagzeug mit zwei Trommelschlägern in den Händen.
+ eine person hängt wäsche an einem ständer auf
+ Der Mann steht an einer Skulptur, die auf einer Palette steht.
+ eine Perso steht mit einem pinken Riesenkondom auf dem Kopf zwischen anderen Leuten
+diff --git a/examples/wmt16-mmt-task2/data/train.3.en b/examples/wmt16-mmt-task2/data/train.3.en
+index c2a0252..63e7dfd 100644
+--- a/examples/wmt16-mmt-task2/data/train.3.en
++++ b/examples/wmt16-mmt-task2/data/train.3.en
+@@ -18540,7 +18540,7 @@ A little girl, in a blue and white shirt, with her mom at a playground.
+ A woman is standing next to a car drinking a soda.
+ An old man with a camera staring at art in a park.
+ Four people swinging on a swing set.
+-In a chain link enclosed skate park a skater goes over one of the obstacles .Wit.
++In a chain link enclosed skate park a skater goes over one of the obstacles.
+ Two young adult looking girls walking together.
+ There is a man in a white jacket and glasses.
+ A person holding a red cup sitting next to a woman wearing a black shirt.
+@@ -21717,7 +21717,7 @@ A girl in white pants is walking by a brightly painted wall.
+ Lonely woman eats alone again, chatting with her internet boyfriend at a diner.
+ A photographer captures the image of two blond women in white dresses.
+ A few females and one male standing on the sidewalk.
+-A young man wearing a white glove standing on the side of a road.An o
++A young man wearing a white glove standing on the side of a road.
+ A red-haired woman is dancing with a man in a red cap in front of an outdoor orchestra and a Russian sign.
+ People walking and a lady looking at her cellphone while walking in a big city shopping.
+ Man in a green jacket and moccasins sleeping on a blue blanket in the street.
+@@ -23287,7 +23287,7 @@ Some people are gathered in front of a building with posters strung up on the wa
+ A curly-haired man plays guitar at a ceremony while people look on.
+ A young long-haired girl is out skipping on the sidewalk on a sunny day.
+ A woman pushes her cart passed local artwork.
+-A smiling blond woman waves as she stands in front of a table covered with food .a.
++A smiling blond woman waves as she stands in front of a table covered with food.
+ The back of a man with black shorts and a white shirts walking next to a building.
+ A man and a woman sit on a beach, far from the water.
+ An Indian male is out shopping for some fruit.
+diff --git a/examples/wmt16-mmt-task2/data/train.4.de b/examples/wmt16-mmt-task2/data/train.4.de
+index 730d5a2..eed8b85 100644
+--- a/examples/wmt16-mmt-task2/data/train.4.de
++++ b/examples/wmt16-mmt-task2/data/train.4.de
+@@ -13428,7 +13428,7 @@ Eine Motorradfahrer springt mit einem roten Motorrad über eine Rampe auf einem
+ Die Eishockeyspieler stehen und sitzen in einem Stadion.
+ Ein schwarz-weißer Hund mit einem Ball in der Schnauze rennt durch ein Gewässer.
+ Der Junge kniet vor dem in eine Einkaufstüte schauende Mädchen mit blauen Strähnen und punkiger Kleidung.
+-Surfer auf der Welle.q
++Surfer auf der Welle.
+ szene aus einem baseballspiel
+ Ein Kind in Baseballkleidung mit Helm schlägt mit dem Schläger auf den Ball.
+ Ein Torwart fängt den Fußball auf einem nassen Spielfeld vor einem Gegenspieler ab.
+@@ -23638,7 +23638,7 @@ Ein Baby sitzt in einer Kapuzenjacke auf dem Bett und hält etwas in der Hand.
+ 2 frauen in festlicher kleidung haben spass
+ Ein kleines Mädchen und ein Junge turnen auf einem blauen Trampolin.
+ Bei einem Essen im Freien mit vielen Personen hält eine Frau mit Brille ein Kind auf dem Arm.
+-Ein Mann hat sich ein Buch unter den Arm geklemmt.Ei
++Ein Mann hat sich ein Buch unter den Arm geklemmt.
+ Eine Frau mit grünem Kleid steht neben einem Mann fotografierend.
+ Mann und ein Kind im flachen Wasser mit einem Surfbrett.
+ eine frau trägt einen jungen auf dem arm und zeigt nach oben
+@@ -25988,7 +25988,7 @@ Ein Baseballspieler hat einen Ball geworfen.
+ 2 Männer erheben 2 Gläser mit Bier und stossen an
+ Baseballspieler beim Abschlag
+ Ein Formel 1 Wagen rast am Publikum vorbei.
+-Menschen sitzen an einem reichlich gedeckten Tisch beim essen.Zwei
++Menschen sitzen an einem reichlich gedeckten Tisch beim essen.
+ Enkel steht lachend vor sitzender und lachender Oma.
+ ein mann säubert einen olatz mit dem besen
+ Ein Fußballer schießt den Ball
+diff --git a/examples/wmt16-mmt-task2/data/train.4.en b/examples/wmt16-mmt-task2/data/train.4.en
+index d0dd393..df2ee77 100644
+--- a/examples/wmt16-mmt-task2/data/train.4.en
++++ b/examples/wmt16-mmt-task2/data/train.4.en
+@@ -23446,7 +23446,7 @@ A young girl and a young guy are outside on a street facing each other.
+ A woman waits to cross the road while holding flowers.
+ A police officer writes a ticket for poor parking.
+ A girl is sleeping on top of a book in a library full of books.
+-Two men playing drums in the street to a crowd .d.
++Two men playing drums in the street to a crowd.
+ Three young adults sitting on top of a ledge.
+ Two people walking down a road leading out of a large building.
+ A vast ocean with surfers in it.
+@@ -23661,7 +23661,7 @@ Worker carries a bale of grass while harvesting out in a field.
+ A man in a blue shirt is standing on the beach and throwing a stone.
+ A man wearing a chef's hat and glove squeezes sauce onto foil.
+ A beautiful array of colors are displayed from a dancer.
+-A .group of diverse people around a memorial
++A group of diverse people around a memorial
+ A bearded, bespectacled man is singing.
+ Blond girl with missing front tooth, in pool.
+ A man with a whistle in his mouth is holding a large tray of food.
+diff --git a/examples/wmt16-mmt-task2/data/train.5.de b/examples/wmt16-mmt-task2/data/train.5.de
+index 50b957b..1c38d4d 100644
+--- a/examples/wmt16-mmt-task2/data/train.5.de
++++ b/examples/wmt16-mmt-task2/data/train.5.de
+@@ -16143,7 +16143,7 @@ Mann werkelt in seinem Bastelkeller
+ Vier Saxophonisten geben ein Konzert.
+ Ein Mann auf einem Schiff spielt eine Marionette, die von einem Mann über ihm geführt wird.
+ Ein Man mit der Cherokee  Frisur geht gebeugt auf die Strasse
+-Eine Frau verkauft Tomaten auf dem Markt.Ein Mann und eine Frau stehen draußen mit Ihrer Katze und unterhalten sich
++Eine Frau verkauft Tomaten auf dem Markt.
+ Einige Personen stehen an einer Nähmaschine, auf der ein Mann näht.
+ Eine Frau und ein kleines Mädchen sitzen an einem Tisch und Essen.
+ Auf dem Gehsteig in einer Unterführung trägt eine Frau eine befüllte Schachtel, eine zweite geht hinter ihr, einige Autos sind auf der Strasse.
+@@ -19683,7 +19683,7 @@ Ein Mann mit Krücken und Wagen in der Hand geht an einer Mauer vorbei
+ ein Mann mit Sonnenbrille und schwarzem Hemd sitzt trommelnd vor einer Trommel
+ Menschen schauen den Sonnenuntergang an.
+ Ein Mann steht auf einer Yacht und blickt mit zwei schwarzen Seilen in den Händen zur Seite.
+-Das Bild zeigt vier Menschen auf einem Wasserfahrzeug, die interessiert die Umgebung ansehen.Das
++Das Bild zeigt vier Menschen auf einem Wasserfahrzeug, die interessiert die Umgebung ansehen.
+ Zwei Blondinen mit schwarzem Outfit stehen mit ihrem Smartphone spielend auf einem Bürgersteig an einer Hauswand.
+ Menschen vor einer Bühne.
+ der Dunkelhäutige Mann in dunkler Kleidung hält eine Bunte Lampe in der Hand
+diff --git a/examples/wmt16-mmt-task2/data/train.5.en b/examples/wmt16-mmt-task2/data/train.5.en
+index c20e1a8..a86c70e 100644
+--- a/examples/wmt16-mmt-task2/data/train.5.en
++++ b/examples/wmt16-mmt-task2/data/train.5.en
+@@ -28257,7 +28257,7 @@ A young man stands on a roof.
+ A cheerleader wearing red, white and blue is standing with white towels in her hand.
+ A female volleyball team huddles up.
+ Car racing down the road with cloud of dust.
+-An older man wearing a leather jacket at a party .Two.
++An older man wearing a leather jacket at a party.
+ A worker hoses down dock.
+ Two people rock climbing near water.
+ A young girl and boy play facing each other in a park.
+diff --git a/examples/wmt16-mmt-task2/data/val.2.de b/examples/wmt16-mmt-task2/data/val.2.de
+index f0e2585..ef9cd70 100644
+--- a/examples/wmt16-mmt-task2/data/val.2.de
++++ b/examples/wmt16-mmt-task2/data/val.2.de
+@@ -233,7 +233,7 @@ Ein brauner Hund läuft durch fast brusthohes Wasser.
+ Ein Hund mit einem Ball in der Schnauze rennt über eine Wiese.
+ Eine Menschenmenge steht vor einem Absperrgitter.
+ Frau hängt in einem Baum
+-Ein junges Pärchen kauft Lose bei einem Losverkäufer.Ei
++Ein junges Pärchen kauft Lose bei einem Losverkäufer.
+ Es sind viele Kinder zu sehen, von denen zwei in die Kamera schauen.
+ Zwei Jungen mit nackten Oberkörper spielen an einem heißen Tag neben einem Brunnen.
+ Ein Mann an der Bucht mit einem Kanu.
+diff --git a/examples/wmt16-mmt-task2/data/val.3.de b/examples/wmt16-mmt-task2/data/val.3.de
+index aef199e..4d03cef 100644
+--- a/examples/wmt16-mmt-task2/data/val.3.de
++++ b/examples/wmt16-mmt-task2/data/val.3.de
+@@ -689,7 +689,7 @@ Zwei junge Männer in Jacke, Jeans und Turnschuhen laufen in der Stadt.
+ Zwei Mädchen mit ihrem Hund auf dem Baum.
+ Eine junge Frau mit einem umgehängten Beutel, lässt sich Fotografieren, während ein Mann hinter ihr steht.
+ Zwei Personen laufen auf einem Steg,  der zu einem See führt und im Hintergrund sich eine Brücke befindet.
+-Drei Frauen laufen Hand in Hand ins Meer.Zwei
++Drei Frauen laufen Hand in Hand ins Meer.
+ Ein Kleinkind mit roten T-Shirt und einen Fläschchen im Mund sitzt auf einen blauen Cabrio.
+ Zwei Männer sitzen vor einem Laptop.
+ Menschen bei einer Demonstration auf einer Straße.
+diff --git a/examples/wmt16-mmt-task2/data/val.5.de b/examples/wmt16-mmt-task2/data/val.5.de
+index 1d2ac64..a0eab69 100644
+--- a/examples/wmt16-mmt-task2/data/val.5.de
++++ b/examples/wmt16-mmt-task2/data/val.5.de
+@@ -406,7 +406,7 @@ Der kleine Kerl auf großen Skiern.
+ Zwei Fräulein spielen mit Spielzeuge.
+ Zwei Mädchen reiten auf einem Kamel.
+ Mehrere Menschen stehen feiernd und unterhaltend an einer Bar.
+-Menschengedränge vor einem Doppeldeckerbus.Z
++Menschengedränge vor einem Doppeldeckerbus.
+ zwei junge Männer vor einer Rikscha
+ Ein Welpe springt durch das Gras.
+ Imbissstand bei nacht
+@@ -715,7 +715,7 @@ Eine Frau in einem roten Kleid steht vor einem sehr modernen Wohnhaus, das sehr
+ eine Inlineskaterin rollt an einer gebogenen blauen Linie entlang.
+ Eine junge Asiatin mit großen Ohrenwärmer und kleiner Pink farbener Handtasche auf einer Straße.
+ Personen auf einem Nachtmarkt.
+-Die Leute isst zusammen.Ein
++Die Leute isst zusammen.
+ Eine Frau steht vor der großen Gebaude.
+ Eine dicke Frau mit blauen Haaren beobachtet eine Menschengruppe.
+ ein mann mit einer orangenen mütze steht neben einer autotür
+@@ -923,7 +923,7 @@ Zwei Boxer stehen sich im Ring gegenüber, während Zuschauer das Geschehen verf
+ Zwei Kinderteams spielen gegeneinander Football.
+ Sängerin mit langen Haaren und einem lila Patch spielt die E-Gitarre.
+ Vier Kinder in weißen Kampfanzügen, die an einem Judo Turnier auf hellblauer Matte teilnehmen
+-Eine Gruppe von Sängern  bei einer Straßenaufführung.E
++Eine Gruppe von Sängern  bei einer Straßenaufführung.
+ Mehrere Mädchen mit Uniform die Flöte spielen.
+ Ein Mann beim Truthahn zubereiten.
+ Ein Junge springt vom Sofa.

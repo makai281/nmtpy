@@ -1,80 +1,50 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from six.moves import range
 from six.moves import zip
 
 import numpy as np
 
 from collections import OrderedDict
-from ..sysutils import fopen
-from ..nmtutils import mask_data
-from ..typedef  import INT, FLOAT
 
-import random
+from ..sysutils   import fopen
+from .iterator    import Iterator
+from .homogeneous import HomogeneousData
 
 """Parallel text iterator for translation data."""
-class BiTextIterator(object):
-    def __init__(self, src_data, src_dict,
-                       trg_data, trg_dict,
-                       batch_size,
-                       n_words_src=0, n_words_trg=0,
-                       src_name='x', trg_name='y'):
+class BiTextIterator(Iterator):
+    def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, logger=None, **kwargs):
+        super(BiTextIterator, self).__init__(batch_size, seed, mask, shuffle_mode, logger)
 
-        # For minibatch shuffling
-        random.seed(1234)
+        assert 'srcfile' in kwargs, "Missing argument srcfile"
+        assert 'trgfile' in kwargs, "Missing argument trgfile"
+        assert 'srcdict' in kwargs, "Missing argument srcdict"
+        assert 'trgdict' in kwargs, "Missing argument trgdict"
 
-        self.src_data = src_data
-        self.src_dict = src_dict
+        self._print('Shuffle mode: %s' % shuffle_mode)
 
-        self.trg_data = trg_data
-        self.trg_dict = trg_dict
+        self.srcfile = kwargs['srcfile']
+        self.trgfile = kwargs['trgfile']
+        self.srcdict = kwargs['srcdict']
+        self.trgdict = kwargs['trgdict']
 
-        self.batch_size = batch_size
+        self.n_words_src = kwargs.get('n_words_src', 0)
+        self.n_words_trg = kwargs.get('n_words_trg', 0)
 
-        self.n_words_src = n_words_src
-        self.n_words_trg = n_words_trg
+        self.src_name = kwargs.get('src_name', 'x')
+        self.trg_name = kwargs.get('trg_name', 'y')
 
-        self.src_name = src_name
-        self.trg_name = trg_name
+        self._keys = [self.src_name]
+        if self.mask:
+            self._keys.append("%s_mask" % self.src_name)
 
-        self.do_mask = (self.batch_size > 1)
-
-        self.n_samples = 0
-        self.__seqs = []
-        self.__idxs = []
-        self.__minibatches = []
-        self.__keys = [self.src_name]
-        if self.do_mask:
-            self.__keys.append("%s_mask" % self.src_name)
-        self.__keys.append(self.trg_name)
-        if self.do_mask:
-            self.__keys.append("%s_mask" % self.trg_name)
-
-        self.__iter = None
-
-        self.read()
-
-    def __repr__(self):
-        return "src: %s, trg: %s" % (self.src_data, self.trg_data)
-
-    def set_batch_size(self, bs):
-        self.batch_size = bs
-        self.prepare_batches()
-
-    def rewind(self):
-        self.__iter = iter(self.__minibatches)
-
-    def __iter__(self):
-        return self
-
-    def get_idxs(self):
-        return self.__idxs
+        self._keys.append(self.trg_name)
+        if self.mask:
+            self._keys.append("%s_mask" % self.trg_name)
 
     def read(self):
-        #self.__max_filt = 0
-        self.__seqs = []
-        self.__idxs = []
-        sf = fopen(self.src_data, 'r')
-        tf = fopen(self.trg_data, 'r')
+        seqs = []
+        sf = fopen(self.srcfile, 'r')
+        tf = fopen(self.trgfile, 'r')
 
         for idx, (sline, tline) in enumerate(zip(sf, tf)):
             sline = sline.strip()
@@ -82,13 +52,10 @@ class BiTextIterator(object):
 
             # Exception if empty line found
             if sline == "" or tline == "":
-                raise Exception("Empty line(s) detected in parallel corpora.")
+                continue
 
-            sline = sline.split(" ")
-            tline = tline.split(" ")
-
-            sseq = [self.src_dict.get(w, 1) for w in sline]
-            tseq = [self.trg_dict.get(w, 1) for w in tline]
+            sseq = [self.srcdict.get(w, 1) for w in sline.split(' ')]
+            tseq = [self.trgdict.get(w, 1) for w in tline.split(' ')]
 
             # if given limit vocabulary
             if self.n_words_src > 0:
@@ -99,66 +66,47 @@ class BiTextIterator(object):
                 tseq = [w if w < self.n_words_trg else 1 for w in tseq]
 
             # Append sequences to the list
-            self.__seqs.append((sseq, tseq))
-            self.__idxs += [idx]
+            seqs.append((sseq, tseq))
         
-        # Save sentence count
-        self.n_samples = len(self.__idxs)
-
         sf.close()
         tf.close()
 
-    def prepare_batches(self):
-        sample_idxs = np.arange(self.n_samples)
-        self.__minibatches = []
+        # Save sequences
+        self._seqs = seqs
 
-        for i in range(0, self.n_samples, self.batch_size):
-            batch_idxs = sample_idxs[i:i + self.batch_size]
-            locals()[self.src_name], locals()["%s_mask" % self.src_name] = \
-                    mask_data([self.__seqs[i][0] for i in batch_idxs])
-            locals()[self.trg_name], locals()["%s_mask" % self.trg_name] = \
-                    mask_data([self.__seqs[i][1] for i in batch_idxs])
-            d = [batch_idxs]
-            d.extend([locals()[k] for k in self.__keys])
-            self.__minibatches.append(d)
+        # Number of training samples
+        self.n_samples = len(self._seqs)
 
-        self.__iter = iter(self.__minibatches)
-        self.__idxs = sample_idxs
-
-    def next(self):
-        try:
-            data = next(self.__iter)
-        except StopIteration as si:
-            self.rewind()
-            raise
-        except AttributeError as ae:
-            raise Exception("You need to call prepare_batches() first.")
+        # Set batch processor function
+        if self.batch_size == 1:
+            self._process_batch = (lambda idxs: self.process_single(idxs[0]))
         else:
-            return OrderedDict([(k,data[i+1]) for i,k in enumerate(self.__keys)])
+            self._process_batch = (lambda idxs: self.mask_seqs(idxs))
 
-### Test
-if __name__ == '__main__':
-    import os
-    src = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.en"
-    trg = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.de"
-    sdc = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.en.pkl"
-    tdc = "~/wmt16/data/text/norm.moses.tok/train.norm.lc.tok.de.pkl"
+        if self.shuffle_mode == 'trglen':
+            # Homogeneous batches ordered by target sequence length
+            # Get an iterator over sample idxs
+            self._iter = HomogeneousData(self._seqs, self.batch_size, trg_pos=1)
+        else:
+            self.rewind()
 
-    from ..nmtutils import load_dictionary,idx_to_sent
-    src_dict, src_idict = load_dictionary(os.path.expanduser(sdc))
-    trg_dict, trg_idict = load_dictionary(os.path.expanduser(tdc))
+    def rewind(self):
+        if self.shuffle_mode != 'trglen':
+            # Fill in the _idxs list for sample order
+            if self.shuffle_mode == 'simple':
+                # Simple shuffle
+                self._idxs = np.random.permutation(self.n_samples).tolist()
+            elif self.shuffle_mode is None:
+                # Ordered
+                self._idxs = np.arange(self.n_samples).tolist()
 
-    iterator = BiTextIterator(os.path.expanduser(src), src_dict,
-                              os.path.expanduser(trg), trg_dict, batch_size=32)
-    iterator.prepare_batches()
-    idxs1 = iterator.get_idxs()
+            self._iter = []
+            for i in range(0, self.n_samples, self.batch_size):
+                self._iter.append(self._idxs[i:i + self.batch_size])
+            self._iter = iter(self._iter)
 
-    d = {}
-    for batch in iterator:
-        for s,t in zip(batch['x'].T, batch['y'].T):
-            src_sent = idx_to_sent(src_idict, s)
-            trg_sent = idx_to_sent(trg_idict, t)
-            if src_sent in d:
-                print "Key already available: %s" % src_sent
-            else:
-                d[src_sent] = trg_sent
+    def mask_seqs(self, idxs):
+        """Prepares a list of padded tensors with their masks for the given sample idxs."""
+        src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
+        trg, trg_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
+        return (src, src_mask, trg, trg_mask)
