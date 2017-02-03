@@ -43,33 +43,21 @@ corpus. This small-sized monomodal NMT obtains state-of-the-art METEOR score on 
 When the training is over, you can translate the test set using the following command:
 
 ```
-nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/attention-e100-r100-adam_4e-04-bs32-meteor-each1000-l2_1e-05-do_0.2_0.4_0.4-gc5-init_xavier-s1235.1.npz \
+nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-monomodal/<your model file> \
               -S ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.bpe.en \
-              -o test.tok.de
+              -o test_monomodal.tok.de
 ```
 
 This will produce a tokenized hypothesis file cleaned from BPE segmentations. Let's score this using `nmt-coco-metrics`:
 
 ```
-nmt-coco-metrics -p -l de test.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
+nmt-coco-metrics -p -l de test_monomodal.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
 Language: de
 The number of references is 1
 Bleu_1: 0.67390 Bleu_2: 0.54240 Bleu_3: 0.44846 Bleu_4: 0.37333 CIDEr: 3.55837 METEOR: 0.57024 METEOR(norm): 0.57058 ROUGE_L: 0.67121
 ```
 
 ### Train a Multimodal NMT
-
-If you use `fusion_*` multimodal architectures in your work, please cite the following
-article:
-
-```
-@article{caglayan2016multimodal,
-  title={Multimodal Attention for Neural Machine Translation},
-  author={Caglayan, Ozan and Barrault, Lo{\"\i}c and Bougares, Fethi},
-  journal={arXiv preprint arXiv:1609.03976},
-  year={2016}
-}
-```
 
 #### Image Features
 
@@ -100,3 +88,16 @@ scripts/03-raw2pkl.py -i data/split_test.txt \
 
 Now that the files are ready, run `nmt-train -c wmt16-task1-multimodal.conf` to train
 a `fusion_concat_dep_ind` architecture.
+When the training is over, you can translate and score the test set using the following commands:
+
+```
+nmt-translate -m ~/nmtpy/models/wmt16-mmt-task1-multimodal/<your model file> \
+              -S ~/nmtpy/data/wmt16-task1/test.pkl \
+                 ~/nmtpy/data/wmt16-task1/flickr30k_ResNets50_blck4_test.fp16.npy \
+              -o test_multimodal.tok.de
+
+nmt-coco-metrics -p -l de test_multimodal.tok.de ~/nmtpy/data/wmt16-task1/test.norm.tok.lc.de
+Language: de
+The number of references is 1
+Bleu_1: 0.64130 Bleu_2: 0.50794 Bleu_3: 0.41599 Bleu_4: 0.34445 CIDEr: 3.27149 METEOR: 0.53988 METEOR(norm): 0.53972 ROUGE_L: 0.64793
+```
