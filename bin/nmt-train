@@ -126,6 +126,11 @@ if __name__ == '__main__':
     # Set device for Theano
     if 'THEANO_FLAGS' not in os.environ:
         train_args.device_id = get_device(train_args.device_id)
+
+        # Check for GPUARRAY to switch to new Theano backend
+        if train_args.device_id.startswith('gpu') and "GPUARRAY" in os.environ:
+            train_args.device_id = train_args.device_id.replace('gpu', 'cuda')
+
         os.environ['THEANO_FLAGS'] = "device=%s" % train_args.device_id
 
     log.info("THEANO_FLAGS = %s" % os.environ['THEANO_FLAGS'])
