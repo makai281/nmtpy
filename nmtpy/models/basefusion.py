@@ -109,29 +109,37 @@ class Model(Attention):
         params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim, scale=self.weight_init)
 
         # convfeats (1024) to ctx dim (2000) for image modality
-        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.conv_dim, nout=self.ctx_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_img_adaptor', nin=self.conv_dim,
+                                        nout=self.ctx_dim, scale=self.weight_init)
 
         #############################################
         # Source sentence encoder: bidirectional GRU
         #############################################
         # Forward and backward encoder parameters
-        params = get_new_layer('gru')[0](params, prefix='text_encoder'  , nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
-        params = get_new_layer('gru')[0](params, prefix='text_encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('gru')[0](params, prefix='text_encoder', nin=self.embedding_dim,
+                                         dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
+        params = get_new_layer('gru')[0](params, prefix='text_encoder_r', nin=self.embedding_dim,
+                                         dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
 
         ##########
         # Decoder
         ##########
         # init_state computation from mean context: 2000 -> 1000 if rnn_dim == 1000
-        params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim,
+                                        nout=self.rnn_dim, scale=self.weight_init)
 
         # GRU cond decoder
         params = self.init_gru_decoder(params, prefix='decoder_multi', nin=self.embedding_dim,
                                         dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init)
 
         # readout
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru', nin=self.rnn_dim     , nout=self.embedding_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.ctx_dim     , nout=self.embedding_dim, scale=self.weight_init)
-        params = get_new_layer('ff')[0](params, prefix='ff_logit'    , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_gru', nin=self.rnn_dim,
+                                        nout=self.embedding_dim, scale=self.weight_init)
+        params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx', nin=self.ctx_dim,
+                                        nout=self.embedding_dim, scale=self.weight_init)
+        if self.tied_trg_emb is False:
+            params = get_new_layer('ff')[0](params, prefix='ff_logit', nin=self.embedding_dim,
+                                            nout=self.n_words_trg, scale=self.weight_init)
 
         # Save initial parameters for debugging purposes
         self.initial_params = params
@@ -147,6 +155,10 @@ class Model(Attention):
         # Target sentences: n_timesteps, n_samples
         y       = tensor.matrix('y', dtype=INT)
         y_mask  = tensor.matrix('y_mask', dtype=FLOAT)
+
+        # Reverse stuff
+        xr      = x[::-1]
+        xr_mask = x_mask[::-1]
 
         # Some shorthands for dimensions
         n_samples       = x.shape[1]
@@ -164,28 +176,23 @@ class Model(Attention):
         ###################
         # Source embeddings
         ###################
-        # Fetch source embeddings. Result is: (n_timesteps x n_samples x embedding_dim)
-        emb_enc = self.tparams['Wemb_enc'][x.flatten()].reshape([n_timesteps, n_samples, self.embedding_dim])
-        # -> n_timesteps x n_samples x embedding_dim
-
-        # Pass the source word vectors through the GRU RNN
-        emb_enc_rnns = get_new_layer('gru')[1](self.tparams, emb_enc, prefix='text_encoder', mask=x_mask)
-        # -> n_timesteps x n_samples x rnn_dim
+        # word embedding for forward rnn (source)
+        emb  = dropout(self.tparams['Wemb_enc'][x.flatten()], self.trng, self.emb_dropout, self.use_dropout)
+        emb  = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
+        forw = get_new_layer('gru')[1](self.tparams, emb, prefix='text_encoder', mask=x_mask, layernorm=self.lnorm)
 
         # word embedding for backward rnn (source)
-        # for the backward rnn, we just need to invert x and x_mask
-        xr      = x[::-1]
-        xr_mask = x_mask[::-1]
-        emb_enc_r = self.tparams['Wemb_enc'][xr.flatten()].reshape([n_timesteps, n_samples, self.embedding_dim])
-        # -> n_timesteps x n_samples x embedding_dim
-        # Pass the source word vectors in reverse through the GRU RNN
-        emb_enc_rnns_r = get_new_layer('gru')[1](self.tparams, emb_enc_r, prefix='text_encoder_r', mask=xr_mask)
-        # -> n_timesteps x n_samples x rnn_dim
+        embr = dropout(self.tparams['Wemb_enc'][xr.flatten()], self.trng, self.emb_dropout, self.use_dropout)
+        embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
+        back = get_new_layer('gru')[1](self.tparams, embr, prefix='text_encoder_r', mask=xr_mask, layernorm=self.lnorm)
 
         # Source context will be the concatenation of forward and backward rnns
         # leading to a vector of 2*rnn_dim for each timestep
-        text_ctx = tensor.concatenate([emb_enc_rnns[0], emb_enc_rnns_r[0][::-1]], axis=emb_enc_rnns[0].ndim-1)
+        text_ctx = tensor.concatenate([forw[0], back[0][::-1]], axis=forw[0].ndim-1)
         # -> n_timesteps x n_samples x 2*rnn_dim
+
+        # Apply dropout
+        text_ctx = dropout(text_ctx, self.trng, self.ctx_dropout, self.use_dropout)
 
         # mean of the context (across time) will be used to initialize decoder rnn
         text_ctx_mean = (text_ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
@@ -208,7 +215,8 @@ class Model(Attention):
         ####################
 
         # Fetch target embeddings. Result is: (n_trg_timesteps x n_samples x embedding_dim)
-        emb_trg = self.tparams['Wemb_dec'][y.flatten()].reshape([y.shape[0], y.shape[1], self.embedding_dim])
+        emb_trg = self.tparams['Wemb_dec'][y.flatten()]
+        emb_trg = emb_trg.reshape([n_timesteps_trg, n_samples, self.embedding_dim])
 
         # Shift it to right to leave place for the <bos> placeholder
         # We ignore the last word <eos> as we don't condition on it at the end
@@ -222,28 +230,31 @@ class Model(Attention):
         ##########
         # decoder - pass through the decoder conditional gru with attention
         dec_mult = self.gru_decoder(self.tparams, emb_trg,
-                                   prefix='decoder_multi',
-                                   input_mask=y_mask,
-                                   ctx1=text_ctx, ctx1_mask=x_mask,
-                                   ctx2=img_ctx,
-                                   one_step=False,
-                                   init_state=text_init_state) # NOTE: init_state only text
+                                    prefix='decoder_multi',
+                                    input_mask=y_mask,
+                                    ctx1=text_ctx, ctx1_mask=x_mask,
+                                    ctx2=img_ctx,
+                                    one_step=False,
+                                    init_state=text_init_state) # NOTE: init_state only text
 
         # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
-        h       = dec_mult[0]    # (n_timesteps_trg, batch_size, rnn_dim)
-        sumctx  = dec_mult[1]    # (n_timesteps_trg, batch_size, ctx*.shape[-1] (2000, 2*rnn_dim))
+        h           = dec_mult[0]    # (n_timesteps_trg, batch_size, rnn_dim)
+        sumctx      = dec_mult[1]    # (n_timesteps_trg, batch_size, ctx*.shape[-1] (2000, 2*rnn_dim))
+        # weights (alignment matrix)
+        self.alphas = list(dec_mult[2:])
 
-        self.alphas  = list(dec_mult[2:])
+        # 3-way merge
+        logit_gru  = get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
+        logit_ctx  = get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
 
-        logit    = emb_trg
-        logit   += get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
-        logit   += get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
+        # Dropout
+        logit = dropout(tanh(logit_gru + emb_trg + logit_ctx), self.trng, self.out_dropout, self.use_dropout)
 
-        # tanh over logit
-        logit = tanh(logit)
+        if self.tied_trg_emb is False:
+            logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        else:
+            logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
 
-        # embedding_dim -> n_words_trg
-        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
         logit_shp = logit.shape
 
         # Apply logsoftmax (stable version)
@@ -254,7 +265,7 @@ class Model(Attention):
         y_flat_idx = tensor.arange(y_flat.shape[0]) * self.n_words_trg + y_flat
 
         cost = log_probs.flatten()[y_flat_idx]
-        cost = cost.reshape([y.shape[0], y.shape[1]])
+        cost = cost.reshape([n_timesteps_trg, n_samples])
         cost = (cost * y_mask).sum(0)
 
         self.f_log_probs = theano.function(self.inputs.values(), cost)
@@ -276,26 +287,19 @@ class Model(Attention):
         # Broadcast middle dimension to make it 196 x 1 x 2000
         img_ctx         = img_ctx[:, None, :]
 
-        # NOTE: Not used
-        # Take the mean over the first dimension: 1 x 2000
-        #img_ctx_mean    = img_ctx.mean(0)
-        # Give the mean to compute the initial state: 1 x 1000
-        #img_init_state  = get_new_layer('ff')[1](self.tparams, img_ctx_mean, prefix='ff_img_state_init', activ='tanh')
-
         #####################
         # Text Bi-GRU Encoder
         #####################
-        emb             = self.tparams['Wemb_enc'][x.flatten()]
-        emb             = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
-        proj            = get_new_layer('gru')[1](self.tparams, emb, prefix='text_encoder')
+        emb  = self.tparams['Wemb_enc'][x.flatten()]
+        emb  = emb.reshape([n_timesteps, n_samples, self.embedding_dim])
+        forw = get_new_layer('gru')[1](self.tparams, emb, prefix='text_encoder', layernorm=self.lnorm)
 
-        embr            = self.tparams['Wemb_enc'][x[::-1].flatten()]
-        embr            = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
-        projr           = get_new_layer('gru')[1](self.tparams, embr, prefix='text_encoder_r')
+        embr = self.tparams['Wemb_enc'][x[::-1].flatten()]
+        embr = embr.reshape([n_timesteps, n_samples, self.embedding_dim])
+        back = get_new_layer('gru')[1](self.tparams, embr, prefix='text_encoder_r', layernorm=self.lnorm)
 
         # concatenate forward and backward rnn hidden states
-        text_ctx        = tensor.concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
-
+        text_ctx        = tensor.concatenate([forw[0], back[0][::-1]], axis=forw[0].ndim-1)
         # get the input for decoder rnn initializer mlp
         text_ctx_mean   = text_ctx.mean(0)
         text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
@@ -303,22 +307,22 @@ class Model(Attention):
         ################
         # Build f_init()
         ################
-        inps            = [x, x_img]
-        outs            = [text_init_state, text_ctx, img_ctx]
-        self.f_init     = theano.function(inps, outs, name='f_init')
+        inps        = [x, x_img]
+        outs        = [text_init_state, text_ctx, img_ctx]
+        self.f_init = theano.function(inps, outs, name='f_init')
 
         ###################
         # Target Embeddings
         ###################
-        y               = tensor.vector('y_sampler', dtype=INT)
-        emb             = tensor.switch(y[:, None] < 0,
-                                        tensor.alloc(0., 1, self.tparams['Wemb_dec'].shape[1]),
-                                        self.tparams['Wemb_dec'][y])
+        y       = tensor.vector('y_sampler', dtype=INT)
+        emb_trg = tensor.switch(y[:, None] < 0,
+                                tensor.alloc(0., 1, self.tparams['Wemb_dec'].shape[1]),
+                                self.tparams['Wemb_dec'][y])
 
         ##########
         # Text GRU
         ##########
-        dec_mult = self.gru_decoder(self.tparams, emb,
+        dec_mult = self.gru_decoder(self.tparams, emb_trg,
                                     prefix='decoder_multi',
                                     input_mask=None,
                                     ctx1=text_ctx, ctx1_mask=None,
@@ -329,27 +333,28 @@ class Model(Attention):
         sumctx = dec_mult[1]
         alphas = tensor.concatenate(dec_mult[2:], axis=-1)
 
-        ########
-        # Fusion
-        ########
-        logit = emb
-        logit += get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
-        logit += get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
-        logit = tanh(logit)
+        # 3-way merge
+        logit_gru  = get_new_layer('ff')[1](self.tparams, h, prefix='ff_logit_gru', activ='linear')
+        logit_ctx  = get_new_layer('ff')[1](self.tparams, sumctx, prefix='ff_logit_ctx', activ='linear')
 
-        logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        logit = tanh(logit_gru + emb_trg + logit_ctx)
+
+        if self.tied_trg_emb is False:
+            logit = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit', activ='linear')
+        else:
+            logit = tensor.dot(logit, self.tparams['Wemb_dec'].T)
 
         # compute the logsoftmax
         next_log_probs = tensor.nnet.logsoftmax(logit)
 
         # Sample from the softmax distribution
-        next_probs = tensor.exp(next_log_probs)
+        # next_probs = tensor.exp(next_log_probs)
 
         ################
         # Build f_next()
         ################
-        inputs = [y, text_init_state, text_ctx, img_ctx]
-        outs = [next_log_probs, h, alphas]
+        inputs      = [y, text_init_state, text_ctx, img_ctx]
+        outs        = [next_log_probs, h, alphas]
         self.f_next = theano.function(inputs, outs, name='f_next')
 
     def get_alpha_regularizer(self, alpha_c):
