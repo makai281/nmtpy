@@ -166,13 +166,15 @@ def find_executable(fname):
 
 def get_device(which='auto'):
     """Return Theano device to use by favoring GPUs first."""
+    # Use CPU
     if which == "cpu":
         return "cpu", None
+
+    # Use the requested GPU without looking for availability
     elif which.startswith("gpu"):
-        # Don't care about usage. Some cards don't
-        # provide that info in nvidia-smi as well.
         create_gpu_lock(int(which.replace("gpu", "")))
         return which
+
     # auto favors GPU in the first place
     elif which == 'auto':
         try:
@@ -183,6 +185,7 @@ def get_device(which='auto'):
 
         # Find out about GPU usage
         usage = ["None" in l for l in out.split("\n") if "Processes" in l]
+
         try:
             # Get first unused one
             which = usage.index(True)
