@@ -96,3 +96,17 @@ During training, you can select whether you would like to use:
  - Just one pair from the first pair of files: `.1.en -> .1.de` (`data_mode:single`)
  
 During early-stopping, we use by default `single` for validation to only consider the description pairs from `.1.en, .1.de` resulting in 1014 images-captions.
+
+### Train a Monomodal NMT
+
+Run `nmt-train -c wmt16-task2-monomodal.conf` to train a monomodal NMT on this
+corpus. When the training is over, you can translate the test set using the following command:
+
+```
+nmt-translate -m ~/nmtpy/models/wmt16-mmt-task2-monomodal/attention_wmt-e100-r100-adam_4e-04-bs32-meteor-eachepoch-l2_1e-05-gc5-init_xavier-s1234.1.npz
+              -S ~/nmtpy/data/wmt16-task2/flickr_30k_align.test.pkl -v pairs \
+              -o test.tok.de
+```
+
+The flag `-v pairs` will generate 5 hypotheses for each image using each source description and
+pick the one having the maximum likelihood based on NMT score.
