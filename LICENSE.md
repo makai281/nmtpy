@@ -25,6 +25,7 @@ SOFTWARE.
 **nmtpy** includes code from the following projects which have their own licenses:
 
  - [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial) [[BSD-3-Clause](https://github.com/nyu-dl/dl4mt-tutorial/blob/master/LICENSE)]
+ - Ensembling and alignment collection from [nematus](https://github.com/rsennrich/nematus) [Same as dl4mt-tutorial]
  - Scripts from [subword-nmt](https://github.com/rsennrich/subword-nmt) [[MIT](https://github.com/rsennrich/subword-nmt/blob/master/LICENSE)]
  - `multi-bleu.perl` from [mosesdecoder](https://github.com/moses-smt/mosesdecoder) [[LGPL-2.1](https://github.com/moses-smt/mosesdecoder/blob/master/COPYING)]
  - METEOR v1.5 JAR from [meteor](https://github.com/cmu-mtlab/meteor) [[LGPL-2.1](https://github.com/cmu-mtlab/meteor/blob/master/COPYING)]

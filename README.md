@@ -144,6 +144,7 @@ $ python -c 'import theano; print theano.config.blas.ldflags'
 
  - [dl4mt-tutorial](https://github.com/nyu-dl/dl4mt-tutorial)
  - Scripts from [subword-nmt](https://github.com/rsennrich/subword-nmt)
+ - Ensembling and alignment collection from [nematus](https://github.com/rsennrich/nematus)
  - `multi-bleu.perl` from [mosesdecoder](https://github.com/moses-smt/mosesdecoder)
  - METEOR v1.5 JAR from [meteor](https://github.com/cmu-mtlab/meteor)
  - Sorted data iterator, coco eval script and LSTM from [arctic-captions](https://github.com/kelvinxu/arctic-captions)
