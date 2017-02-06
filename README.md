@@ -67,7 +67,7 @@ You need the following Python libraries installed in order to use **nmtpy**:
   improving CPU decoding speeds during beam search. With a correct compilation and installation, you should achieve
   similar performance with OpenBLAS as well but the setup procedure may be difficult to follow for inexperienced ones.
 - nmtpy currently **only** supports Python 2.7 but we plan to move towards Python 3 in the future.
-- Please note that METEOR requires a Java runtime so `java` should be in your `$PATH`.
+- Please note that METEOR requires a **Java** runtime so `java` should be in your `$PATH`.
 
 #### Additional data for METEOR
 
