@@ -99,7 +99,8 @@ So if you care (and you absolutely should) about reproducibility, make sure your
 
 ## Configuring Theano
 
-Here is a basic `.theanorc` file recommended for best performance:
+Here is a basic `.theanorc` file (Note that the way you install CUDA, CuDNN
+may require some modifications):
 
 ```
 [global]
@@ -109,10 +110,6 @@ device = gpu0
 floatX = float32
 # Keep theano compilation in RAM if you have a 7/24 available server
 base_compiledir=/tmp/theano-%(user)s
-
-[nvcc]
-# This is already disabled by upstream Theano as well
-fastmath = False
 
 [cuda]
 # CUDA 8.0 is better
@@ -128,6 +125,17 @@ include_path = /opt/CUDNN/cudnn-v5.1/include
 # Allocate 95% of GPU memory once
 cnmem = 0.95
 ```
+
+If you have a recent Theano, you may want to try the new GPU backend after
+installing [libgpuarray](https://github.com/Theano/libgpuarray). In order to do so,
+pass `GPUARRAY=1` into the environment when running `nmt-train`:
+
+```
+$ GPUARRAY=1 nmt-train -c <conf file> ...
+```
+
+Note that we could not obtain accurate results using Maxwell GPUs with this backend
+so use it at your own risk.
 
 ### Checking BLAS configuration
 
