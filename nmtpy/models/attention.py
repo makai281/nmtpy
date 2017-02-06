@@ -152,6 +152,9 @@ class Model(BaseModel):
             # Compute sum of log_p's for the current hypotheses
             cand_scores = hyp_scores[:, None] - sum(next_log_ps)
 
+            # Mean alphas for the mean model (n_models > 1)
+            mean_alphas = sum(alphas) / n_models
+
             # Flatten by modifying .shape (faster)
             cand_scores.shape = cand_scores.size
 
@@ -181,26 +184,26 @@ class Model(BaseModel):
             for idx, [ti, wi] in enumerate(zip(trans_idxs, word_idxs)):
                 # Form the new hypothesis by appending new word to the left hyp
                 new_hyp = hyp_samples[ti] + [wi]
-                #new_ali = hyp_alignments[ti] + [alphas[ti]]
+                new_ali = hyp_alignments[ti] + [mean_alphas[ti]]
 
                 if wi == 0:
                     # <eos> found, separate out finished hypotheses
                     final_sample.append(new_hyp)
                     final_score.append(costs[idx])
-                    #final_alignments.append(new_ali)
+                    final_alignments.append(new_ali)
                 else:
                     # Add formed hypothesis to the new hypotheses list
                     new_hyp_samples.append(new_hyp)
                     # Cumulated cost of this hypothesis
                     new_hyp_scores.append(costs[idx])
-                    #new_hyp_alignments.append(new_ali)
+                    new_hyp_alignments.append(new_ali)
                     # Hidden state of the decoder for this hypothesis
                     hyp_states.append([next_state[ti] for next_state in next_states])
                     live_beam += 1
 
             hyp_scores  = np.array(new_hyp_scores, dtype=FLOAT)
             hyp_samples = new_hyp_samples
-            #hyp_alignments = new_hyp_alignments
+            hyp_alignments = new_hyp_alignments
 
             if live_beam == 0:
                 break
@@ -214,11 +217,12 @@ class Model(BaseModel):
         for idx in xrange(live_beam):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
-            #final_alignments.append(hyp_alignments[idx])
+            final_alignments.append(hyp_alignments[idx])
 
         if not kwargs.get('get_att_alphas', False):
             # Don't send back alignments for nothing
             final_alignments = None
+
         return final_sample, final_score, final_alignments
 
     def info(self):
