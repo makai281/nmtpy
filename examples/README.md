@@ -40,9 +40,9 @@ article:
 For multimodal baselines, you will need the convolutional features extracted
 from a pre-trained ResNet-50. You can download these files from the links below:
 
- - [flickr30k_ResNets50_blck4_train.fp16.npy.xz]() (6GB)
- - [flickr30k_ResNets50_blck4_val.fp16.npy.xz]() (214M)
- - [flickr30k_ResNets50_blck4_test.fp16.npy.xz]() (211M)
+ - [flickr30k_ResNets50_blck4_train.fp16.npy.xz](http://www-lium.univ-lemans.fr/sites/default/files/NMTPY/flickr30k_ResNets50_blck4_train.fp16.npy.xz) (6GB)
+ - [flickr30k_ResNets50_blck4_val.fp16.npy.xz](http://www-lium.univ-lemans.fr/sites/default/files/NMTPY/flickr30k_ResNets50_blck4_val.fp16.npy.xz) (214M)
+ - [flickr30k_ResNets50_blck4_test.fp16.npy.xz](http://www-lium.univ-lemans.fr/sites/default/files/NMTPY/flickr30k_ResNets50_blck4_test.fp16.npy.xz) (211M)
 
 After downloading the files, extract them using the following command:
 
