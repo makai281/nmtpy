@@ -1,10 +1,19 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
+import os
+import sys
+
 from setuptools import setup
 import nmtpy
 
 # Install pycocoevalcap metric scorers as well
-pycocometrics  = ['bleu', 'meteor', 'cider', 'rouge']
-pycocopackages = ['nmtpy.cocoeval.%s' % m for m in pycocometrics]
+pycocometrics   = ['bleu', 'meteor', 'cider', 'rouge']
+pycocopackages  = ['nmtpy.cocoeval.%s' % m for m in pycocometrics]
+
+if 'install' in sys.argv or 'develop' in sys.argv:
+    if not os.path.exists('nmtpy/external/data/paraphrase-en.gz'):
+        print('You need to run scripts/get-meteor-data.sh first.')
+        sys.exit(1)
 
 setup(
         name='nmtpy',
