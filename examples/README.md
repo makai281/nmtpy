@@ -35,8 +35,6 @@ article:
 
 ### Getting the Image Features
 
-(Files are not uploaded yet!)
-
 For multimodal baselines, you will need the convolutional features extracted
 from a pre-trained ResNet-50. You can download these files from the links below:
 
@@ -52,6 +50,7 @@ xz -d <downloaded xz file>
 
 Each `.npy` file contains 14x14x1024 convolutional feature maps for each image
 which are extracted from **res4f_relu** layer of a ResNet-50 trained on ImageNet:
+(The `fp16` suffix means that the `dtype` is `float16`.)
 
 ```
 >> valfeats = numpy.load('flickr30k_ResNets50_blck4_val.fp16.npy')
