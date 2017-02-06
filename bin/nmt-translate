@@ -352,7 +352,7 @@ class Translator(object):
     def dump_json(self, filename):
         """Export decoding data into json for further visualization."""
         metadata = OrderedDict()
-        metadata['model']     = os.path.basename(self.model_file)
+        metadata['models']    = [os.path.basename(m) for m in self.model_files]
         metadata['beam_size'] = self.beam_size
 
         srcs    = []
