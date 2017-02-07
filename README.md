@@ -56,6 +56,42 @@ A non-exhaustive list of differences between **nmtpy** and **dl4mt-tutorial** is
   - Training and validation loss normalization for comparable perplexities
   - Initialization of a model with a pretrained NMT for further finetuning
 
+## Models
+
+### Attentional NMT: `attention.py`
+This is the basic shallow attention based NMT from `dl4mt-tutorial` improved in different ways:
+  - 3 forward dropout layers after source embeddings, source context and before softmax managed by the configuration parameters `emb_dropout, ctx_dropout, out_dropout`.
+  - Layer normalization for source encoder (`layer_norm=True|False`)
+  - Tied target embeddings (`tied_trg_emb=True|False`)
+  
+This model uses the simple `BitextIterator` i.e. it directly reads plain parallel text files as defined in the experiment configuration file. Please see [this monomodal example](examples/wmt16-mmt-task1/wmt16-mmt-task1-monomodal.conf) for usage.
+
+### Multimodal NMT / Image Captioning: `fusion*py`
+
+These `fusion` models derived from `attention.py` and `basefusion.py` implement several multimodal NMT / Image Captioning architectures detailed in the following papers:
+
+[Caglayan, Ozan, et al. "Does Multimodality Help Human and Machine for Translation and Image Captioning?." arXiv preprint arXiv:1605.09186 (2016).](https://arxiv.org/abs/1605.09186)
+
+[Caglayan, Ozan, Loïc Barrault, and Fethi Bougares. "Multimodal Attention for Neural Machine Translation." arXiv preprint arXiv:1609.03976 (2016).](https://arxiv.org/abs/1609.03976)
+
+The models are separated into 8 files implementing their own multimodal CGRU differing in the way the attention is formulated in the decoder (4 ways) x the way the multimodal contexts are fusioned (2 ways: SUM/CONCAT). These models also use a different data iterator, namely `WMTIterator` that requires converting the textual data into `.pkl` as in the [multimodal example](examples/wmt16-mmt-task1).
+
+The `WMTIterator` only knows how to handle the ResNet-50 convolutional features that we provide in the examples page. If you would like to use FC-style fixed-length vectors or other types of multimodal features, you need to write your own iterator.
+
+### Factored NMT
+
+The model file for the following paper will be provided as soon as the integration is ready:
+
+[García-Martínez, Mercedes, Loïc Barrault, and Fethi Bougares. "Factored Neural Machine Translation." arXiv preprint arXiv:1609.04621 (2016).](https://arxiv.org/abs/1609.04621)
+
+### RNNLM: `rnnlm.py`
+
+This is a basic recurrent language model to be used with `nmt-test-lm` utility.
+
+
+
+
+
 ## Requirements
 
 You need the following Python libraries installed in order to use **nmtpy**:
