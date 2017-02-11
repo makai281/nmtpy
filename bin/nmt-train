@@ -68,6 +68,8 @@ if __name__ == '__main__':
                                                   type=str)
     parser.add_argument('-t', '--timestamp'     , help="Add timestamp to log messages.",
                                                   action="store_true", default=False)
+    parser.add_argument('-n', '--no-log'        , help="Do not log to text file.",
+                                                  action="store_true", default=False)
 
     parser.add_argument('-v', '--verbose'       , help="Dump Theano graph and inspect optimization.",
                                                   action="store_true", default=False)
@@ -88,6 +90,7 @@ if __name__ == '__main__':
     extra   = cargs.__dict__.pop('extra')
     suffix  = cargs.__dict__.pop('suffix')
     tstamp  = cargs.__dict__.pop('timestamp')
+    nolog   = cargs.__dict__.pop('no_log')
 
     # Take the remaining command line arguments (model_type and/or init if any)
     cmd_args = cargs.__dict__
@@ -112,8 +115,10 @@ if __name__ == '__main__':
     # Get unique run identifier (starts from 1)
     run_id = get_next_runid(model_args.save_path, exp_id)
     # Get log file name
-    log_fname = os.path.join(model_args.save_path,
-                             "%s.%d.log" % (exp_id, run_id))
+    log_fname = None
+    if not nolog:
+        log_fname = os.path.join(model_args.save_path,
+                                "%s.%d.log" % (exp_id, run_id))
     # Update save_path
     model_args.save_path = os.path.join(model_args.save_path,
                                         "%s.%d" % (exp_id, run_id))
