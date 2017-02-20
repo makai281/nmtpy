@@ -124,9 +124,18 @@ class Model(Attention):
         ##########
         # Decoder
         ##########
-        # init_state computation from mean context: 2000 -> 1000 if rnn_dim == 1000
-        params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim,
-                                        nout=self.rnn_dim, scale=self.weight_init)
+        if self.init_cgru == 'text':
+            # init_state computation from mean textual context
+            params = get_new_layer('ff')[0](params, prefix='ff_text_state_init', nin=self.ctx_dim,
+                                            nout=self.rnn_dim, scale=self.weight_init)
+        elif self.init_cgru == 'img':
+            # Global average pooling to init the decoder
+            params = get_new_layer('ff')[0](params, prefix='ff_img_state_init', nin=self.conv_dim,
+                                            nout=self.rnn_dim, scale=self.weight_init)
+        elif self.init_cgru == 'textimg':
+            # A combination of both modalities
+            params = get_new_layer('ff')[0](params, prefix='ff_textimg_state_init', nin=self.ctx_dim+self.conv_dim,
+                                            nout=self.rnn_dim, scale=self.weight_init)
 
         # GRU cond decoder
         params = self.init_gru_decoder(params, prefix='decoder_multi', nin=self.embedding_dim,
@@ -194,13 +203,27 @@ class Model(Attention):
         # Apply dropout
         text_ctx = dropout(text_ctx, self.trng, self.ctx_dropout, self.use_dropout)
 
-        # mean of the context (across time) will be used to initialize decoder rnn
-        text_ctx_mean = (text_ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
-        # -> n_samples x ctx_dim (2*rnn_dim)
+        if self.init_cgru == 'text':
+            # mean of the context (across time) will be used to initialize decoder rnn
+            text_ctx_mean = (text_ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+            # -> n_samples x ctx_dim (2*rnn_dim)
 
-        # initial decoder state computed from source context mean
-        text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
-        # -> n_samples x rnn_dim (last dim shrinked down by this FF to rnn_dim)
+            # initial decoder state computed from source context mean
+            init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
+            # -> n_samples x rnn_dim (last dim shrinked down by this FF to rnn_dim)
+        elif self.init_cgru == 'img':
+            # Reduce to nb_samples x conv_dim and transform
+            init_state = get_new_layer('ff')[1](self.tparams, x_img.mean(axis=0), prefix='ff_img_state_init', activ='tanh')
+        elif self.init_cgru == 'textimg':
+            # n_samples x conv_dim
+            img_ctx_mean  = x_img.mean(axis=0)
+            # n_samples x ctx_dim
+            text_ctx_mean = (text_ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+            # n_samples x (conv_dim + ctx_dim)
+            mmodal_ctx = tensor.concatenate([img_ctx_mean, text_ctx_mean], axis=-1)
+            init_state = get_new_layer('ff')[1](self.tparams, mmodal_ctx, prefix='ff_textimg_state_init', activ='tanh')
+        else:
+            init_state = tensor.alloc(0., n_samples, self.rnn_dim)
 
         #######################
         # Source image features
@@ -235,7 +258,7 @@ class Model(Attention):
                                     ctx1=text_ctx, ctx1_mask=x_mask,
                                     ctx2=img_ctx,
                                     one_step=False,
-                                    init_state=text_init_state) # NOTE: init_state only text
+                                    init_state=init_state)
 
         # gru_cond returns hidden state, weighted sum of context vectors and attentional weights.
         h           = dec_mult[0]    # (n_timesteps_trg, batch_size, rnn_dim)
@@ -280,10 +303,10 @@ class Model(Attention):
         ################
         # Image features
         ################
-        # 196 x 1024
-        x_img           = tensor.matrix('x_img', dtype=FLOAT)
+        # 196 x 1 x 1024
+        x_img           = tensor.tensor3('x_img', dtype=FLOAT)
         # Convert to 196 x 2000 (2*rnn_dim)
-        img_ctx         = get_new_layer('ff')[1](self.tparams, x_img, prefix='ff_img_adaptor', activ='linear')
+        img_ctx         = get_new_layer('ff')[1](self.tparams, x_img[:, 0, :], prefix='ff_img_adaptor', activ='linear')
         # Broadcast middle dimension to make it 196 x 1 x 2000
         img_ctx         = img_ctx[:, None, :]
 
@@ -299,16 +322,29 @@ class Model(Attention):
         back = get_new_layer('gru')[1](self.tparams, embr, prefix='text_encoder_r', layernorm=self.lnorm)
 
         # concatenate forward and backward rnn hidden states
-        text_ctx        = tensor.concatenate([forw[0], back[0][::-1]], axis=forw[0].ndim-1)
-        # get the input for decoder rnn initializer mlp
-        text_ctx_mean   = text_ctx.mean(0)
-        text_init_state = get_new_layer('ff')[1](self.tparams, text_ctx_mean, prefix='ff_text_state_init', activ='tanh')
+        text_ctx = tensor.concatenate([forw[0], back[0][::-1]], axis=forw[0].ndim-1)
+
+        if self.init_cgru == 'text':
+            init_state = get_new_layer('ff')[1](self.tparams, text_ctx.mean(0), prefix='ff_text_state_init', activ='tanh')
+        elif self.init_cgru == 'img':
+            # Reduce to nb_samples x conv_dim and transform
+            init_state = get_new_layer('ff')[1](self.tparams, x_img.mean(0), prefix='ff_img_state_init', activ='tanh')
+        elif self.init_cgru == 'textimg':
+            # n_samples x conv_dim
+            img_ctx_mean  = x_img.mean(0)
+            # n_samples x ctx_dim
+            text_ctx_mean = text_ctx.mean(0)
+            # n_samples x (conv_dim + ctx_dim)
+            mmodal_ctx = tensor.concatenate([img_ctx_mean, text_ctx_mean], axis=-1)
+            init_state = get_new_layer('ff')[1](self.tparams, mmodal_ctx, prefix='ff_textimg_state_init', activ='tanh')
+        else:
+            init_state = tensor.alloc(0., n_samples, self.rnn_dim)
 
         ################
         # Build f_init()
         ################
         inps        = [x, x_img]
-        outs        = [text_init_state, text_ctx, img_ctx]
+        outs        = [init_state, text_ctx, img_ctx]
         self.f_init = theano.function(inps, outs, name='f_init')
 
         ###################
@@ -328,7 +364,7 @@ class Model(Attention):
                                     ctx1=text_ctx, ctx1_mask=None,
                                     ctx2=img_ctx,
                                     one_step=True,
-                                    init_state=text_init_state)
+                                    init_state=init_state)
         h      = dec_mult[0]
         sumctx = dec_mult[1]
         alphas = tensor.concatenate(dec_mult[2:], axis=-1)
@@ -353,7 +389,7 @@ class Model(Attention):
         ################
         # Build f_next()
         ################
-        inputs      = [y, text_init_state, text_ctx, img_ctx]
+        inputs      = [y, init_state, text_ctx, img_ctx]
         outs        = [next_log_probs, h, alphas]
         self.f_next = theano.function(inputs, outs, name='f_next')
 

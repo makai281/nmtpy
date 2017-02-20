@@ -38,6 +38,9 @@ class Model(BaseModel):
         # Shuffle mode (default: No shuffle)
         self.smode = kwargs.get('shuffle_mode', 'simple')
 
+        # How to initialize CGRU
+        self.init_cgru = kwargs.get('init_cgru', 'text')
+
         # Get dropout parameters
         # Let's keep the defaults as 0 to not use dropout
         # You can adjust those from your conf files.
@@ -285,25 +288,35 @@ class Model(BaseModel):
         params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim, scale=self.weight_init)
         params['Wemb_dec'] = norm_weight(self.n_words_trg, self.embedding_dim, scale=self.weight_init)
 
+        ############################
         # encoder: bidirectional RNN
-        #########
+        ############################
         # Forward encoder
         params = get_new_layer(self.enc_type)[0](params, prefix='encoder', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
         # Backwards encoder
         params = get_new_layer(self.enc_type)[0](params, prefix='encoder_r', nin=self.embedding_dim, dim=self.rnn_dim, scale=self.weight_init, layernorm=self.lnorm)
 
-        # How many additional encoder layers to add?
+        # How many additional encoder layers to stack?
         for i in range(1, self.n_enc_layers):
-            params = get_new_layer(self.enc_type)[0](params, prefix='deepencoder_%d' % i,
+            params = get_new_layer(self.enc_type)[0](params, prefix='deep_encoder_%d' % i,
                                                      nin=self.ctx_dim, dim=self.ctx_dim,
                                                      scale=self.weight_init, layernorm=self.lnorm)
 
-        # init_state, init_cell
-        params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
+        ############################
+        # How do we initialize CGRU?
+        ############################
+        if self.init_cgru == 'text':
+            # init_state computation from mean textual context
+            params = get_new_layer('ff')[0](params, prefix='ff_state', nin=self.ctx_dim, nout=self.rnn_dim, scale=self.weight_init)
+
+        #########
         # decoder
+        #########
         params = get_new_layer('gru_cond')[0](params, prefix='decoder', nin=self.embedding_dim, dim=self.rnn_dim, dimctx=self.ctx_dim, scale=self.weight_init, layernorm=False)
 
-        # readout
+        ########
+        # fusion
+        ########
         params = get_new_layer('ff')[0](params, prefix='ff_logit_gru'  , nin=self.rnn_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_prev' , nin=self.embedding_dim , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
@@ -356,11 +369,13 @@ class Model(BaseModel):
         # Apply dropout
         ctx = dropout(ctx[0], self.trng, self.ctx_dropout, self.use_dropout)
 
-        # mean of the context (across time) will be used to initialize decoder rnn
-        ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
-
-        # initial decoder state
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        if self.init_cgru == 'text':
+            # mean of the context (across time) will be used to initialize decoder rnn
+            ctx_mean   = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+            init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        else:
+            # Assume zero-initialized decoder
+            init_state = tensor.alloc(0., n_samples, self.rnn_dim)
 
         # word embedding (target), we will shift the target sequence one time step
         # to the right. This is done because of the bi-gram connections in the
@@ -444,11 +459,15 @@ class Model(BaseModel):
                                                   prefix='deepencoder_%d' % i,
                                                   layernorm=self.lnorm)
 
-        ctx      = ctx[0]
-        # get the input for decoder rnn initializer mlp
-        ctx_mean = ctx.mean(0)
-        # ctx_mean = tensor.concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
-        init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        ctx = ctx[0]
+
+        if self.init_cgru == 'text' and 'ff_state_W' in self.tparams:
+            # get the input for decoder rnn initializer mlp
+            ctx_mean = ctx.mean(0)
+            init_state = get_new_layer('ff')[1](self.tparams, ctx_mean, prefix='ff_state', activ='tanh')
+        else:
+            # assume zero-initialized decoder
+            init_state = tensor.alloc(0., n_samples, self.rnn_dim)
 
         outs = [init_state, ctx]
         self.f_init = theano.function([x], outs, name='f_init')

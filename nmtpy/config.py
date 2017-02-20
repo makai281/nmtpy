@@ -29,7 +29,7 @@ def _parse_value(value):
         try:
             # If this fails, this is a string
             literal = literal_eval(value)
-        except ValueError as ve:
+        except Exception as ve:
             return value
         else:
             # Did not fail => literal is a float or int now
