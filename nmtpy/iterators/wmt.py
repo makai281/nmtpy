@@ -161,7 +161,7 @@ class WMTIterator(Iterator):
         data = [data]
         if self.img_avail:
             # Do this 196 x 1024
-            data += [self.img_feats[self._seqs[idx][2]]]
+            data += [self.img_feats[self._seqs[idx][2]][:, None, :]]
         if self.trg_avail:
             trg, _ = Iterator.mask_data([self._seqs[idx][5]])
             data.append(trg)
