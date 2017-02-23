@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
 import numpy as np
-
-from collections import OrderedDict
 
 from ..sysutils   import fopen
 from .iterator    import Iterator

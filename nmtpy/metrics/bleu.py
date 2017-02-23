@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
-import os
+import subprocess
 import pkg_resources
 
-from subprocess import Popen, PIPE, check_output
-
-from ..sysutils import real_path, get_temp_file
 from .metric    import Metric
 
 BLEU_SCRIPT = pkg_resources.resource_filename('nmtpy', 'external/multi-bleu.perl')
@@ -27,25 +24,19 @@ class MultiBleuScorer(object):
         if self.lowercase:
             self.__cmdline.append("-lc")
 
-    def compute(self, refs, hyps):
+    def compute(self, refs, hypfile):
         cmdline = self.__cmdline[:]
 
         # Make reference files a list
         refs = [refs] if isinstance(refs, str) else refs
         cmdline.extend(refs)
 
-        if isinstance(hyps, list):
-            # Hypotheses are sent through STDIN
-            process = Popen(cmdline, stdout=PIPE, stderr=PIPE, stdin=PIPE)
-            process.stdin.write("\n".join(hyps) + "\n")
-        elif isinstance(hyps, str):
-            # Hypotheses is file
-            with open(hyps, "rb") as fhyp:
-                process = Popen(cmdline, stdout=PIPE, stderr=PIPE, stdin=fhyp)
+        hypstring = None
+        with open(hypfile, "r") as fhyp:
+            hypstring = fhyp.read().rstrip()
 
-        stdout, stderr = process.communicate()
-
-        score = stdout.splitlines()
+        score = subprocess.run(cmdline, stdout=subprocess.PIPE,
+                               input=hypstring, universal_newlines=True).stdout.splitlines()
         if len(score) == 0:
             return BLEUScore()
         else:

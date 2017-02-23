@@ -1,13 +1,4 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
-# Python
-import os
-import cPickle
-import inspect
-import importlib
-
 from collections import OrderedDict
 
 # 3rd party
@@ -17,9 +8,9 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from ..layers import *
+from ..layers import dropout, tanh, get_new_layer
 from ..defaults import INT, FLOAT
-from ..nmtutils import *
+from ..nmtutils import norm_weight, invert_dictionary, load_dictionary
 from ..iterators.text import TextIterator
 from ..iterators.bitext import BiTextIterator
 from .basemodel import BaseModel
@@ -180,7 +171,7 @@ class Model(BaseModel):
 
             # Find out to which initial hypothesis idx this was belonging
             # Find out the idx of the appended word
-            trans_idxs  = ranks_flat / next_log_ps[0].shape[1]
+            trans_idxs  = ranks_flat // next_log_ps[0].shape[1]
             word_idxs   = ranks_flat % next_log_ps[0].shape[1]
 
             # Iterate over the hypotheses and add them to new_* lists
@@ -217,7 +208,7 @@ class Model(BaseModel):
             tiled_ctxs  = [np.tile(ctx, [live_beam, 1]) for ctx in text_ctxs]
 
         # dump every remaining hypotheses
-        for idx in xrange(live_beam):
+        for idx in range(live_beam):
             final_sample.append(hyp_samples[idx])
             final_score.append(hyp_scores[idx])
             final_alignments.append(hyp_alignments[idx])
@@ -428,7 +419,7 @@ class Model(BaseModel):
         cost = cost.reshape([n_timesteps_trg, n_samples])
         cost = (cost * y_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(), cost)
+        self.f_log_probs = theano.function(list(self.inputs.values()), cost)
 
         # For alpha regularization
 
@@ -509,10 +500,9 @@ class Model(BaseModel):
         next_log_probs = tensor.nnet.logsoftmax(logit)
 
         # Sample from the softmax distribution
-        next_probs = tensor.exp(next_log_probs)
-
         # NOTE: We never use sampling and it incurs performance penalty
         # let's disable it for now
+        #next_probs = tensor.exp(next_log_probs)
         #next_word = self.trng.multinomial(pvals=next_probs).argmax(1)
 
         # compile a function to do the whole thing above

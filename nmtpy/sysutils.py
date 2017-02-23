@@ -17,7 +17,7 @@ def print_summary(train_args, model_args, print_func=None):
         res = ""
         templ = '%' + str(maxlen) + 's : '
         kvs = []
-        for k,v in d.items():
+        for k,v in list(d.items()):
             if isinstance(v, list):
                 kvs.append((k, v.pop(0)))
                 for l in v:
@@ -32,8 +32,8 @@ def print_summary(train_args, model_args, print_func=None):
 
     train_args = copy.deepcopy(train_args)
     model_args = copy.deepcopy(model_args)
-    max_width = _get_max_width(train_args.__dict__.keys() +
-                               model_args.__dict__.keys())
+    max_width = _get_max_width(list(train_args.__dict__.keys()) +
+                               list(model_args.__dict__.keys()))
 
     # Add training options
     result  = 'Training options:'
@@ -178,13 +178,13 @@ def get_device(which='auto'):
     # auto favors GPU in the first place
     elif which == 'auto':
         try:
-            out = subprocess.check_output(["nvidia-smi", "-q"])
-        except OSError as oe:
+            p = subprocess.run(["nvidia-smi", "-q"], stdout=subprocess.PIPE, universal_newlines=True)
+        except FileNotFoundError as oe:
             # Binary not found, fallback to CPU
             return "cpu"
 
         # Find out about GPU usage
-        usage = ["None" in l for l in out.split("\n") if "Processes" in l]
+        usage = ["None" in l for l in p.stdout.split("\n") if "Processes" in l]
 
         try:
             # Get first unused one
@@ -193,7 +193,7 @@ def get_device(which='auto'):
             # No available GPU on this machine
             return "cpu"
 
-        lock_file = create_gpu_lock(which)
+        create_gpu_lock(which)
         return ("gpu%d" % which)
 
 def get_exp_identifier(train_args, model_args, suffix=None):

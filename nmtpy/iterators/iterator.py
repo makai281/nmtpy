@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
 import random
 
 from abc import ABCMeta, abstractmethod
@@ -10,9 +7,8 @@ from collections import OrderedDict
 import numpy as np
 from ..defaults import INT, FLOAT
 
-class Iterator(object):
+class Iterator(object, metaclass=ABCMeta):
     """Base Iterator class."""
-    __metaclass__ = ABCMeta
 
     @staticmethod
     def mask_data(seqs):
@@ -64,7 +60,7 @@ class Iterator(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         """Returns the next set of data from the iterator."""
         try:
             data = self._process_batch(next(self._iter))

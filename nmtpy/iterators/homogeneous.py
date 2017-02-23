@@ -2,7 +2,6 @@
 import numpy as np
 import copy
 
-from .iterator  import Iterator
 # Iterator that randomly fetches samples with same target
 # length to be efficient in terms of RNN underlyings.
 # Code from https://github.com/kelvinxu/arctic-captions
@@ -45,7 +44,7 @@ class HomogeneousData(object):
 
         self.len_idx = -1
 
-    def next(self):
+    def __next__(self):
         fin_unique_len = 0
         while True:
             # What is the length idx for this batch?

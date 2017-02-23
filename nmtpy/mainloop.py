@@ -97,7 +97,7 @@ class MainLoop(object):
             self.uctr += 1
 
             # Forward/backward and get loss
-            loss = self.model.train_batch(*data.values())
+            loss = self.model.train_batch(*list(data.values()))
             batch_losses.append(loss)
 
             # verbose

@@ -1,27 +1,5 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
-# Python
-import os
-import cPickle
-import inspect
-import importlib
-
-from collections import OrderedDict
-
-# 3rd party
-import numpy as np
-
-import theano
-import theano.tensor as tensor
-
-# Ours
-from ..layers import *
-from ..defaults import INT, FLOAT
-from ..nmtutils import *
 from ..iterators.wmt import WMTIterator
-
 from .attention import Model as Attention
 
 # Same model as attention but using WMTIterator

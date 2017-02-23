@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
-import cPickle
-import sys
-
-import random
-from collections import OrderedDict
-
+import pickle
 import numpy as np
 
 from ..nmtutils     import sent_to_idx
@@ -85,7 +77,7 @@ class WMTIterator(Iterator):
         # Load the corpora
         with open(self.pklfile, 'rb') as f:
             self._print('Loading pkl file...')
-            self._seqs = cPickle.load(f)
+            self._seqs = pickle.load(f)
             self._print('Done.')
 
         # Check for what is available
@@ -117,8 +109,6 @@ class WMTIterator(Iterator):
         self.n_unique_images = len(set([s[3] for s in self._seqs]))
 
         # Some statistics
-        unk_trg = 0
-        unk_src = 0
         total_src_words = []
         total_trg_words = []
 

@@ -7,7 +7,6 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 import sys
-import logging
 import argparse
 import platform
 import textwrap
@@ -195,7 +194,7 @@ if __name__ == '__main__':
     data_loss = model.build()
 
     log.info("Input tensor order: ")
-    log.info(model.inputs.values())
+    log.info(list(model.inputs.values()))
 
     if train_args.sample_freq > 0:
         log.info('Building sampler')

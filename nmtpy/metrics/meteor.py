@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
+import subprocess
 import pkg_resources
-from subprocess import check_output
 
 from ..sysutils import get_temp_file
 from .metric import Metric
@@ -59,9 +59,8 @@ class METEORScorer(object):
             # Multiple references
             cmdline.extend(["-r", str(n_refs)])
 
-        output = check_output(cmdline)
-
-        score = output.splitlines()
+        score = subprocess.run(cmdline, stdout=subprocess.PIPE,
+                               universal_newlines=True).stdout.splitlines()
         if len(score) == 0:
             return METEORScore()
         else:

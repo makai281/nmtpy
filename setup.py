@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
 import os
 import sys
 
@@ -28,8 +27,8 @@ setup(
             'Intended Audience :: Science/Research',
             'Topic :: Scientific/Engineering',
             'License :: OSI Approved :: MIT License',
-            'Programming Language :: Python :: 2 :: Only',
-            'Programming Language :: Python :: 2.7',
+            'Programming Language :: Python :: 3 :: Only',
+            'Programming Language :: Python :: 3.5',
             'Operating System :: POSIX',
             ],
         keywords='nmt neural-mt translation deep-learning',
@@ -38,7 +37,6 @@ setup(
         install_requires=[
           'numpy',
           'theano',
-          'six',
         ],
         scripts=[
                     'bin/nmt-train',

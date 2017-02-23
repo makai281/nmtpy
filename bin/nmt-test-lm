@@ -71,7 +71,7 @@ class Tester(object):
         self.model.set_dropout(False)
 
         # invert dictionary
-        self.ref_idict = dict([[v,k] for k,v in self.model.src_dict.iteritems()])
+        self.ref_idict = dict([[v,k] for k,v in self.model.src_dict.items()])
 
             # Normal test mode
         if self.src_files is not None:
@@ -104,7 +104,7 @@ class Tester(object):
         # Create processes
         self.model.build_sampler()
         self.model.build()
-        for idx in xrange(self.n_jobs):
+        for idx in range(self.n_jobs):
             self.processes[idx] = Process(target=test_model, args=(write_queue, read_queue, idx, self.model))
             self.processes[idx].start()
             cleanup.register_proc(self.processes[idx].pid)
@@ -112,7 +112,7 @@ class Tester(object):
         cleanup.register_handler()
 
         # Send data to worker processes
-        for idx in xrange(self.n_sentences):
+        for idx in range(self.n_sentences):
             sample = next(self.iterator)
             write_queue.put((idx, sample))
 
@@ -126,7 +126,7 @@ class Tester(object):
         sum_sentlen = 0
         sum_logprob = 0.
 
-        for i in xrange(self.n_sentences):
+        for i in range(self.n_sentences):
             # Get response from worker
             resp = read_queue.get()
 
@@ -146,7 +146,7 @@ class Tester(object):
 
         log.info("Test Perplexity: %.4f" % np.exp(sum_logprob/sum_sentlen))
         # Stop workers
-        for idx in xrange(self.n_jobs):
+        for idx in range(self.n_jobs):
             write_queue.put(None)
             self.processes[idx].terminate()
             cleanup.unregister_proc(self.processes[idx].pid)

@@ -57,9 +57,9 @@ ipython
 
 ```python
 ...
-In [1]: import cPickle
+In [1]: import pickle
 
-In [2]: v = cPickle.load(open('flickr_30k_align.valid.pkl'))
+In [2]: v = pickle.load(open('flickr_30k_align.valid.pkl'))
 
 In [3]: len(v)
 Out[3]: 25350

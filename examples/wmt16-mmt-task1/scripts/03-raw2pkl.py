@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-from __future__ import print_function
-from six.moves.cPickle import dump
-from six.moves import zip_longest
-
 import os
 import sys
+import pickle
 import argparse
+
+from itertools import zip_longest
 
 # Each element of the list that is pickled is in the following format:
 # [ssplit, tsplit, imgid, imgname, swords, twords]
@@ -27,7 +26,7 @@ if __name__ == '__main__':
 
     # By default each sentence maps to its relevant line in the
     # imglist file (1-1 mapping)
-    lines = range(len(imglist))
+    lines = list(range(len(imglist)))
     if args.lines:
         # Image-sentence pair mapping should be done
         # based on the 'lines retained' file (NOTE: 1-indexed file!)
@@ -44,4 +43,4 @@ if __name__ == '__main__':
         pair_id = lines[idx]
         seqs.append([None, None, pair_id, imglist[pair_id], ssent.strip().split(' '), tsent.strip().split(' ') if tsent else None])
 
-    dump(seqs, args.outfile)
+    pickle.dump(seqs, args.outfile)

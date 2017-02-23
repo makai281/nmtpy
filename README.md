@@ -97,12 +97,11 @@ This is a basic recurrent language model to be used with `nmt-test-lm` utility.
 You need the following Python libraries installed in order to use **nmtpy**:
   - numpy
   - Theano >= 0.8 (0.9.x would be better)
-  - six
 
 - We recommend using Anaconda Python distribution which is equipped with Intel MKL (Math Kernel Library) greatly
   improving CPU decoding speeds during beam search. With a correct compilation and installation, you should achieve
   similar performance with OpenBLAS as well but the setup procedure may be difficult to follow for inexperienced ones.
-- nmtpy currently **only** supports Python 2.7 but we plan to move towards Python 3 in the future.
+- nmtpy only supports Python 3, please see [pythonclock.org](http://pythonclock.org)
 - Please note that METEOR requires a **Java** runtime so `java` should be in your `$PATH`.
 
 #### Additional data for METEOR

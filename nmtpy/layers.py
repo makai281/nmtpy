@@ -4,8 +4,8 @@ import numpy as np
 import theano
 from theano import tensor
 
-from .nmtutils import *
-from .defaults import INT, FLOAT
+from .nmtutils import norm_weight, ortho_weight, pp
+from .defaults import FLOAT
 
 # Shorthands for activations
 linear  = lambda x: x

@@ -1,18 +1,15 @@
 #!/usr/bin/env python
-import cPickle
-
-from collections import OrderedDict, Counter
-from itertools import izip_longest, izip
-
-import numpy as np
-
 import os
 import re
 import sys
 import random
 import string
+import pickle
 import argparse
 
+from collections import OrderedDict, Counter
+
+import numpy as np
 # Each element of the list that is pickled is in the following format:
 # [ssplit, tsplit, imgid, imgname, swords, twords]
 
@@ -45,15 +42,15 @@ def create_dictionaries(sents, outpath, minvocab):
             for ii, ww in enumerate(sorted_words):
                 vocab[ww] = ii + 2
 
-            print "%s: %d words" % (names[i], len(vocab))
+            print("%s: %d words" % (names[i], len(vocab)))
 
-            cPickle.dump(vocab, df, -1)
+            pickle.dump(vocab, df)
 
 def process_file(fname, lowercase, strippunc):
     caps = open(fname)
     result = []
     for line in caps:
-        line = unicode(line.rstrip(), 'utf-8')
+        line = line.strip()
         if lowercase:
             line = line.lower()
 
@@ -72,7 +69,7 @@ def process_sentence_pairs(imgs, src_sents, trg_sents, sidx, tidx, clean=True,
                            minlen=3, maxlen=50, ratio=3, img_offset=0):
     pairs = []
 
-    for idx, (swords, twords) in enumerate(izip(src_sents, trg_sents)):
+    for idx, (swords, twords) in enumerate(zip(src_sents, trg_sents)):
         slen = len(swords)
         tlen = len(twords)
 
@@ -113,7 +110,7 @@ if __name__ == '__main__':
     # Load image list. This contains the order of the images
     # in the features file.
     imgs = open(args.imagelist).read().strip().split("\n")
-    print "# of images in the image list: %d" % len(imgs)
+    print("# of images in the image list: %d" % len(imgs))
 
     # Create output directory if not available
     if not os.path.exists(args.output):
@@ -133,17 +130,17 @@ if __name__ == '__main__':
     trglang = train_trg_files[0].split(".")[-1]
 
     # Print some informations
-    print "Lowercase: ", args.lowercase
-    print "Strip punctuations: ", args.strippunc
-    print "Min sentence length: %d" % args.minlen
-    print "Max sentence length: %d" % args.maxlen
-    print "Min word freq for vocab: %d" % args.minvocab
-    print "Found %d training files." % len(train_src_files)
-    print "Found %d validation files." % len(valid_src_files)
+    print("Lowercase: ", args.lowercase)
+    print("Strip punctuations: ", args.strippunc)
+    print("Min sentence length: %d" % args.minlen)
+    print("Max sentence length: %d" % args.maxlen)
+    print("Min word freq for vocab: %d" % args.minvocab)
+    print("Found %d training files." % len(train_src_files))
+    print("Found %d validation files." % len(valid_src_files))
     if len(test_src_files) > 0:
-        print "Found %d test files." % len(test_src_files)
-    print "Source language: %s" % srclang
-    print "Target language: %s" % trglang
+        print("Found %d test files." % len(test_src_files))
+    print("Source language: %s" % srclang)
+    print("Target language: %s" % trglang)
 
     assert len(train_src_files) == len(train_trg_files)
     assert len(valid_src_files) == len(valid_trg_files)
@@ -160,27 +157,27 @@ if __name__ == '__main__':
 
     # Read all sentences once, do lowercasing and strip punctuations if requested
     for f in train_src_files:
-        print f
+        print(f)
         train_src_sents.append(process_file(f, args.lowercase, args.strippunc))
 
     for f in train_trg_files:
-        print f
+        print(f)
         train_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
 
     for f in valid_src_files:
-        print f
+        print(f)
         valid_src_sents.append(process_file(f, args.lowercase, args.strippunc))
 
     for f in valid_trg_files:
-        print f
+        print(f)
         valid_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
 
     for f in test_src_files:
-        print f
+        print(f)
         test_src_sents.append(process_file(f, args.lowercase, args.strippunc))
 
     for f in test_trg_files:
-        print f
+        print(f)
         test_trg_sents.append(process_file(f, args.lowercase, args.strippunc))
 
     sent_sets = {'train' : (train_src_sents, train_trg_sents),
@@ -189,7 +186,7 @@ if __name__ == '__main__':
                 }
 
     if args.lowercase or args.strippunc:
-        print "Rewriting processed validation sentences"
+        print("Rewriting processed validation sentences")
         # Rewrite validation files as they are now processed
         suffix = ""
         if args.lowercase:
@@ -200,21 +197,21 @@ if __name__ == '__main__':
         for s in ['valid', 'test']:
             src_sents, trg_sents = sent_sets[s]
             for idx, split in enumerate(src_sents, 1):
-                with open(os.path.join(args.output, '%s.%d.tok%s.%s' % (s, idx, suffix, srclang)), 'wb') as f:
+                with open(os.path.join(args.output, '%s.%d.tok%s.%s' % (s, idx, suffix, srclang)), 'w') as f:
                     for sent in split:
-                        f.write(" ".join(sent).encode('utf-8') + '\n')
+                        f.write(" ".join(sent) + '\n')
 
             for idx, split in enumerate(trg_sents, 1):
-                with open(os.path.join(args.output, '%s.%d.tok%s.%s' % (s, idx, suffix, trglang)), 'wb') as f:
+                with open(os.path.join(args.output, '%s.%d.tok%s.%s' % (s, idx, suffix, trglang)), 'w') as f:
                     for sent in split:
-                        f.write(" ".join(sent).encode('utf-8') + '\n')
+                        f.write(" ".join(sent) + '\n')
 
     tr_sum = sum([len(spl) for spl in train_src_sents])
     vl_sum = sum([len(spl) for spl in valid_src_sents])
     ts_sum = sum([len(spl) for spl in test_src_sents])
-    print "Total number of training sentences: %d" % (tr_sum)
-    print "Total number of validation sentences: %d" % (vl_sum)
-    print "Total number of test sentences: %d" % (ts_sum)
+    print("Total number of training sentences: %d" % (tr_sum))
+    print("Total number of validation sentences: %d" % (vl_sum))
+    print("Total number of test sentences: %d" % (ts_sum))
 
     # Specific to Flickr30k
     n_train = 29000
@@ -230,24 +227,24 @@ if __name__ == '__main__':
 
     for split in ['train', 'valid', 'test']:
         do_clean = (split == 'train')
-        print "Processing %s splits" % split
+        print("Processing %s splits" % split)
         # This is the cross product of all splits
         src_sents, trg_sents, img_offset = splits[split]
         for sidx, ssentsplit in enumerate(src_sents):
-            print "%d => " % len(ssentsplit), 
+            print("%d => " % len(ssentsplit), end=' ') 
             for tidx, tsentsplit in enumerate(trg_sents):
-                print len(tsentsplit), 
+                print(len(tsentsplit), end=' ') 
                 sentences[split].extend(process_sentence_pairs(imgs, ssentsplit, tsentsplit, sidx, tidx,
                                         clean=do_clean, minlen=args.minlen, maxlen=args.maxlen, ratio=args.ratio, img_offset=img_offset))
-            print
+            print()
 
-        print "Final %s pair count: %d" % (split, len(sentences[split]))
+        print("Final %s pair count: %d" % (split, len(sentences[split])))
 
     for split in ['train', 'valid', 'test']:
         if len(sentences[split]) > 0:
-            print "Dumping %s pkl file" % split
+            print("Dumping %s pkl file" % split)
             with open(os.path.join(args.output, 'flickr_30k_align.%s.pkl' % split), 'wb') as f:
-                cPickle.dump(sentences[split], f, -1)
+                pickle.dump(sentences[split], f)
 
     # Create the dictionary with nmt-build-dict afterwards
     create_dictionaries(sentences['train'], args.output, args.minvocab)

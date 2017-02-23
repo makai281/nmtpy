@@ -2,7 +2,7 @@
 import os
 import glob
 
-from ConfigParser import RawConfigParser
+from configparser import RawConfigParser
 from argparse import Namespace
 from ast import literal_eval
 
@@ -42,7 +42,7 @@ def _get_section_dict(l):
 
 def _update_dict(d, defs):
     """Update d with key-values from defs IF key misses from d."""
-    for k,v in defs.items():
+    for k,v in list(defs.items()):
         if k not in d:
             d[k] = v
     return d
@@ -60,11 +60,10 @@ class Config(RawConfigParser, object):
 
         # dict that will override
         # this can contain both model and training args unfortunately.
-        self._override  = _get_section_dict(override.items()) \
+        self._override  = _get_section_dict(list(override.items())) \
                                 if override else {}
 
         # Parse the file, raise if error
-        parsed = self.read(filename)
         if len(self.read(filename)) == 0:
             raise Exception('Could not parse configuration file.')
 
@@ -80,7 +79,7 @@ class Config(RawConfigParser, object):
         trdict = _update_dict(trdict, self._trdefs)
         mddict = _update_dict(mddict, self._mddefs)
 
-        for key, value in self._override.items():
+        for key, value in list(self._override.items()):
             assert not (key in trdict and key in mddict)
             if key in trdict:
                 trdict[key] = value

@@ -31,5 +31,5 @@ if __name__ == '__main__':
             # Override
             newfilename = npzf
 
-        print 'Writing %s' % newfilename
+        print('Writing %s' % newfilename)
         np.savez(newfilename, tparams=npz['tparams'], opts=opts)

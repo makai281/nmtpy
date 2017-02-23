@@ -6,6 +6,7 @@ Computes the BLEU, ROUGE, METEOR, and CIDER
 using the COCO metrics scripts
 """
 import argparse
+from collections import OrderedDict
 
 # Script taken and adapted from Kelvin Xu's arctic-captions project
 # https://github.com/kelvinxu/arctic-captions
@@ -16,13 +17,11 @@ from nmtpy.cocoeval.cider.cider     import Cider
 from nmtpy.cocoeval.meteor.meteor   import Meteor
 
 def load_textfiles(references, hypothesis):
-    print "The number of references is {}".format(len(references))
-
     # Read hypotheses into hypo dict
     hypo = {idx: [lines.strip()] for (idx, lines) in enumerate(hypothesis)}
 
     # take out newlines before creating dictionary
-    raw_refs = [map(str.strip, r) for r in zip(*references)]
+    raw_refs = [list(map(str.strip, r)) for r in zip(*references)]
     refs = {idx: rr for idx, rr in enumerate(raw_refs)}
 
     # sanity check that we have the same number of references as hypothesis
@@ -33,44 +32,37 @@ def load_textfiles(references, hypothesis):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Compute BLEU, METEOR, ROUGE and Cider for single or multiple references.")
 
-    parser.add_argument("-p", "--pretty",   action='store_true',            help='Dump results in a pretty way.')
     parser.add_argument("-w", "--write",    action='store_true',            help='Create a score file containing the results.')
     parser.add_argument("-l", "--language", default='en',                   help='Sentence language (default: en)')
     parser.add_argument("hypothesis",       type=argparse.FileType('r'),    help="The hypothesis file")
     parser.add_argument("references",       type=argparse.FileType('r'),    help="Path to all the reference files", nargs='+')
 
     args = parser.parse_args()
-    print "Language: %s" % args.language
+    print("Language: %s" % args.language)
+    print("The number of references is {}".format(len(args.references)))
     ref, hypo = load_textfiles(args.references, args.hypothesis)
 
     # List of scorers
     scorers = [
         (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
-        (Meteor(args.language), "METEOR"),
-        (Meteor(args.language, norm=True), "METEOR(norm)"),
-        (Rouge(), "ROUGE_L"),
-        (Cider(), "CIDEr")
+        (Meteor(args.language), ["METEOR"]),
+        (Meteor(args.language, norm=True), ["METEOR(norm)"]),
+        (Cider(), ["CIDEr"]),
+        (Rouge(), ["ROUGE_L"]),
     ]
 
-    result = {}
+    result = OrderedDict()
 
     for scorer, method in scorers:
-        score, scores = scorer.compute_score(ref, hypo)
-        if score is None:
-            continue
-        if type(score) == list:
+        score, _ = scorer.compute_score(ref, hypo)
+        if score:
+            if not isinstance(score, list):
+                score = [score]
             for m, s in zip(method, score):
-                result[m] = s
-        else:
-            result[method] = score
+                result[m] = float('%.4f' % s)
 
     if args.write:
         with open("%s.score" % args.hypothesis.name, 'w') as f:
             f.write("%s\n" % result)
 
-    if args.pretty:
-        for metric in sorted(result.keys()):
-            print "%s: %3.5f" % (metric, result[metric]),
-        print
-    else:
-        print result
+    print(result)

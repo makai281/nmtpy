@@ -4,10 +4,9 @@ import numpy as np
 
 import theano
 import theano.tensor as tensor
-# Ours
-from ..layers import *
+from ..layers import tanh, get_new_layer
 from ..defaults import INT, FLOAT
-from ..nmtutils import *
+from ..nmtutils import load_dictionary, norm_weight
 from ..iterators.text import TextIterator
 
 from .basemodel import BaseModel
@@ -132,11 +131,11 @@ class Model(BaseModel):
         cost = (cost * x_mask)
 
         #f_log_probs_detailled return the log probs array correponding to each word log probs
-        self.f_log_probs_detailled = theano.function(self.inputs.values(), cost)
+        self.f_log_probs_detailled = theano.function(list(self.inputs.values()), cost)
         cost = (cost * x_mask).sum(0)
 
         #f_log_probs return the sum of the sentence log probs
-        self.f_log_probs = theano.function(self.inputs.values(), cost)
+        self.f_log_probs = theano.function(list(self.inputs.values()), cost)
 
         return cost.mean()
 
@@ -146,13 +145,13 @@ class Model(BaseModel):
              #Training validation
              for data in self.valid_iterator:
                  norm = data['y_mask'].sum(0)
-                 log_probs = sum(self.f_log_probs(*data.values())) / norm
+                 log_probs = sum(self.f_log_probs(*list(data.values()))) / norm
                  probs.extend(log_probs)
              return np.array(probs).mean()
          else:
              #lm testing one sentence at the time
              norm = sentence['y_mask'].sum(0)
-             log_probs = self.f_log_probs_detailled(*sentence.values())
+             log_probs = self.f_log_probs_detailled(*list(sentence.values()))
              probs.extend(log_probs)
              return np.array(probs), norm
 
@@ -196,10 +195,10 @@ class Model(BaseModel):
         sample_score = 0
 
         # initial token is indicated by a -1 and initial state is zero
-        next_w = -1 * numpy.ones((1,)).astype(INT)
-        next_state = numpy.zeros((1, options['dim'])).astype(FLOAT)
+        next_w = -1 * np.ones((1,)).astype(INT)
+        next_state = np.zeros((1, options['dim'])).astype(FLOAT)
 
-        for ii in xrange(maxlen):
+        for ii in range(maxlen):
             inps = [next_w, next_state]
             ret = f_next(*inps)
             next_p, next_w, next_state = ret[0], ret[1], ret[2]
@@ -213,5 +212,5 @@ class Model(BaseModel):
             if nw == 0:
                 break
 
-
+        # FIXME: This is broken
         return sample, sample_score, sample_scores, curr_loss, maxlen
