@@ -12,7 +12,7 @@ from itertools import zip_longest
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='prepare')
 
-    parser.add_argument('-o', '--outfile', help='Output file name',     required=True, type=argparse.FileType('w'))
+    parser.add_argument('-o', '--outfile', help='Output file name',     required=True, type=argparse.FileType('wb'))
     parser.add_argument('-i', '--imglist', help='Image list file',      required=True, type=argparse.FileType('r'))
     parser.add_argument('-s', '--source', help="Source sentence file",  required=True, type=argparse.FileType('r'))
     parser.add_argument('-t', '--target', help="Target sentence file",  default=[],    type=argparse.FileType('r'))
