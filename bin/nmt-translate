@@ -266,20 +266,8 @@ class Translator(object):
             if attw is not None:
                 self.att_weights[sample_idx] = attw[0]
 
-            outs = []
-
-            for hyp in hyps:
-                hyp = idx_to_sent(self.trg_idict, hyp)
-
-                # Apply post-processing filters like compound stitching
-                for filt in self.filters:
-                    hyp = filt(hyp)
-
-               # Append the actual hypothesis
-                outs.append(hyp)
-
             # Place the hypotheses into their relevant places
-            self.trans[sample_idx] = outs
+            self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps]
 
             # Print progress
             if (i+1) % 100 == 0:
@@ -307,6 +295,15 @@ class Translator(object):
             cleanup.unregister_proc(self.processes[pidx].pid)
 
     def write_hyps(self, filename, dump_scores=False):
+        # Apply post-processing filters like compound stitching
+        for i in range(len(self.trans)):
+            # List of hyps (length 1 if nbest==1) per source sentence
+            for j in range(len(self.trans[i])):
+                inp = self.trans[i][j]
+                for filt in self.filters:
+                    inp = filt(inp)
+                self.trans[i][j] = inp
+
         # Write file
         with open(filename, 'w') as f:
             if self.mode == "forced" or dump_scores:
