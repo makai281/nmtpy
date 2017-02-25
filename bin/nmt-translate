@@ -171,9 +171,6 @@ class Translator(object):
                 if 'valid_img' in self.models[0].data:
                     self.models[0].data['valid_img'] = self.src_files[1]
 
-                if self.ref_files is not None:
-                    self.models[0].data['valid_trg'] = self.ref_files
-
             # Initialize model's validation data iterator
             # NOTE: data_mode is for best-source-selection decoding for multimodal systems
             if 'data_mode' in inspect.getargspec(self.models[0].load_valid_data).args:
@@ -192,8 +189,6 @@ class Translator(object):
                 # All sentences
                 self.n_sentences = self.iterator.n_samples
 
-            log.info('I will translate %d samples' % self.n_sentences)
-
             # Assume validation data encoded in the model
             if self.src_files is None:
                 log.info("No test data given, assuming validation dataset.")
@@ -208,6 +203,8 @@ class Translator(object):
                     self.ref_files = listify(self.models[0].data['valid_trg_orig'])
                 else:
                     self.ref_files = listify(self.models[0].valid_ref_files)
+
+            log.info('I will translate %d samples' % self.n_sentences)
 
         # Print information
         log.info("Source file(s)")
