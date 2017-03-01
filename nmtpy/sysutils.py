@@ -182,7 +182,7 @@ def get_device(which='auto'):
     # auto favors GPU in the first place
     elif which == 'auto':
         try:
-            p = subprocess.run(["nvidia-smi", "-q"], stdout=subprocess.PIPE, universal_newlines=True)
+            p = subprocess.run(["nvidia-smi", "-q", "-d", "PIDS"], stdout=subprocess.PIPE, universal_newlines=True)
         except FileNotFoundError as oe:
             # Binary not found, fallback to CPU
             return "cpu"

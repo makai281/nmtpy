@@ -144,7 +144,7 @@ def param_init_conv(params, input_shape, filter_shape, scale='he', prefix='conv'
     n_inp_chan, n_inp_row, n_in_col = input_shape
     n_out_chan, n_inp_chan, n_filt_row, n_filt_col = filter_shape
 
-    W = norm_weight(n_filt_row*n_filt_col*n_inp_chan, n_out_chan, scale=0.01)
+    W = norm_weight(n_filt_row*n_filt_col*n_inp_chan, n_out_chan, scale=scale)
     # Conv layer weights as 4D tensor
     params[pp(prefix, 'W')] = W.reshape((n_out_chan, n_inp_chan, n_filt_row, n_filt_col))
     # 1 bias per output channel
@@ -154,10 +154,10 @@ def param_init_conv(params, input_shape, filter_shape, scale='he', prefix='conv'
 
 def conv_layer(tparams, state_below, prefix='conv', activ='relu'):
     # state_below shape should be bc01
-    out = tensor.nnet.conv2d(state_below, tparams[pp(prefix, 'W')],
-                             border_mode='valid')
-    # We have 4D output activations: bc01
-    return eval(activ) (out + tparams[pp(prefix, 'b')][None, :, None, None])
+    return eval(activ) (
+        tensor.nnet.conv2d(state_below, tparams[pp(prefix, 'W')], border_mode='valid') +
+        tparams[pp(prefix, 'b')][None, :, None, None]
+        )
 
 #####################################################################
 # feedforward layer: affine transformation + point-wise nonlinearity
