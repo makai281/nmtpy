@@ -26,6 +26,7 @@ TRAIN_DEFAULTS = {
         'valid_njobs':        16,             # # of parallel CPU tasks to do beam-search
         'valid_beam':         12,             # Allow changing beam size during validation
         'valid_freq':         0,              # 0: End of epochs
+        'valid_save_hyp':     False,          # Save each output of validation to separate files
         'sample_freq':        0,              # Sampling frequency during training (0: disabled)
-        'save_iter':          False,          # Save each best valid weights to separate file
+        'save_iter':          False,          # Save each best valid weights to separate files
         }

@@ -129,10 +129,14 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode='single'):
+def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode='single', f_valid_out=None):
     """Run nmt-translate for validation during training."""
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
            "-j", str(n_jobs), "-m", save_path, "-M", metric, "-v", valid_mode]
+
+    if f_valid_out is not None:
+        #print("run valid with -o ", f_valid_out, " , should save !", file=stderr)
+        cmd.extend(["-o", f_valid_out])
 
     # nmt-translate will print a dict of metrics
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=sys.stdout)
