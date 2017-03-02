@@ -3,14 +3,13 @@
 # Acknowledge Michael Denkowski for the generous discussion and help 
 
 import os
-import sys
-import subprocess
 import threading
+import subprocess
 import pkg_resources
 
 METEOR_JAR = pkg_resources.resource_filename('nmtpy', 'external/meteor-1.5.jar')
 
-class Meteor:
+class Meteor(object):
     def __init__(self, language, norm=False):
         self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, '-', '-', '-stdio', '-l', language]
         self.env = os.environ
@@ -21,7 +20,7 @@ class Meteor:
 
         self.meteor_p = subprocess.Popen(self.meteor_cmd, stdin=subprocess.PIPE, \
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        env=self.env)
+                                        env=self.env, universal_newlines=True, bufsize=1)
         # Used to guarantee thread safety
         self.lock = threading.Lock()
 
@@ -29,18 +28,24 @@ class Meteor:
         return "METEOR"
 
     def compute_score(self, gts, res):
-        imgIds = sorted(gts.keys())
+        imgIds = sorted(list(gts.keys()))
         scores = []
 
         eval_line = 'EVAL'
         self.lock.acquire()
         for i in imgIds:
             assert(len(res[i]) == 1)
-            stat = self._stat(res[i][0], gts[i])
+
+            hypothesis_str = res[i][0].replace('|||', '').replace('  ', ' ')
+            score_line = ' ||| '.join(('SCORE', ' ||| '.join(gts[i]), hypothesis_str))
+
+            # We obtained --> SCORE ||| reference 1 words ||| reference n words ||| hypothesis words
+            self.meteor_p.stdin.write(score_line + '\n')
+            stat = self.meteor_p.stdout.readline().strip()
             eval_line += ' ||| {}'.format(stat)
 
         # Send to METEOR
-        self.meteor_p.stdin.write('{}\n'.format(eval_line))
+        self.meteor_p.stdin.write(eval_line + '\n')
 
         # Collect segment scores
         for i in range(len(imgIds)):
@@ -52,13 +57,6 @@ class Meteor:
         self.lock.release()
 
         return final_score, scores
-
-    def _stat(self, hypothesis_str, reference_list):
-        hypothesis_str = hypothesis_str.replace('|||', '').replace('  ', ' ')
-        score_line = ' ||| '.join(('SCORE', ' ||| '.join(reference_list), hypothesis_str))
-        # We obtained --> SCORE ||| reference 1 words ||| reference n words ||| hypothesis words
-        self.meteor_p.stdin.write('{}\n'.format(score_line))
-        return self.meteor_p.stdout.readline().strip()
 
     def __del__(self):
         self.lock.acquire()

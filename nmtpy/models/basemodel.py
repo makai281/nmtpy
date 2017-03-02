@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
-import os
-import inspect
 import importlib
 
 from collections import OrderedDict
@@ -16,20 +11,19 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import numpy as np
 from ..nmtutils import unzip, get_param_dict
-from ..sysutils import *
+from ..sysutils import readable_size, get_temp_file, get_valid_evaluation
 from ..defaults import INT, FLOAT
 
 #######################################
 ## For debugging function input outputs
 def inspect_inputs(i, node, fn):
-    print '>> Inputs: ', i, node, [input[0] for input in fn.inputs]
+    print('>> Inputs: ', i, node, [input[0] for input in fn.inputs])
 
 def inspect_outputs(i, node, fn):
-    print '>> Outputs: ', i, node, [input[0] for input in fn.outputs]
+    print('>> Outputs: ', i, node, [input[0] for input in fn.outputs])
 #######################################
 
-class BaseModel(object):
-    __metaclass__ = ABCMeta
+class BaseModel(object, metaclass=ABCMeta):
     def __init__(self, **kwargs):
         # Merge incoming parameters
         self.__dict__.update(kwargs)
@@ -103,7 +97,7 @@ class BaseModel(object):
         self.tparams = OrderedDict()
 
         params = get_param_dict(fname)
-        for k,v in params.iteritems():
+        for k,v in params.items():
             self.tparams[k] = theano.shared(v, name=k)
 
     def init_shared_variables(self, _from=None):
@@ -114,7 +108,7 @@ class BaseModel(object):
         if self.tparams is None:
             # tparams is None for the first call
             self.tparams = OrderedDict()
-            for kk, pp in _from.iteritems():
+            for kk, pp in _from.items():
                 self.tparams[kk] = theano.shared(_from[kk], name=kk)
         else:
             # Already initialized the params, override them
@@ -131,7 +125,7 @@ class BaseModel(object):
             # Don't fail if data doesn't contain y_mask. The loss won't
             # be normalized but the training will continue
             norm = data['y_mask'].sum(0) if 'y_mask' in data else 1
-            log_probs = self.f_log_probs(*data.values()) / norm
+            log_probs = self.f_log_probs(*list(data.values())) / norm
             probs.extend(log_probs)
 
         return np.array(probs).mean()
@@ -140,7 +134,7 @@ class BaseModel(object):
         """Return l2 weight decay regularization term."""
         decay_c = theano.shared(np.float64(decay_c).astype(FLOAT), name='decay_c')
         weight_decay = 0.
-        for kk, vv in self.tparams.iteritems():
+        for kk, vv in self.tparams.items():
             # Skip biases for L2 regularization
             if not skip_bias or (skip_bias and vv.get_value().ndim > 1):
                 weight_decay += (vv ** 2).sum()
@@ -187,7 +181,7 @@ class BaseModel(object):
 
         # Get gradients of cost with respect to variables
         # This uses final_cost which is not normalized w.r.t sentence lengths
-        grads = tensor.grad(final_cost, wrt=tparams.values())
+        grads = tensor.grad(final_cost, wrt=list(tparams.values()))
 
         # Clip gradients if requested
         if clip_c > 0:
@@ -205,14 +199,14 @@ class BaseModel(object):
 
         # Compile forward/backward function
         if debug:
-            self.train_batch = theano.function(self.inputs.values(), norm_cost, updates=updates,
+            self.train_batch = theano.function(list(self.inputs.values()), norm_cost, updates=updates,
                                                mode=theano.compile.MonitorMode(
                                                    pre_func=inspect_inputs,
                                                    post_func=inspect_outputs))
         else:
-            self.train_batch = theano.function(self.inputs.values(), norm_cost, updates=updates)
+            self.train_batch = theano.function(list(self.inputs.values()), norm_cost, updates=updates)
 
-    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', valid_mode='single'):
+    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', valid_mode='single', f_valid_out=None):
         """Save model under /tmp for passing it to nmt-translate."""
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
@@ -222,7 +216,8 @@ class BaseModel(object):
                                           n_jobs=n_jobs,
                                           metric=metric,
                                           mode=mode,
-                                          valid_mode=valid_mode)
+                                          valid_mode=valid_mode,
+                                          f_valid_out=f_valid_out)
 
         return result
 
@@ -239,14 +234,14 @@ class BaseModel(object):
             target = input_dict.pop("y_true")
             maxlen = len(target)
 
-        inputs = input_dict.values()
+        inputs = list(input_dict.values())
 
         next_state, ctx0 = self.f_init(*inputs)
 
         # Beginning-of-sentence indicator is -1
         next_word = np.array([-1], dtype=INT)
 
-        for ii in xrange(maxlen):
+        for ii in range(maxlen):
             # Get next states
             next_log_p, next_word, next_state = self.f_next(*[next_word, ctx0, next_state])
 

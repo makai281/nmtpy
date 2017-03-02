@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from six.moves import zip
 import numpy as np
 
 import theano

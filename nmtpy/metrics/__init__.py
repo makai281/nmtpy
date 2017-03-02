@@ -1,5 +1,5 @@
-from bleu   import MultiBleuScorer
-from meteor import METEORScorer
+from .bleu   import MultiBleuScorer
+from .meteor import METEORScorer
 
 def get_scorer(scorer):
     scorers = {

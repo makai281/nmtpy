@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
 import random
-import cPickle
+import pickle
 from collections import OrderedDict
 
 import numpy as np
 
-from ..nmtutils import idx_to_sent, load_dictionary
-from ..defaults import INT, FLOAT
 from .iterator import Iterator
 
 class FlickrIterator(object):
@@ -66,8 +61,8 @@ class FlickrIterator(object):
             return idxs
 
         ##############
-        with open(self.pkl_file) as f:
-            d = cPickle.load(f)
+        with open(self.pkl_file, 'rb') as f:
+            d = pickle.load(f)
 
         self.feats = d['feats']
 
@@ -103,8 +98,8 @@ class FlickrIterator(object):
             random.shuffle(self.__seqs)
 
         self.__minibatches = []
-        batches = [xrange(i, min(i+self.batch_size, self.n_samples)) \
-                for i in range(0, self.n_samples, self.batch_size)]
+        batches = [list(range(i, min(i+self.batch_size, self.n_samples))) \
+                        for i in range(0, self.n_samples, self.batch_size)]
 
         for idxs in batches:
             x = np.vstack(self.feats[self.__seqs[i][0]] for i in idxs)
@@ -113,7 +108,7 @@ class FlickrIterator(object):
 
         self.__iter = iter(self.__minibatches)
 
-    def next(self):
+    def __next__(self):
         try:
             data = next(self.__iter)
         except StopIteration as si:

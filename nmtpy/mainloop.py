@@ -6,7 +6,7 @@ import time
 import os
 
 class MainLoop(object):
-    def __init__(self, model, logger, train_args):
+    def __init__(self, model, logger, train_args, model_args):
         # model instance
         self.model          = model
         # logger
@@ -33,10 +33,14 @@ class MainLoop(object):
         self.beam_size      = train_args.valid_beam
         self.njobs          = train_args.valid_njobs
         self.f_valid        = train_args.valid_freq
+        self.valid_save_hyp = train_args.valid_save_hyp  #save validations outputs
         self.f_sample       = train_args.sample_freq
         self.f_verbose      = 10
         self.do_sampling    = self.f_sample > 0
         self.do_beam_search = self.valid_metric != 'px'
+
+        self.save_path      = model_args.save_path
+
 
         # NOTE: This is relevant only for fusion models + WMTIterator
         self.valid_mode     = 'single'
@@ -97,7 +101,7 @@ class MainLoop(object):
             self.uctr += 1
 
             # Forward/backward and get loss
-            loss = self.model.train_batch(*data.values())
+            loss = self.model.train_batch(*list(data.values()))
             batch_losses.append(loss)
 
             # verbose
@@ -191,13 +195,15 @@ class MainLoop(object):
             self._print("Validation %2d - loss = %5.5f (PPL: %4.5f)" % (self.vctr, cur_loss, ppl))
 
             metric = None
+            f_valid_out = None if self.valid_save_hyp is False else "{0}.{1:03d}".format(self.save_path, self.vctr)
             # Are we doing translation?
             if self.do_beam_search:
                 metric_str, metric = self.model.run_beam_search(beam_size=self.beam_size,
                                                                 n_jobs=self.njobs,
                                                                 metric=self.valid_metric,
                                                                 mode='beamsearch',
-                                                                valid_mode=self.valid_mode)
+                                                                valid_mode=self.valid_mode,
+                                                                f_valid_out=f_valid_out)
 
                 self._print("Validation %2d - %s" % (self.vctr, metric_str))
 

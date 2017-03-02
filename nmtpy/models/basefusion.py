@@ -1,13 +1,4 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
-# Python
-import os
-import copy
-import cPickle
-import importlib
-
 from collections import OrderedDict
 
 # 3rd party
@@ -17,9 +8,9 @@ import theano
 import theano.tensor as tensor
 
 # Ours
-from ..layers import *
+from ..layers import dropout, get_new_layer, tanh
 from ..defaults import INT, FLOAT
-from ..nmtutils import *
+from ..nmtutils import norm_weight
 from ..iterators.wmt import WMTIterator
 
 from .attention import Model as Attention
@@ -291,7 +282,7 @@ class Model(Attention):
         cost = cost.reshape([n_timesteps_trg, n_samples])
         cost = (cost * y_mask).sum(0)
 
-        self.f_log_probs = theano.function(self.inputs.values(), cost)
+        self.f_log_probs = theano.function(list(self.inputs.values()), cost)
 
         return cost
 

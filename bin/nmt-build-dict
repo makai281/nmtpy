@@ -3,9 +3,8 @@
 
 import os
 import sys
-import sqlite3
 import argparse
-import cPickle as pkl
+import pickle as pkl
 from collections import OrderedDict
 
 import numpy as np
@@ -21,10 +20,10 @@ def create_dict(sentences, min_freq, output_file):
             word_freqs[w] += 1
 
         if (idx+1) % 10000 == 0:
-            print '\r%d/%d processed' % (idx + 1, l_sentences),
+            print('\r%d/%d processed' % (idx + 1, l_sentences), end=' ')
             sys.stdout.flush()
 
-    print
+    print()
 
     # Remove already available <eos> and <unk> if any
     if '<eos>' in word_freqs:
@@ -32,20 +31,20 @@ def create_dict(sentences, min_freq, output_file):
     if '<unk>' in word_freqs:
         del word_freqs['<unk>']
 
-    words = word_freqs.keys()
-    freqs = np.array(word_freqs.values())
+    words = list(word_freqs.keys())
+    freqs = np.array(list(word_freqs.values()))
 
     # Some heuristic to warn against non-tokenized data
     if "." not in words or "," not in words:
-        print "(You can ignore this if the input doesn't contain punctuations.)"
-        print "WARNING: Check that the input data is tokenized!"
+        print("(You can ignore this if the input doesn't contain punctuations.)")
+        print("WARNING: Check that the input data is tokenized!")
 
     # Sort in descending order of frequency
     sorted_idx = np.argsort(freqs)
     sorted_words = [words[ii] for ii in \
                     sorted_idx[::-1] if freqs[ii] >= min_freq]
 
-    print "# of unique words in %s: %d" % (filename, len(sorted_words))
+    print("# of unique words in %s: %d" % (filename, len(sorted_words)))
 
     worddict = OrderedDict()
     worddict['<eos>'] = 0
@@ -55,7 +54,7 @@ def create_dict(sentences, min_freq, output_file):
     for ii, ww in enumerate(sorted_words):
         worddict[ww] = ii + 2
 
-    print "Dumping vocabulary (%d tokens) to %s..." % (len(worddict), output_file)
+    print("Dumping vocabulary (%d tokens) to %s..." % (len(worddict), output_file))
     with open(output_file, 'wb') as f:
         pkl.dump(worddict, f)
 
@@ -75,26 +74,11 @@ if __name__ == '__main__':
         vocab_fname = os.path.join(args.output_dir, vocab_fname)
 
         sentences = []
-        if filename.endswith('sql'):
-            conn = sqlite3.connect(args.files[0])
-            cur = conn.cursor()
-            # read all data once
-            print 'Fetching all rows from database...'
-            sentences = cur.execute('SELECT src,trg from data').fetchall()
-            conn.close()
-            srcs = []
-            trgs = []
-            for s in sentences:
-                srcs.append(s[0])
-                trgs.append(s[1])
-            create_dict(srcs, args.min_freq, vocab_fname + '_src.pkl')
-            create_dict(trgs, args.min_freq, vocab_fname + '_trg.pkl')
-        else:
-            print "Reading file %s" % filename
-            with open(filename) as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        sentences.append(line)
+        print("Reading file %s" % filename)
+        with open(filename) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    sentences.append(line)
 
-        create_dict(sentences, args.min_freq, vocab_fname + '.pkl')
+        create_dict(sentences, args.min_freq, vocab_fname + '.vocab.pkl')

@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-import cPickle
+import pickle
 
 from collections import OrderedDict
 from .defaults import INT, FLOAT
 
 def invert_dictionary(d):
-    return OrderedDict([(v,k) for k,v in d.iteritems()])
+    return OrderedDict([(v,k) for k,v in d.items()])
 
 def load_dictionary(fname):
-    with open(fname, "rb") as f:
-        vocab = cPickle.load(f)
+    with open(fname, 'rb') as f:
+        vocab = pickle.load(f)
 
     return vocab, invert_dictionary(vocab)
 
@@ -39,13 +39,13 @@ def sent_to_idx(vocab, tokens, limit=0):
 
 # push parameters to Theano shared variables
 def zipp(params, tparams):
-    for kk, vv in params.iteritems():
+    for kk, vv in params.items():
         tparams[kk].set_value(vv)
 
 # pull parameters from Theano shared variables
 def unzip(zipped):
     new_params = OrderedDict()
-    for kk, vv in zipped.iteritems():
+    for kk, vv in zipped.items():
         new_params[kk] = vv.get_value()
     return new_params
 

@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
-
-from collections import OrderedDict
-
-import random
 import numpy as np
 
 from ..sysutils import fopen
@@ -35,7 +29,7 @@ class TextIterator(Iterator):
 
                 # Skip empty lines
                 if line == "":
-                    print 'Warning: empty line in %s' % self.__file
+                    print('Warning: empty line in %s' % self.__file)
                 else:
                     line = line.split(" ")
 

@@ -10,7 +10,6 @@ import os
 import sys
 import time
 import json
-import atexit
 import inspect
 import argparse
 import importlib
@@ -21,7 +20,6 @@ from collections import OrderedDict
 import numpy as np
 
 from nmtpy.logger           import Logger
-from nmtpy.config           import Config
 from nmtpy.metrics          import get_scorer
 from nmtpy.nmtutils         import idx_to_sent
 from nmtpy.textutils        import reduce_to_best
@@ -45,7 +43,7 @@ def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks
     if mode == "beamsearch":
         f_inits     = [m.f_init for m in models]
         f_nexts     = [m.f_next for m in models]
-        func_call = 'beam_search(data_dict.values(), f_inits, f_nexts, beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
+        func_call = 'beam_search(list(data_dict.values()), f_inits, f_nexts, beam_size=beam_size, get_att_alphas=%s, suppress_unks=%s)' % (get_att_alphas, suppress_unks)
 
     elif mode in ["forced", "sample"]:
         func_call = 'model.gen_sample(data_dict)'
@@ -99,7 +97,6 @@ class Translator(object):
         self.get_att_alphas = self.export
 
         # Fetch other arguments
-        self.utf8           = False
         self.first          = args.first
         self.nbest          = args.nbest
         self.seed           = args.seed
@@ -149,10 +146,6 @@ class Translator(object):
         # Get inverted dictionary from the model itself
         self.trg_idict = self.models[0].trg_idict
 
-        # Be compatible for both utf-8 and normal dictionaries
-        if isinstance(self.trg_idict[2], unicode):
-            self.utf8 = True
-
         #######################################################
         # Forced decoding/NMT rescoring for given src/trg pairs
         #######################################################
@@ -178,9 +171,6 @@ class Translator(object):
                 if 'valid_img' in self.models[0].data:
                     self.models[0].data['valid_img'] = self.src_files[1]
 
-                if self.ref_files is not None:
-                    self.models[0].data['valid_trg'] = self.ref_files
-
             # Initialize model's validation data iterator
             # NOTE: data_mode is for best-source-selection decoding for multimodal systems
             if 'data_mode' in inspect.getargspec(self.models[0].load_valid_data).args:
@@ -199,8 +189,6 @@ class Translator(object):
                 # All sentences
                 self.n_sentences = self.iterator.n_samples
 
-            log.info('I will translate %d samples' % self.n_sentences)
-
             # Assume validation data encoded in the model
             if self.src_files is None:
                 log.info("No test data given, assuming validation dataset.")
@@ -215,6 +203,8 @@ class Translator(object):
                     self.ref_files = listify(self.models[0].data['valid_trg_orig'])
                 else:
                     self.ref_files = listify(self.models[0].valid_ref_files)
+
+            log.info('I will translate %d samples' % self.n_sentences)
 
         # Print information
         log.info("Source file(s)")
@@ -232,7 +222,7 @@ class Translator(object):
         read_queue  = Queue()
 
         # Create processes
-        for idx in xrange(self.n_jobs):
+        for idx in range(self.n_jobs):
             self.processes[idx] = Process(target=translate_model,
                                           args=(write_queue, read_queue, idx, self.models, self.beam_size,
                                           self.nbest, self.suppress_unks, self.get_att_alphas,
@@ -244,7 +234,7 @@ class Translator(object):
         cleanup.register_handler()
 
         # Send data to worker processes
-        for idx in xrange(self.n_sentences):
+        for idx in range(self.n_sentences):
             write_queue.put((idx, next(self.iterator)))
 
         log.info("Distributed %d sentences to worker processes." % self.n_sentences)
@@ -259,7 +249,7 @@ class Translator(object):
         # Performance computation stuff
         start_time = per100_time = time.time()
 
-        for i in xrange(self.n_sentences):
+        for i in range(self.n_sentences):
             # Get response from worker
             resp = read_queue.get()
 
@@ -273,20 +263,8 @@ class Translator(object):
             if attw is not None:
                 self.att_weights[sample_idx] = attw[0]
 
-            outs = []
-
-            for hyp in hyps:
-                hyp = idx_to_sent(self.trg_idict, hyp)
-
-                # Apply post-processing filters like compound stitching
-                for filt in self.filters:
-                    hyp = filt(hyp)
-
-               # Append the actual hypothesis
-                outs.append(hyp)
-
             # Place the hypotheses into their relevant places
-            self.trans[sample_idx] = outs
+            self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps]
 
             # Print progress
             if (i+1) % 100 == 0:
@@ -308,27 +286,33 @@ class Translator(object):
             log.info("~%d words / sec" % word_per_sec)
 
         # Stop workers
-        for pidx in xrange(self.n_jobs):
+        for pidx in range(self.n_jobs):
             write_queue.put(None)
             self.processes[pidx].terminate()
             cleanup.unregister_proc(self.processes[pidx].pid)
 
     def write_hyps(self, filename, dump_scores=False):
-        def __encode(s):
-            return s.encode('utf-8') if self.utf8 else s
+        # Apply post-processing filters like compound stitching
+        for i in range(len(self.trans)):
+            # List of hyps (length 1 if nbest==1) per source sentence
+            for j in range(len(self.trans[i])):
+                inp = self.trans[i][j]
+                for filt in self.filters:
+                    inp = filt(inp)
+                self.trans[i][j] = inp
 
         # Write file
         with open(filename, 'w') as f:
             if self.mode == "forced" or dump_scores:
                 # We have a single hypothesis and a score for each sentence
                 for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
-                    f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc)))
+                    f.write("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc))
 
             elif self.nbest > 1:
                 # We have n hypotheses and n scores for each sentence
                 for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
                     for tr, sc in zip(trs, scs):
-                        f.write(__encode("%d ||| %s ||| %.6f\n" % (idx, tr, sc)))
+                        f.write("%d ||| %s ||| %.6f\n" % (idx, tr, sc))
             else:
                 if self.valid_mode == 'pairs':
                     # Pick the best hyp out of all source sentences for a single image
@@ -337,7 +321,7 @@ class Translator(object):
                 # Prepare and dump
                 self.hyps = [s[0] for s in self.trans]
                 hyps = "\n".join(self.hyps) + "\n"
-                f.write(__encode(hyps))
+                f.write(hyps)
 
     def compute_metrics(self, hyp_file, scorers):
         """Computes evaluation metrics for the hypotheses."""
@@ -372,7 +356,6 @@ class Translator(object):
         # Open reference files
         all_refs = [open(f).read().strip().split("\n") for f in self.ref_files]
         n_refs = len(all_refs)
-        n_samples = len(all_refs[0])
 
         mult_source = False
         if len(all_refs[0]) != len(srcs):
@@ -422,7 +405,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.decoder == "forced" and (args.src_files is None or args.ref_files is None):
-        print "Error: Forced decoding requires that you give src and ref files explicitly."
+        print("Error: Forced decoding requires that you give src and ref files explicitly.")
         sys.exit(1)
 
     if args.n_jobs == 0:
@@ -467,6 +450,6 @@ if __name__ == "__main__":
         # Compute all metrics
         results = translator.compute_metrics(out_file, args.metrics.split(","))
         # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
-        print results
+        print(results)
 
     sys.exit(0)

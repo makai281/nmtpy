@@ -17,15 +17,15 @@ cat "${OUT}/train.norm.max50.tok.lc".{en,de} | nmt-bpe-learn -s $MOPS > $BPEFILE
 
 # Apply to train
 echo "Applying BPE to train"
-nmt-bpe-apply -c $BPEFILE -i "${OUT}/train.norm.max50.tok.lc.en" -o "${OUT}/train.norm.max50.tok.lc.bpe.en"
-nmt-bpe-apply -c $BPEFILE -i "${OUT}/train.norm.max50.tok.lc.de" -o "${OUT}/train.norm.max50.tok.lc.bpe.de"
+nmt-bpe-apply -c $BPEFILE -i "${OUT}/train.norm.max50.tok.lc.en" -o "${OUT}/train.norm.max50.tok.lc.bpe${MOPS}.en"
+nmt-bpe-apply -c $BPEFILE -i "${OUT}/train.norm.max50.tok.lc.de" -o "${OUT}/train.norm.max50.tok.lc.bpe${MOPS}.de"
 
 # Apply to val and test
 for TYPE in "val" "test"; do
   echo "Applying BPE to $TYPE"
-  nmt-bpe-apply -c $BPEFILE -i "${OUT}/${TYPE}.norm.tok.lc.en" -o "${OUT}/${TYPE}.norm.tok.lc.bpe.en"
-  nmt-bpe-apply -c $BPEFILE -i "${OUT}/${TYPE}.norm.tok.lc.de" -o "${OUT}/${TYPE}.norm.tok.lc.bpe.de"
+  nmt-bpe-apply -c $BPEFILE -i "${OUT}/${TYPE}.norm.tok.lc.en" -o "${OUT}/${TYPE}.norm.tok.lc.bpe${MOPS}.en"
+  nmt-bpe-apply -c $BPEFILE -i "${OUT}/${TYPE}.norm.tok.lc.de" -o "${OUT}/${TYPE}.norm.tok.lc.bpe${MOPS}.de"
 done
 
 # Create dictionaries
-nmt-build-dict "${OUT}/train.norm.max50.tok.lc.bpe".{en,de} -o $OUT
+nmt-build-dict "${OUT}/train.norm.max50.tok.lc.bpe$MOPS".{en,de} -o $OUT
