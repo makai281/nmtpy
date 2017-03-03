@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-from six.moves import range
-from six.moves import zip
+#from six.moves import range
+#from six.moves import zip
 
 # Python
-import os
-import cPickle
-import inspect
-import importlib
+#import os
+#import cPickle
+#import inspect
+#import importlib
 
 from collections import OrderedDict
 
@@ -66,30 +66,30 @@ class Model(BaseModel):
             # Load them from pkl files
             self.src_dict, src_idict = load_dictionary(kwargs['dicts']['src'])
 
-        if 'trg_dict' in kwargs:
+        if 'trg1_dict' in kwargs:
             # Already passed through kwargs (nmt-translate)
             self.trg_dict = kwargs['trg_dict']
             # Invert dict
             trg_idict = invert_dictionary(self.trg_dict)
         else:
             # Load them from pkl files
-            self.trg_dict, trg_idict = load_dictionary(kwargs['dicts']['trg'])
-        if 'trgfact_dict' in kwargs:
+            self.trg_dict, trg_idict = load_dictionary(kwargs['dicts']['trg1'])
+        if 'trg2_dict' in kwargs:
             # Already passed through kwargs (nmt-translate)
             self.trgfact_dict = kwargs['trgfact_dict']
             # Invert dict
             trgfact_idict = invert_dictionary(self.trgfact_dict)
         else:
             # Load them from pkl files
-            self.trgfact_dict, trgfact_idict = load_dictionary(kwargs['dicts']['trgfact'])
+            self.trgfact_dict, trgfact_idict = load_dictionary(kwargs['dicts']['trg2'])
 
         # Limit shortlist sizes
         self.n_words_src = min(self.n_words_src, len(self.src_dict)) \
                 if self.n_words_src > 0 else len(self.src_dict)
-        self.n_words_trg = min(self.n_words_trg, len(self.trg_dict)) \
-                if self.n_words_trg > 0 else len(self.trg_dict)
-        self.n_words_trgfact = min(self.n_words_trgfact, len(self.trgfact_dict)) \
-                if self.n_words_trgfact > 0 else len(self.trgfact_dict)
+        self.n_words_trg1 = min(self.n_words_trg1, len(self.trg_dict)) \
+                if self.n_words_trg1 > 0 else len(self.trg_dict)
+        self.n_words_trg2 = min(self.n_words_trg2, len(self.trgfact_dict)) \
+                if self.n_words_trg2 > 0 else len(self.trgfact_dict)
 
         # Create options. This will saved as .pkl
         self.set_options(self.__dict__)
@@ -243,8 +243,8 @@ class Model(BaseModel):
 
     def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)
-        self.logger.info('Target vocabulary size: %d', self.n_words_trg)
-        self.logger.info('Target factors vocabulary size: %d', self.n_words_trgfact)
+        self.logger.info('Target vocabulary size: %d', self.n_words_trg1)
+        self.logger.info('Target factors vocabulary size: %d', self.n_words_trg2)
         self.logger.info('%d training samples' % self.train_iterator.n_samples)
         self.logger.info('%d validation samples' % self.valid_iterator.n_samples)
         self.logger.info('dropout (emb,ctx,out): %.2f, %.2f, %.2f' % (self.emb_dropout, self.ctx_dropout, self.out_dropout))
@@ -265,11 +265,11 @@ class Model(BaseModel):
             self.valid_iterator = FactorsIterator(
                                     batch_size=self.batch_size,
                                     srcfile=self.data['valid_src'], srcdict=self.src_dict,
-                                    trglemfile=self.data['valid_trglem'], trglemdict=self.trg_dict,
-                                    trgfactfile=self.data['valid_trgfact'], trgfactdict=self.trgmult_dict,
+                                    trglemfile=self.data['valid_trg1'], trglemdict=self.trg_dict,
+                                    trgfactfile=self.data['valid_trg2'], trgfactdict=self.trgfact_dict,
                                     #trgfile=self.valid_ref_files[0], trgdict=self.trg_dict,
-                                    n_words_src=self.n_words_src, n_words_trg=self.n_words_trg,
-				    n_words_trglem=self.n_words_trg, n_words_trgfact=self.n_words_trgmult)
+                                    n_words_src=self.n_words_src, n_words_trg=self.n_words_trg1,
+                                    n_words_trglem=self.n_words_trg1, n_words_trgfact=self.n_words_trg2)
 
         self.valid_iterator.read()
 
@@ -279,10 +279,10 @@ class Model(BaseModel):
                                 shuffle_mode=self.smode,
                                 logger=self.logger,
                                 srcfile=self.data['train_src'], srcdict=self.src_dict,
-                                trglemfile=self.data['train_trg'], trglemdict=self.trg_dict,
-                                trgfactfile=self.data['train_trgfact'], trgfactdict=self.trgmult_dict,
+                                trglemfile=self.data['train_trg1'], trglemdict=self.trg_dict,
+                                trgfactfile=self.data['train_trg2'], trgfactdict=self.trgfact_dict,
                                 n_words_src=self.n_words_src,
-                                n_words_trglem=self.n_words_trg, n_words_trgfact=self.n_words_trgmult)
+                                n_words_trglem=self.n_words_trg1, n_words_trgfact=self.n_words_trg2)
 
         # Prepare batches
         self.train_iterator.read()
@@ -304,8 +304,8 @@ class Model(BaseModel):
 
         # embedding weights for encoder and decoder
         params['Wemb_enc'] = norm_weight(self.n_words_src, self.embedding_dim, scale=self.weight_init)
-        params['Wemb_dec_lem'] = norm_weight(self.n_words_trg, self.embedding_dim, scale=self.weight_init)
-	params['Wemb_dec_fact'] = norm_weight(self.n_words_trgmult, self.embedding_dim, scale=self.weight_init)
+        params['Wemb_dec_lem'] = norm_weight(self.n_words_trg1, self.embedding_dim, scale=self.weight_init)
+        params['Wemb_dec_fact'] = norm_weight(self.n_words_trg2, self.embedding_dim, scale=self.weight_init)
 
         ############################
         # encoder: bidirectional RNN
@@ -340,8 +340,8 @@ class Model(BaseModel):
         params = get_new_layer('ff')[0](params, prefix='ff_logit_prev' , nin=2*self.embedding_dim , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         params = get_new_layer('ff')[0](params, prefix='ff_logit_ctx'  , nin=self.ctx_dim       , nout=self.embedding_dim, scale=self.weight_init, ortho=False)
         if self.tied_trg_emb is False:
-	    params = get_new_layer('ff')[0](params, prefix='ff_logit_trg'      , nin=self.embedding_dim , nout=self.n_words_trg, scale=self.weight_init)
-	    params = get_new_layer('ff')[0](params, prefix='ff_logit_trgmult'      , nin=self.embedding_dim , nout=self.n_words_trgmult, scale=self.weight_init)
+            params = get_new_layer('ff')[0](params, prefix='ff_logit_trg'  , nin=self.embedding_dim , nout=self.n_words_trg1, scale=self.weight_init)
+            params = get_new_layer('ff')[0](params, prefix='ff_logit_trgmult'  , nin=self.embedding_dim , nout=self.n_words_trg2, scale=self.weight_init)
 
         self.initial_params = params
 
@@ -367,7 +367,8 @@ class Model(BaseModel):
         xr_mask = x_mask[::-1]
 
         n_timesteps = x.shape[0]
-        n_timesteps_trg = y.shape[0]
+        n_timesteps_trg = y1.shape[0]
+        n_timesteps_trgmult = y2.shape[0]
         n_samples = x.shape[1]
 
         # word embedding for forward rnn (source)
@@ -415,10 +416,10 @@ class Model(BaseModel):
         emb_fact_shifted = tensor.zeros_like(emb_fact)
         emb_fact_shifted = tensor.set_subtensor(emb_fact_shifted[1:], emb_fact[:-1])
         emb_fact = emb_fact_shifted
-
-	# Concat the 2 embeddings
-	emb_prev = tensor.concatenate([emb_lem,emb_fact], axis=2)       # not condition on the last output.
-
+    
+        # Concat the 2 embeddings
+        emb_prev = tensor.concatenate([emb_lem, emb_fact], axis=2)
+    
         # decoder - pass through the decoder conditional gru with attention
         proj = get_new_layer('gru_cond')[1](self.tparams, emb_prev,
                                             prefix='decoder',
@@ -444,10 +445,11 @@ class Model(BaseModel):
 
         if self.tied_trg_emb is False:
             logit_trg = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit_trg', activ='linear')
-	    logit_trgmult = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit_trgmult', activ='linear')
+            logit_trgmult = get_new_layer('ff')[1](self.tparams, logit, prefix='ff_logit_trgmult', activ='linear')
+        
         else:
             logit_trg = tensor.dot(logit, self.tparams['Wemb_dec_lem'].T)
-	    logit_trgmult = tensor.dot(logit, self.tparams['Wemb_dec_fact'].T)
+            logit_trgmult = tensor.dot(logit, self.tparams['Wemb_dec_fact'].T)
 
         logit_trg_shp = logit_trg.shape
         logit_trgmult_shp = logit_trgmult.shape
@@ -457,13 +459,20 @@ class Model(BaseModel):
         log_trgmult_probs = -tensor.nnet.logsoftmax(logit_trgmult.reshape([logit_trgmult_shp[0]*logit_trgmult_shp[1], logit_trgmult_shp[2]]))
 
         # cost
-        y_flat = y.flatten()
-        y_flat_idx = tensor.arange(y_flat.shape[0]) * self.n_words_trg + y_flat
+        y1_flat = y1.flatten()
+        y2_flat = y2.flatten()
+        y1_flat_idx = tensor.arange(y1_flat.shape[0]) * self.n_words_trg1 + y1_flat
+        y2_flat_idx = tensor.arange(y2_flat.shape[0]) * self.n_words_trg2 + y2_flat
 
-        cost = log_probs.flatten()[y_flat_idx]
-        cost = cost.reshape([n_timesteps_trg, n_samples])
-        cost = (cost * y_mask).sum(0)
+        cost_trg = log_trg_probs.flatten()[y1_flat_idx]
+        cost_trg = cost_trg.reshape([n_timesteps_trg, n_samples])
+        cost_trg = (cost_trg * y1_mask).sum(0)
 
+        cost_trgmult = log_trgmult_probs.flatten()[y2_flat_idx]
+        cost_trgmult = cost_trgmult.reshape([n_timesteps_trgmult, n_samples])
+        cost_trgmult = (cost_trgmult * y2_mask).sum(0)
+
+        cost = cost_trg + cost_trgmult
         self.f_log_probs = theano.function(self.inputs.values(), cost)
 
         # For alpha regularization
