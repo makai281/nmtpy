@@ -33,6 +33,7 @@ class FactorsIterator(Iterator):
         # 'single'  : Take only the first pair e.g., train0.en->train0.de (~29K parallel)
         # 'pairs'   : Take only one-to-one pairs e.g., train_i.en->train_i.de (~145K parallel)
         self.mode = kwargs.get('mode', 'all')
+        self._print('Shuffle mode: %s' % shuffle_mode)
 
         if 'srcfactfile' in kwargs:
             self.srcfact = True
@@ -82,7 +83,6 @@ class FactorsIterator(Iterator):
             if self.mask:
                 self._keys.append("%s_mask" % self.trglem_name)
                 self._keys.append("%s_mask" % self.trgfact_name)
-            print (self._keys)
     
         else:
             self.trgfact = False
