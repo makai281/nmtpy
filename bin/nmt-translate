@@ -204,8 +204,8 @@ class Translator(object):
                 if 'valid_srcfact' in self.model.data:
                     self.models[0].data['valid_srcfact'] = self.src_files[1]
                 if self.factors:
-                    self.models[0].data['valid_trglem'] = self.lem_ref_files
-                    self.models[0].data['valid_trgfact'] = self.fact_ref_files
+                    self.models[0].data['valid_trglem'] = self.ref_files[1]
+                    self.models[0].data['valid_trgfact'] = self.ref_files[2]
 
             # Initialize model's validation data iterator
             # NOTE: data_mode is for best-source-selection decoding for multimodal systems
@@ -243,8 +243,8 @@ class Translator(object):
                     self.ref_files = listify(self.models[0].valid_ref_files)
                 if self.factors:
                     self.ref_files = listify(self.models[0].data['valid_trg'])
-                    self.lem_ref_files = listify(self.models[0].data['valid_trglem'])
-                    self.fact_ref_files = listify(self.models[0].data['valid_trgfact'])
+                    self.ref_files.append(listify(self.models[0].data['valid_trglem']))
+                    self.ref_files.append(listify(self.models[0].data['valid_trgfact']))
 
             log.info('I will translate %d samples' % self.n_sentences)
 
