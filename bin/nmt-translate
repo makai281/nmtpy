@@ -26,6 +26,7 @@ from nmtpy.textutils        import reduce_to_best
 from nmtpy.sysutils         import *
 from nmtpy.filters          import get_filter
 from nmtpy.iterators.bitext import BiTextIterator
+from nmtpy.iterators.factors import FactorsIterator
 from nmtpy.defaults         import INT, FLOAT
 
 import nmtpy.cleanup as cleanup
@@ -70,7 +71,11 @@ def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks
 
         # Sort the scores and take the best(s) idx(s)
         best_idxs = np.argsort(score)[:nbest]
-        trans = np.array(trans)[best_idxs]
+        if args.factors:
+            trans = np.array(trans[0])[best_idxs]
+            trans_fact = np.array(trans[1])[best_idxs]
+        else:
+            trans = np.array(trans)[best_idxs]
 
         # Check for attention weights
         if align is not None:
@@ -87,6 +92,7 @@ class Translator(object):
         # Always lists provided by argparse (nargs:'+')
         self.src_files = args.src_files
         self.ref_files = args.ref_files
+        self.factors = args.factors
 
         # Collect processed source sentences in here
         # for further exporting to json
@@ -145,13 +151,38 @@ class Translator(object):
 
         # Get inverted dictionary from the model itself
         self.trg_idict = self.models[0].trg_idict
+        # TODO you can include the factors option inside the model
 
         #######################################################
         # Forced decoding/NMT rescoring for given src/trg pairs
         #######################################################
         if self.mode == "forced" and self.src_files and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
-            self.iterator = BiTextIterator(
+            # TODO forced mode not finished for factors, for now we use just beamsearch
+            if args.factors:
+                if len(self.src_files) == 1:
+                    self.iterator = FactorsIterator(
+                                        batch_size=1,
+                                        srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
+                                        trglemfile=self.ref_files[0], trgdict=self.models[0].trg_dict,
+                                        trgfactfile=self.fact_ref_files[0], trgmultdict=self.models[0].trgmult_dict,
+                                        n_words_src=self.models[0].n_words_src,
+                                        n_words_trg=self.models[0].n_words_trg,
+                                        n_words_trgmult=self.models[0].n_words_trgmult,
+                                        trg_name='y_true')
+                else: 
+                    self.iterator = FactorsIterator(
+                                        batch_size=1,
+                                        srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
+                                        srcfactfile=self.src_files[1], srcfactdict=self.models[0].srcfact_dict,
+                                        trglemfile=self.ref_files[0], trgdict=self.model.trg_dict,
+                                        trgfactfile=self.fact_ref_files[0], trgmultdict=self.models[0].trgmult_dict,
+                                        n_words_src=self.models[0].n_words_src,
+                                        n_words_trg=self.models[0].n_words_trg,
+                                        n_words_trgmult=self.models[0].n_words_trgmult,
+                                        trg_name='y_true')
+            else:
+                self.iterator = BiTextIterator(
                                         batch_size=1,
                                         srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
                                         trgfile=self.ref_files[0], trgdict=self.models[0].trg_dict,
@@ -170,6 +201,11 @@ class Translator(object):
                 self.models[0].data['valid_src'] = self.src_files[0]
                 if 'valid_img' in self.models[0].data:
                     self.models[0].data['valid_img'] = self.src_files[1]
+                if 'valid_srcfact' in self.model.data:
+                    self.models[0].data['valid_srcfact'] = self.src_files[1]
+                if self.factors:
+                    self.models[0].data['valid_trglem'] = self.lem_ref_files
+                    self.models[0].data['valid_trgfact'] = self.fact_ref_files
 
             # Initialize model's validation data iterator
             # NOTE: data_mode is for best-source-selection decoding for multimodal systems
@@ -199,10 +235,16 @@ class Translator(object):
                 # with compound splitting reverted so that we can compute
                 # the metrics correctly.
                 # NOTE: May be avoided by using filters on reference sentences.
+                if 'valid_srcfact' in self.models[0].data:
+                    self.src_files.append(listify(self.models[0].data['valid_srcfact']))
                 if "valid_trg_orig" in self.models[0].data:
                     self.ref_files = listify(self.models[0].data['valid_trg_orig'])
                 else:
                     self.ref_files = listify(self.models[0].valid_ref_files)
+                if self.factors:
+                    self.ref_files = listify(self.models[0].data['valid_trg'])
+                    self.lem_ref_files = listify(self.models[0].data['valid_trglem'])
+                    self.fact_ref_files = listify(self.models[0].data['valid_trgfact'])
 
             log.info('I will translate %d samples' % self.n_sentences)
 
@@ -214,6 +256,14 @@ class Translator(object):
         if self.ref_files:
             log.info("Reference file(s)")
             for f in self.ref_files:
+                log.info("  %s" % f)
+        if self.lem_ref_files:
+            log.info("Lemmas reference file(s)")
+            for f in self.lem_ref_files:
+                log.info("  %s" % f)
+        if self.fact_ref_files:
+            log.info("Factors reference file(s)")
+            for f in self.fact_ref_files:
                 log.info("  %s" % f)
 
     def start(self):
@@ -241,6 +291,8 @@ class Translator(object):
 
         # Receive the results
         self.trans       = [None] * self.n_sentences
+        if args.factors:
+            self.trans_fact  = [None] * self.n_sentences
         self.scores      = [None] * self.n_sentences
 
         # Will be filled if --export is passed
@@ -262,9 +314,13 @@ class Translator(object):
             # Did we receive attention weights from beam search?
             if attw is not None:
                 self.att_weights[sample_idx] = attw[0]
-
+            
             # Place the hypotheses into their relevant places
-            self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps]
+            if args.factors:
+                self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps[0]]
+                self.trans_fact[sample_idx] = [idx_to_sent(self.trgfact_idict, hyp) for hyp in hyps[1]]
+            else:
+                self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps]
 
             # Print progress
             if (i+1) % 100 == 0:
@@ -291,35 +347,36 @@ class Translator(object):
             self.processes[pidx].terminate()
             cleanup.unregister_proc(self.processes[pidx].pid)
 
-    def write_hyps(self, filename, dump_scores=False):
+    # OJO Adding trans to distinguish if it comes from factors or not
+    def write_hyps(self, filename, trans, dump_scores=False):
         # Apply post-processing filters like compound stitching
-        for i in range(len(self.trans)):
+        for i in range(len(trans)):
             # List of hyps (length 1 if nbest==1) per source sentence
-            for j in range(len(self.trans[i])):
-                inp = self.trans[i][j]
+            for j in range(len(trans[i])):
+                inp = trans[i][j]
                 for filt in self.filters:
                     inp = filt(inp)
-                self.trans[i][j] = inp
+                trans[i][j] = inp
 
         # Write file
         with open(filename, 'w') as f:
             if self.mode == "forced" or dump_scores:
                 # We have a single hypothesis and a score for each sentence
-                for idx, (tr, sc) in enumerate(zip(self.trans, self.scores)):
+                for idx, (tr, sc) in enumerate(zip(trans, self.scores)):
                     f.write("%d ||| %s ||| %.6f\n" % (idx, tr[0], sc))
 
             elif self.nbest > 1:
                 # We have n hypotheses and n scores for each sentence
-                for idx, (trs, scs) in enumerate(zip(self.trans, self.scores)):
+                for idx, (trs, scs) in enumerate(zip(trans, self.scores)):
                     for tr, sc in zip(trs, scs):
                         f.write("%d ||| %s ||| %.6f\n" % (idx, tr, sc))
             else:
                 if self.valid_mode == 'pairs':
                     # Pick the best hyp out of all source sentences for a single image
-                    self.trans = reduce_to_best(self.trans, self.scores,
+                    trans = reduce_to_best(trans, self.scores,
                                                 self.iterator.n_unique_images, avoid_unk=True)
                 # Prepare and dump
-                self.hyps = [s[0] for s in self.trans]
+                self.hyps = [s[0] for s in trans]
                 hyps = "\n".join(self.hyps) + "\n"
                 f.write(hyps)
 
@@ -332,7 +389,36 @@ class Translator(object):
             results[scorer] = (str(score), score.score)
         self.results = results
         return results
-
+    
+    def compute_fact_score(self, hyp_file, hyp_mult_file, scorers):
+        results = {}
+        for scorer in scorers:
+            c = get_scorer(scorer)()
+            score = c.compute(self.lem_ref_files, hyp_file)
+            print ('BLEU lemmas=', (str(score), score.score))
+            score_fact = c.compute(self.fact_ref_files, hyp_mult_file)
+            print ('BLEU factors=', (str(score_fact), score_fact.score))
+            if self.models[0].valid_ref_files != self.lem_ref_files:
+                # Calculate factors2word
+                c = get_scorer('factors2word')()
+                score = c.compute(hyp_file, hyp_mult_file, self.ref_files[0])
+                results[scorer] = (str(score), score.score)
+            else:
+                print ('evaluating one output')
+                results[scorer] = (str(score), 2*score.score+score_fact.score)
+        return results
+    
+    def compute_2outs1eval_score(self, hyp_file, hyp_mult_file, scorers):
+        results = {}
+        for scorer in scorers:
+            c = get_scorer(scorer)()
+            score = c.compute(self.fact_ref_files, hyp_mult_file)
+            print ('BLEU 2 output=', (str(score), score.score))
+            score = c.compute(self.lem_ref_files, hyp_file)
+            print ('BLEU 1 output=', (str(score), score.score))
+            results[scorer] = (str(score), score.score)
+        return results
+        
     def dump_json(self, filename):
         """Export decoding data into json for further visualization."""
         metadata = OrderedDict()
@@ -368,9 +454,15 @@ class Translator(object):
             refs.append([all_refs[i][sidx] for i in range(n_refs)])
 
         # Add sources, targets, and references
-        for s, t, att in zip(srcs, self.trans, self.att_weights):
-            sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'ref' : refs.pop(0), 'att': att}
-            samples.append(sample)
+        # if factors add self.trans_mult to the dump file
+        if args.factors:
+            for s, t, f, att in zip(srcs, self.trans, self.trans_mult, self.att_weights):
+                sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'trgfact' : f[0].split(' '), 'ref' : refs.pop(0), 'att': att}
+                samples.append(sample)
+        else:
+            for s, t, att in zip(srcs, self.trans, self.att_weights):
+                sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'ref' : refs.pop(0), 'att': att}
+                samples.append(sample)
         data['data'] = samples
 
         # Export the JSON
@@ -401,6 +493,8 @@ if __name__ == "__main__":
     parser.add_argument('-S', '--src-files'     , type=str, nargs='+', default=None, help="Source data(s) in order: text,image (default: validation set)")
     parser.add_argument('-R', '--ref-files'     , type=str, nargs='+', default=None, help="One or multiple reference files (default: validation set)")
     parser.add_argument('-m', '--models'        , nargs='+', required=True, help="Model files")
+    parser.add_argument('-fa', '--factors'      , action='store_true', default=False, help="Activate factors option (default: false)")
+    parser.add_argument('-oe', '--outs2eval1'    , action='store_true', default=False, help="Activate 2 outsputs 1 evaluation option (default: false)")
 
     args = parser.parse_args()
 
@@ -448,7 +542,14 @@ if __name__ == "__main__":
     if args.decoder != "forced" and args.nbest == 1 \
             and translator.ref_files and not args.score:
         # Compute all metrics
-        results = translator.compute_metrics(out_file, args.metrics.split(","))
+        #if args.outs2eval1:
+        if args.outs2eval1 or args.factors:
+            results = translator.compute_2outs1eval_score(out_file, fact_out_file, args.metrics.split(","))
+        # TODO factors evaluation
+        elif args.factors:
+            results = translator.compute_fact_score(out_file, fact_out_file, args.metrics.split(","))
+        else:
+            results = translator.compute_metrics(out_file, args.metrics.split(","))
         # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
         print(results)
 
