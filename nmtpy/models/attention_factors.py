@@ -25,6 +25,7 @@ from ..iterators.bitext import BiTextIterator
 from ..iterators.factors import FactorsIterator
 from .basemodel import BaseModel
 from .attention import Model
+from ..sysutils import readable_size, get_temp_file, get_valid_evaluation
 
 class Model(BaseModel):
     def __init__(self, seed, logger, **kwargs):
@@ -107,9 +108,27 @@ class Model(BaseModel):
         # We call this once to setup dropout mechanism correctly
         self.set_dropout(False)
         self.logger = logger
+    
+    def run_beam_search(self, beam_size=12, n_jobs=8, metric='bleu', mode='beamsearch', valid_mode='single', f_valid_out=None):
+        """Save model under /tmp for passing it to nmt-translate."""
+        # Save model temporarily
+        with get_temp_file(suffix=".npz", delete=True) as tmpf:
+            self.save(tmpf.name)
+
+            result = get_valid_evaluation(tmpf.name,
+                                          beam_size=beam_size,
+                                          n_jobs=n_jobs,
+                                          metric=metric,
+                                          mode=mode,
+                                          valid_mode=valid_mode,
+                                          f_valid_out=f_valid_out,
+                                          factors=True)
+
+        return result
+
 
     @staticmethod
-    def beam_search(self, inputs, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
+    def beam_search(inputs, f_inits, f_nexts, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
 
             # Final results and their scores
             final_sample_lem = []
@@ -132,7 +151,7 @@ class Model(BaseModel):
             # next_state: mean context vector (ctx0.mean()) passed through FF with a final
             # shape of (1 x 1 x ctx_dim)
             # The 2 outputs have the same next_state
-            next_state, ctx0 = self.f_init(inputs[0])
+            next_state, ctx0 = f_inits[0](inputs[0])
 
             # Beginning-of-sentence indicator is -1
             next_w_lem = -1 * np.ones((1,)).astype(INT)
@@ -150,7 +169,7 @@ class Model(BaseModel):
             tiled_ctx = np.tile(ctx0, [1, 1])
             live_beam = beam_size
 
-            for ii in xrange(maxlen):
+            for ii in range(maxlen):
                 # Always starts with the initial tstep's context vectors
                 # e.g. we have a ctx0 of shape (n_words x 1 x ctx_dim)
                 # Tiling it live_beam times makes it (n_words x live_beam x ctx_dim)
@@ -163,7 +182,7 @@ class Model(BaseModel):
                 # of duplicated left hypotheses. tiled_ctx is always the same except
                 # the 2nd dimension as the context vectors of the source sequence
                 # is always the same regardless of the decoding step.
-                next_log_p_lem, _, next_log_p_fact, _, next_state, alphas = self.f_next(*[next_w_lem, next_w_fact, tiled_ctx, next_state])
+                next_log_p_lem, _, next_log_p_fact, _, next_state, alphas = f_nexts[0](*[next_w_lem, next_w_fact, tiled_ctx, next_state])
                 # For each f_next, we obtain a new set of alpha's for the next_w
                 # for each hypothesis in the beam search
 
@@ -186,15 +205,19 @@ class Model(BaseModel):
                     # Take the best beam_size-dead_beam hypotheses
                     ranks_lem = cand_h_scores_lem.argpartition(live_beam-1)[:live_beam]
                     # if beam size if bigger than factors vocab, use vocab size as beam size for it
-                    if live_beam > self.n_words_trgmult:
-                        ranks_fact = cand_h_scores_fact.argpartition(self.n_words_trgmult-1)[:self.n_words_trgmult]
+                    #if live_beam > self.n_words_trgmult:
+                    if live_beam > next_log_p_fact.shape[1]:
+                        #ranks_fact = cand_h_scores_fact.argpartition(self.n_words_trgmult-1)[:self.n_words_trgmult]
+                        ranks_fact = cand_h_scores_fact.argpartition(next_log_p_fact,shape[1]-1)[:next_log_p_fact.shape[1]]
                     else:
                         ranks_fact = cand_h_scores_fact.argpartition(live_beam-1)[:live_beam]
                     # Get their costs
                     costs_h_lem = cand_h_scores_lem[ranks_lem]
                     costs_h_fact = cand_h_scores_fact[ranks_fact]
-                    word_indices_lem = ranks_lem % self.n_words_trg
-                    word_indices_fact = ranks_fact % self.n_words_trgmult
+                    #word_indices_lem = ranks_lem % self.n_words_trg
+                    word_indices_lem = ranks_lem % next_log_p_lem.shape[1]
+                    #word_indices_fact = ranks_fact % self.n_words_trgmult
+                    word_indices_fact = ranks_fact % next_log_p_fact.shape[1]
                     
                     # Sum the logp's of lemmas and factors and keep the best ones
                     cand_h_costs = []
@@ -202,8 +225,10 @@ class Model(BaseModel):
                     cand_h_costs_fact = []
                     cand_h_w_idx = []
                     for l in range(live_beam):
-                        if live_beam > self.n_words_trgmult:
-                            for f in range(self.n_words_trgmult):
+                        #if live_beam > self.n_words_trgmult:
+                        if live_beam > next_log_p_fact.shape[1]:
+                            #for f in range(self.n_words_trgmult):
+                            for f in range(next_log_p_fact.shape[1]):
                                 cand_h_costs.append(costs_h_lem[l]+ costs_h_fact[f])
                                 cand_h_costs_lem.append(costs_h_lem[l])
                                 cand_h_costs_fact.append(costs_h_fact[f])
@@ -232,7 +257,7 @@ class Model(BaseModel):
                     for w in word_h_indices:
                         cand_w_idx.append(w)
                     trans_h_indices = []
-                    trans_h_indices = beam_size * [idx]
+                    trans_h_indices = live_beam * [idx]
                     trans_h_indices = np.array(trans_h_indices)
                     cand_trans_idx.append(trans_h_indices)
 
@@ -315,7 +340,7 @@ class Model(BaseModel):
 
             # dump every remaining hypotheses
             #if live_beam > 0:
-            for idx in xrange(live_beam):
+            for idx in range(live_beam):
                 final_score_lem.append(hyp_scores_lem[idx])
                 final_sample_lem.append(hyp_samples_lem[idx])
                 final_sample_fact.append(hyp_samples_fact[idx])
@@ -325,8 +350,12 @@ class Model(BaseModel):
             final_score = []
             for b in range(beam_size):
                 final_score.append(final_score_lem[b] + final_score_fact[b])
-	    # we pass the 2 translations together
-            return [final_sample_lem, final_sample_fact], final_score, final_alignments
+            # we pass the 2 translations together
+            print ('final_sample_lem:', final_sample_lem)
+            print ('final_sample_fact:', final_sample_fact)
+            print ('final_score:', final_score)
+            print ('final_alignments:', final_alignments)
+            return final_sample_lem, final_score, final_alignments, final_sample_fact
 
     def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)

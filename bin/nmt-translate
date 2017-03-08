@@ -64,17 +64,25 @@ def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks
         sample_idx, data_dict = req[0], req[1]
 
         # Get the translation, its score and alignments
-        trans, score, align = eval(func_call)
+        #trans, score, align = eval(func_call)
+        resp = eval(func_call)
 
-        # normalize scores according to sequence lengths
-        score = score / np.array([len(s) for s in trans])
-
-        # Sort the scores and take the best(s) idx(s)
-        best_idxs = np.argsort(score)[:nbest]
         if args.factors:
-            trans = np.array(trans[0])[best_idxs]
-            trans_fact = np.array(trans[1])[best_idxs]
+            # normalize scores according to sequence lengths
+            trans, score, align, trans_fact = resp
+            score = score / np.array([len(s) for s in trans])
+
+            # Sort the scores and take the best(s) idx(s)
+            best_idxs = np.argsort(score)[:nbest]
+            trans = np.array(trans)[best_idxs]
+            trans_fact = np.array(trans_fact)[best_idxs]
         else:
+            trans, score, align = resp
+            # normalize scores according to sequence lengths
+            score = score / np.array([len(s) for s in trans])
+
+            # Sort the scores and take the best(s) idx(s)
+            best_idxs = np.argsort(score)[:nbest]
             trans = np.array(trans)[best_idxs]
 
         # Check for attention weights
@@ -82,7 +90,10 @@ def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks
             align = np.array(align)[best_idxs]
 
         # Send response back
-        wqueue.put((sample_idx, trans, score[best_idxs], align))
+        if args.factors:
+            wqueue.put((sample_idx, trans, score[best_idxs], align, trans_fact))
+        else:
+            wqueue.put((sample_idx, trans, score[best_idxs], align))
 
 class Translator(object):
     """Starts worker processes and waits for the results."""
@@ -151,6 +162,9 @@ class Translator(object):
 
         # Get inverted dictionary from the model itself
         self.trg_idict = self.models[0].trg_idict
+        if args.factors:
+            self.trgfact_idict = self.models[0].trgfact_idict
+
         # TODO you can include the factors option inside the model
 
         #######################################################
@@ -204,8 +218,8 @@ class Translator(object):
                 if 'valid_srcfact' in self.model.data:
                     self.models[0].data['valid_srcfact'] = self.src_files[1]
                 if self.factors:
-                    self.models[0].data['valid_trglem'] = self.ref_files[1]
-                    self.models[0].data['valid_trgfact'] = self.ref_files[2]
+                    self.models[0].data['valid_trg1'] = self.ref_files[1]
+                    self.models[0].data['valid_trg2'] = self.ref_files[2]
 
             # Initialize model's validation data iterator
             # NOTE: data_mode is for best-source-selection decoding for multimodal systems
@@ -243,8 +257,8 @@ class Translator(object):
                     self.ref_files = listify(self.models[0].valid_ref_files)
                 if self.factors:
                     self.ref_files = listify(self.models[0].data['valid_trg'])
-                    self.ref_files.append(listify(self.models[0].data['valid_trglem']))
-                    self.ref_files.append(listify(self.models[0].data['valid_trgfact']))
+                    self.ref_files.append(listify(self.models[0].data['valid_trg1']))
+                    self.ref_files.append(listify(self.models[0].data['valid_trg2']))
 
             log.info('I will translate %d samples' % self.n_sentences)
 
@@ -256,14 +270,6 @@ class Translator(object):
         if self.ref_files:
             log.info("Reference file(s)")
             for f in self.ref_files:
-                log.info("  %s" % f)
-        if self.lem_ref_files:
-            log.info("Lemmas reference file(s)")
-            for f in self.lem_ref_files:
-                log.info("  %s" % f)
-        if self.fact_ref_files:
-            log.info("Factors reference file(s)")
-            for f in self.fact_ref_files:
                 log.info("  %s" % f)
 
     def start(self):
@@ -309,18 +315,16 @@ class Translator(object):
             sample_idx = resp[0]
 
             # Get the hypotheses, scores and attention weights if any
-            hyps, self.scores[sample_idx], attw = resp[1:]
+            hyps, self.scores[sample_idx], attw = resp[1], resp[2], resp[3]
 
             # Did we receive attention weights from beam search?
             if attw is not None:
                 self.att_weights[sample_idx] = attw[0]
             
             # Place the hypotheses into their relevant places
+            self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps]
             if args.factors:
-                self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps[0]]
-                self.trans_fact[sample_idx] = [idx_to_sent(self.trgfact_idict, hyp) for hyp in hyps[1]]
-            else:
-                self.trans[sample_idx] = [idx_to_sent(self.trg_idict, hyp) for hyp in hyps]
+                self.trans_fact[sample_idx] = [idx_to_sent(self.trgfact_idict, hyp) for hyp in resp[4]]
 
             # Print progress
             if (i+1) % 100 == 0:
@@ -394,11 +398,11 @@ class Translator(object):
         results = {}
         for scorer in scorers:
             c = get_scorer(scorer)()
-            score = c.compute(self.lem_ref_files, hyp_file)
+            score = c.compute(self.ref_files[1], hyp_file)
             print ('BLEU lemmas=', (str(score), score.score))
-            score_fact = c.compute(self.fact_ref_files, hyp_mult_file)
+            score_fact = c.compute(self.ref_files[2], hyp_mult_file)
             print ('BLEU factors=', (str(score_fact), score_fact.score))
-            if self.models[0].valid_ref_files != self.lem_ref_files:
+            if self.models[0].valid_ref_files != self.ref_files[1]:
                 # Calculate factors2word
                 c = get_scorer('factors2word')()
                 score = c.compute(hyp_file, hyp_mult_file, self.ref_files[0])
@@ -412,9 +416,9 @@ class Translator(object):
         results = {}
         for scorer in scorers:
             c = get_scorer(scorer)()
-            score = c.compute(self.fact_ref_files, hyp_mult_file)
+            score = c.compute(self.ref_files[2], hyp_mult_file)
             print ('BLEU 2 output=', (str(score), score.score))
-            score = c.compute(self.lem_ref_files, hyp_file)
+            score = c.compute(self.ref_files[1], hyp_file)
             print ('BLEU 1 output=', (str(score), score.score))
             results[scorer] = (str(score), score.score)
         return results
@@ -486,6 +490,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-M', '--metrics'       , type=str, default='bleu', help="Comma separated list of metrics (bleu or bleu,meteor)")
     parser.add_argument('-o', '--saveto'        , type=str, default=None,   help="Output translations file (if not given, only metrics will be printed)")
+    parser.add_argument('-ofa', '--factsaveto'   , type=str, help="Output factors translations file (if not given, only metrics will be printed)", default=None)
     parser.add_argument('-e', '--export'        , action='store_true',      help="Export all decoding process to json for visualization")
     parser.add_argument('-s', '--score'         , action='store_true',      help="Print scores of each sentence even nbest == 1")
     parser.add_argument('-u', '--suppress-unks' , action='store_true',      help="Don't produce <unk>'s in beam search")
@@ -533,6 +538,8 @@ if __name__ == "__main__":
 
     # Dump hypotheses
     translator.write_hyps(out_file, args.score)
+    if args.factsaveto:
+        translator.write_hyps(fact_out_file, args.score)
 
     if args.export and args.saveto:
         # Export attentional informations if -o and -e are given
