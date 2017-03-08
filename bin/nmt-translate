@@ -352,7 +352,11 @@ class Translator(object):
             cleanup.unregister_proc(self.processes[pidx].pid)
 
     # OJO Adding trans to distinguish if it comes from factors or not
-    def write_hyps(self, filename, trans, dump_scores=False):
+    def write_hyps(self, filename, n_out, dump_scores=False):
+        if n_out == 1:
+            trans = self.trans
+        else: 
+            trans = self.trans_fact
         # Apply post-processing filters like compound stitching
         for i in range(len(trans)):
             # List of hyps (length 1 if nbest==1) per source sentence
@@ -529,6 +533,8 @@ if __name__ == "__main__":
     translator.start()
 
     out_file = args.saveto
+    if args.factsaveto:
+        fact_out_file = args.factsaveto
     if not args.saveto:
         # Override this if given
         args.score = False
@@ -537,9 +543,10 @@ if __name__ == "__main__":
         hypf.close()
 
     # Dump hypotheses
-    translator.write_hyps(out_file, args.score)
+    # pass output file, number of output and scores
+    translator.write_hyps(out_file, 1, args.score)
     if args.factsaveto:
-        translator.write_hyps(fact_out_file, args.score)
+        translator.write_hyps(fact_out_file, 2, args.score)
 
     if args.export and args.saveto:
         # Export attentional informations if -o and -e are given
