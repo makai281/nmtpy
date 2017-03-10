@@ -184,7 +184,8 @@ class Translator(object):
                                         n_words_trg=self.models[0].n_words_trg,
                                         n_words_trgmult=self.models[0].n_words_trgmult,
                                         trg_name='y_true')
-                else: 
+                else:
+                    # Factors also in input
                     self.iterator = FactorsIterator(
                                         batch_size=1,
                                         srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
@@ -403,30 +404,21 @@ class Translator(object):
         for scorer in scorers:
             c = get_scorer(scorer)()
             score = c.compute(self.ref_files[1], hyp_file)
-            print ('BLEU lemmas=', (str(score), score.score))
+            print ('BLEU output 1 =', (str(score), score.score))
             score_fact = c.compute(self.ref_files[2], hyp_mult_file)
-            print ('BLEU factors=', (str(score_fact), score_fact.score))
-            if self.models[0].valid_ref_files != self.ref_files[1]:
-                # Calculate factors2word
-                c = get_scorer('factors2word')()
-                score = c.compute(args.eval_factors, hyp_file, hyp_mult_file, self.ref_files[0])
+            print ('BLEU output 2 =', (str(score_fact), score_fact.score))
+            if args.factors == 'eval1' or self.models[0].valid_ref_files == self.ref_files[1]:
+                print ('evaluating one output')
+                #results[scorer] = (str(score), 2*score.score+score_fact.score)
                 results[scorer] = (str(score), score.score)
             else:
-                print ('evaluating one output')
-                results[scorer] = (str(score), 2*score.score+score_fact.score)
+                # Calculate factors2word
+                print ('Factors to word')
+                c = get_scorer('factors2word')()
+                score = c.compute(args.factors, hyp_file, hyp_mult_file, self.ref_files[0])
+                results[scorer] = (str(score), score.score)
         return results
     
-    def compute_2outs1eval_score(self, hyp_file, hyp_mult_file, scorers):
-        results = {}
-        for scorer in scorers:
-            c = get_scorer(scorer)()
-            score = c.compute(self.ref_files[2], hyp_mult_file)
-            print ('BLEU 2 output=', (str(score), score.score))
-            score = c.compute(self.ref_files[1], hyp_file)
-            print ('BLEU 1 output=', (str(score), score.score))
-            results[scorer] = (str(score), score.score)
-        return results
-        
     def dump_json(self, filename):
         """Export decoding data into json for further visualization."""
         metadata = OrderedDict()
@@ -462,7 +454,7 @@ class Translator(object):
             refs.append([all_refs[i][sidx] for i in range(n_refs)])
 
         # Add sources, targets, and references
-        # if factors add self.trans_mult to the dump file
+        # if factors add trans_fact to the dump file
         if args.factors:
             for s, t, f, att in zip(srcs, self.trans, self.trans_mult, self.att_weights):
                 sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'trgfact' : f[0].split(' '), 'ref' : refs.pop(0), 'att': att}
@@ -502,8 +494,7 @@ if __name__ == "__main__":
     parser.add_argument('-S', '--src-files'     , type=str, nargs='+', default=None, help="Source data(s) in order: text,image (default: validation set)")
     parser.add_argument('-R', '--ref-files'     , type=str, nargs='+', default=None, help="One or multiple reference files (default: validation set)")
     parser.add_argument('-m', '--models'        , nargs='+', required=True, help="Model files")
-    parser.add_argument('-fa', '--factors'      , action='store_true', default=False, help="Activate factors option (default: false)")
-    parser.add_argument('-ef', '--eval-factors' , type=str, default='eval1', help="Combination of output factors, eval1 to evaluate just with the first output or script to combine them (default: eval1)")
+    parser.add_argument('-fa', '--factors'      , type=str, default=None, help="Activate factors. The value can be eval1 to evaluate just with the first output or the script to combine the 2 outputs (default: None)")
 
     args = parser.parse_args()
 
@@ -556,10 +547,8 @@ if __name__ == "__main__":
     if args.decoder != "forced" and args.nbest == 1 \
             and translator.ref_files and not args.score:
         # Compute all metrics
-        if args.eval_factors == 'eval1':
-            results = translator.compute_2outs1eval_score(out_file, fact_out_file, args.metrics.split(","))
-        # TODO factors evaluation
-        elif args.factors:
+        if args.factors:
+            # Factors evaluation combining the 2 outputs
             results = translator.compute_fact_score(out_file, fact_out_file, args.metrics.split(","))
         else:
             results = translator.compute_metrics(out_file, args.metrics.split(","))

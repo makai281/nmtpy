@@ -56,6 +56,8 @@ class Model(BaseModel):
 
         # Use a single embedding matrix for target words?
         self.tied_trg_emb = kwargs.get('tied_trg_emb', False)
+        
+        self.factors = kwargs.get('factors', None)
 
         # Load dictionaries
         if 'src_dict' in kwargs:
@@ -122,7 +124,7 @@ class Model(BaseModel):
                                           mode=mode,
                                           valid_mode=valid_mode,
                                           f_valid_out=f_valid_out,
-                                          factors=True)
+                                          factors=self.factors)
 
         return result
 

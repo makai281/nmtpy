@@ -10,10 +10,6 @@ class Factors2word(object):
     def __init__(self):
         super(Factors2word, self)
         self.name = "Factors2word"
-        #self.script = find_executable(script)
-        #if not self.script:
-        #    raise Exception("factors2word script %s not found." % self.script)
-
 
     def compute(self, script, hyp_file, hyp_mult_file, ref):
         script = find_executable(script)
