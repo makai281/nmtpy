@@ -351,10 +351,6 @@ class Model(BaseModel):
             for b in range(beam_size):
                 final_score.append(final_score_lem[b] + final_score_fact[b])
             # we pass the 2 translations together
-            print ('final_sample_lem:', final_sample_lem)
-            print ('final_sample_fact:', final_sample_fact)
-            print ('final_score:', final_score)
-            print ('final_alignments:', final_alignments)
             return final_sample_lem, final_score, final_alignments, final_sample_fact
 
     def info(self):
