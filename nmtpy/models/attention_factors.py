@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
-#from six.moves import range
-#from six.moves import zip
 
 # Python
-#import os
-#import cPickle
-#import inspect
-#import importlib
-
 from collections import OrderedDict
+import tempfile
+import os
 
 # 3rd party
 import numpy as np
@@ -116,6 +111,13 @@ class Model(BaseModel):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save(tmpf.name)
+        
+            lem_trans_fd, lem_trans_fname = tempfile.mkstemp(suffix='.lem.hyp')
+            os.close(lem_trans_fd)
+            fact_trans_fd, fact_trans_fname = tempfile.mkstemp(suffix='.fact.hyp')
+            os.close(fact_trans_fd)
+            print (lem_trans_fname)
+            print (fact_trans_fname)
 
             result = get_valid_evaluation(tmpf.name,
                                           beam_size=beam_size,
@@ -123,7 +125,7 @@ class Model(BaseModel):
                                           metric=metric,
                                           mode=mode,
                                           valid_mode=valid_mode,
-                                          f_valid_out=f_valid_out,
+                                          f_valid_out=[lem_trans_fname, fact_trans_fname],
                                           factors=self.factors)
 
         return result

@@ -165,14 +165,11 @@ class Translator(object):
         if args.factors:
             self.trgfact_idict = self.models[0].trgfact_idict
 
-        # TODO you can include the factors option inside the model
-
         #######################################################
         # Forced decoding/NMT rescoring for given src/trg pairs
         #######################################################
         if self.mode == "forced" and self.src_files and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
-            # TODO forced mode not finished for factors, for now we use just beamsearch
             if args.factors:
                 if len(self.src_files) == 1:
                     self.iterator = FactorsIterator(

@@ -134,16 +134,11 @@ def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode=
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
            "-j", str(n_jobs), "-m", save_path, "-M", metric, "-v", valid_mode]
 
-
     if factors:
-        lem_trans_fd, lem_trans_fname = tempfile.mkstemp(suffix='.lem.hyp')
-        os.close(lem_trans_fd)
-        fact_trans_fd, fact_trans_fname = tempfile.mkstemp(suffix='.fact.hyp')
-        os.close(fact_trans_fd)
-        cmd.extend(["-fa", factors, "-o", lem_trans_fname, "-ofa", fact_trans_fname])
+        cmd.extend(["-fa", factors, "-o", f_valid_out[0], f_valid_out[1]])
 
-    if f_valid_out is not None:
-        #print("run valid with -o ", f_valid_out, " , should save !", file=stderr)
+    elif f_valid_out is not None:
+        print ('f_valid_out:', f_valid_out)
         cmd.extend(["-o", f_valid_out])
 
     # nmt-translate will print a dict of metrics
