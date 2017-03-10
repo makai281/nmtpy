@@ -7,15 +7,18 @@ from .bleu   import MultiBleuScorer, BLEUScore
 
 """Factors2word class."""
 class Factors2word(object):
-    def __init__(self, script="factors2word_file_p3.py"):
-        self.script = find_executable(script)
-        if not self.script:
-            raise Exception("factors2word script %s not found." % self.script)
+    def __init__(self):
+        super(Factors2word, self)
+        self.name = "Factors2word"
+        #self.script = find_executable(script)
+        #if not self.script:
+        #    raise Exception("factors2word script %s not found." % self.script)
 
 
-    def compute(self, hyp_file, hyp_mult_file, ref):
+    def compute(self, script, hyp_file, hyp_mult_file, ref):
+        script = find_executable(script)
         lang = ref.split('.')[-1]
-        cmdline = ['python', self.script, lang, hyp_file, hyp_mult_file, ref]
+        cmdline = ['python', script, lang, hyp_file, hyp_mult_file, ref]
         print ('cmdline:', cmdline)
 
         hypstring = None

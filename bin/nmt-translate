@@ -409,7 +409,7 @@ class Translator(object):
             if self.models[0].valid_ref_files != self.ref_files[1]:
                 # Calculate factors2word
                 c = get_scorer('factors2word')()
-                score = c.compute(hyp_file, hyp_mult_file, self.ref_files[0])
+                score = c.compute(args.eval_factors, hyp_file, hyp_mult_file, self.ref_files[0])
                 results[scorer] = (str(score), score.score)
             else:
                 print ('evaluating one output')
@@ -494,7 +494,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-M', '--metrics'       , type=str, default='bleu', help="Comma separated list of metrics (bleu or bleu,meteor)")
     parser.add_argument('-o', '--saveto'        , type=str, default=None,   help="Output translations file (if not given, only metrics will be printed)")
-    parser.add_argument('-ofa', '--factsaveto'   , type=str, help="Output factors translations file (if not given, only metrics will be printed)", default=None)
+    parser.add_argument('-ofa', '--factsaveto'  , type=str, help="Output factors translations file (if not given, only metrics will be printed)", default=None)
     parser.add_argument('-e', '--export'        , action='store_true',      help="Export all decoding process to json for visualization")
     parser.add_argument('-s', '--score'         , action='store_true',      help="Print scores of each sentence even nbest == 1")
     parser.add_argument('-u', '--suppress-unks' , action='store_true',      help="Don't produce <unk>'s in beam search")
@@ -503,7 +503,7 @@ if __name__ == "__main__":
     parser.add_argument('-R', '--ref-files'     , type=str, nargs='+', default=None, help="One or multiple reference files (default: validation set)")
     parser.add_argument('-m', '--models'        , nargs='+', required=True, help="Model files")
     parser.add_argument('-fa', '--factors'      , action='store_true', default=False, help="Activate factors option (default: false)")
-    parser.add_argument('-oe', '--outs2eval1'    , action='store_true', default=False, help="Activate 2 outsputs 1 evaluation option (default: false)")
+    parser.add_argument('-ef', '--eval-factors' , type=str, default='eval1', help="Combination of output factors, eval1 to evaluate just with the first output or script to combine them (default: eval1)")
 
     args = parser.parse_args()
 
@@ -556,8 +556,7 @@ if __name__ == "__main__":
     if args.decoder != "forced" and args.nbest == 1 \
             and translator.ref_files and not args.score:
         # Compute all metrics
-        #if args.outs2eval1:
-        if args.outs2eval1 or args.factors:
+        if args.eval_factors == 'eval1':
             results = translator.compute_2outs1eval_score(out_file, fact_out_file, args.metrics.split(","))
         # TODO factors evaluation
         elif args.factors:
