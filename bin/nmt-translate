@@ -399,13 +399,13 @@ class Translator(object):
         self.results = results
         return results
     
-    def compute_fact_score(self, hyp_file, hyp_mult_file, scorers):
+    def compute_fact_score(self, hyp_files, scorers):
         results = {}
         for scorer in scorers:
             c = get_scorer(scorer)()
-            score = c.compute(self.ref_files[1], hyp_file)
+            score = c.compute(self.ref_files[1], hyp_files[0])
             print ('BLEU output 1 =', (str(score), score.score))
-            score_fact = c.compute(self.ref_files[2], hyp_mult_file)
+            score_fact = c.compute(self.ref_files[2], hyp_files[1])
             print ('BLEU output 2 =', (str(score_fact), score_fact.score))
             if args.factors == 'eval1' or self.models[0].valid_ref_files == self.ref_files[1]:
                 print ('evaluating one output')
@@ -415,7 +415,7 @@ class Translator(object):
                 # Calculate factors2word
                 print ('Factors to word')
                 c = get_scorer('factors2word')()
-                score = c.compute(args.factors, hyp_file, hyp_mult_file, self.ref_files[0])
+                score = c.compute(args.factors, hyp_files[0], hyp_files[1], self.ref_files[0])
                 results[scorer] = (str(score), score.score)
         return results
     
@@ -485,8 +485,7 @@ if __name__ == "__main__":
     parser.add_argument('-D', '--decoder'       , default='beamsearch',     choices=['beamsearch', 'argmax', 'sample', 'forced'], help="Decoding mode")
 
     parser.add_argument('-M', '--metrics'       , type=str, default='bleu', help="Comma separated list of metrics (bleu or bleu,meteor)")
-    parser.add_argument('-o', '--saveto'        , type=str, default=None,   help="Output translations file (if not given, only metrics will be printed)")
-    parser.add_argument('-ofa', '--factsaveto'  , type=str, help="Output factors translations file (if not given, only metrics will be printed)", default=None)
+    parser.add_argument('-o', '--saveto'        , type=str, nargs='+', default=None,   help="Output translations file(s) (if not given, only metrics will be printed)")
     parser.add_argument('-e', '--export'        , action='store_true',      help="Export all decoding process to json for visualization")
     parser.add_argument('-s', '--score'         , action='store_true',      help="Print scores of each sentence even nbest == 1")
     parser.add_argument('-u', '--suppress-unks' , action='store_true',      help="Don't produce <unk>'s in beam search")
@@ -524,8 +523,6 @@ if __name__ == "__main__":
     translator.start()
 
     out_file = args.saveto
-    if args.factsaveto:
-        fact_out_file = args.factsaveto
     if not args.saveto:
         # Override this if given
         args.score = False
@@ -535,9 +532,11 @@ if __name__ == "__main__":
 
     # Dump hypotheses
     # pass output file, number of output and scores
-    translator.write_hyps(out_file, 1, args.score)
-    if args.factsaveto:
-        translator.write_hyps(fact_out_file, 2, args.score)
+    if args.factors:
+        translator.write_hyps(out_file[0], 1, args.score)
+        translator.write_hyps(out_file[1], 2, args.score)
+    else:
+        translator.write_hyps(out_file, 1, args.score)
 
     if args.export and args.saveto:
         # Export attentional informations if -o and -e are given
@@ -549,7 +548,7 @@ if __name__ == "__main__":
         # Compute all metrics
         if args.factors:
             # Factors evaluation combining the 2 outputs
-            results = translator.compute_fact_score(out_file, fact_out_file, args.metrics.split(","))
+            results = translator.compute_fact_score(out_file, args.metrics.split(","))
         else:
             results = translator.compute_metrics(out_file, args.metrics.split(","))
         # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
