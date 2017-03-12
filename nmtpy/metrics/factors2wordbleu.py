@@ -15,7 +15,6 @@ class Factors2word(object):
         script = find_executable(script)
         lang = ref.split('.')[-1]
         cmdline = ['python', script, lang, hyp_file, hyp_mult_file, ref]
-        print ('cmdline:', cmdline)
 
         hypstring = None
         with open(hyp_file, "r") as fhyp:

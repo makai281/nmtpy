@@ -138,7 +138,6 @@ def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode=
         cmd.extend(["-fa", factors, "-o", f_valid_out[0], f_valid_out[1]])
 
     elif f_valid_out is not None:
-        print ('f_valid_out:', f_valid_out)
         cmd.extend(["-o", f_valid_out])
 
     # nmt-translate will print a dict of metrics
