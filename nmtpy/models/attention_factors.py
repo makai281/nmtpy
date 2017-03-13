@@ -116,8 +116,6 @@ class Model(BaseModel):
             os.close(lem_trans_fd)
             fact_trans_fd, fact_trans_fname = tempfile.mkstemp(suffix='.fact.hyp')
             os.close(fact_trans_fd)
-            print (lem_trans_fname)
-            print (fact_trans_fname)
 
             result = get_valid_evaluation(tmpf.name,
                                           beam_size=beam_size,
@@ -127,8 +125,11 @@ class Model(BaseModel):
                                           valid_mode=valid_mode,
                                           f_valid_out=[lem_trans_fname, fact_trans_fname],
                                           factors=self.factors)
+        self.logger.info("Lemmas BLEU: %s" % lem_bleu_str)
+        fact_bleu_str, fact_bleu = result['out2']
+        self.logger.info("Factors BLEU: %s" % fact_bleu_str)
 
-        return result
+        return result[metric]
 
 
     @staticmethod

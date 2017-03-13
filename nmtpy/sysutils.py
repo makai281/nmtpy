@@ -146,7 +146,10 @@ def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode=
     out, err = p.communicate()
     cleanup.unregister_proc(p.pid)
     results = eval(out.splitlines()[-1].strip())
-    return results[metric]
+    if factors:
+        return results
+    else:
+        return results[metric]
 
 def create_gpu_lock(used_gpu):
     """Create a lock file for GPU reservation."""
