@@ -230,10 +230,13 @@ def get_exp_identifier(train_args, model_args, suffix=None):
     if train_args.decay_c > 0:
         name += "-l2_%.e" % train_args.decay_c
 
-    if 'emb_dropout' in model_args:
-        name += "-do_%.1f_%.1f_%.1f" % (model_args.emb_dropout,
-                                        model_args.ctx_dropout,
-                                        model_args.out_dropout)
+    # Dropout parameter names can be different for each model
+    dropouts = sorted([opt for opt in model_args.__dict__ \
+                           if opt.endswith('dropout')])
+    if len(dropouts) > 0:
+        name += "_do"
+        for dout in dropouts:
+            name += "_%s%.1f" % (dout[0], model_args.__dict__[dout])
 
     if train_args.clip_c > 0:
         name += "-gc%d" % int(train_args.clip_c)
