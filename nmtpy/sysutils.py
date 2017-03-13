@@ -133,7 +133,7 @@ def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode=
     """Run nmt-translate for validation during training."""
     cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
            "-j", str(n_jobs), "-m", save_path, "-M", metric, "-v", valid_mode]
-
+    # Factors option needs -fa option with the script and 2 output files
     if factors:
         cmd.extend(["-fa", factors, "-o", f_valid_out[0], f_valid_out[1]])
 
@@ -148,6 +148,7 @@ def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode=
     results = eval(out.splitlines()[-1].strip())
     if factors:
         return results
+    # TODO pass results as normal 
     else:
         return results[metric]
 

@@ -19,14 +19,9 @@ class FactorsIterator(Iterator):
     def __init__(self, batch_size, seed=1234, mask=True, shuffle_mode=None, **kwargs):
         super(FactorsIterator, self).__init__(batch_size, seed, mask, shuffle_mode)
 
-#        assert 'srcfile' in kwargs, "Missing argument srcfile"
-#        assert 'trglemfile' in kwargs, "Missing argument trglemfile"
-#        assert 'trgfactfile' in kwargs, "Missing argument trgfactfile"
-#        assert 'srcdict' in kwargs, "Missing argument srcdict"
-#        assert 'trglemdict' in kwargs, "Missing argument trglemdict"
-#        assert 'trgfactdict' in kwargs, "Missing argument trgfactdict"
         
         #TODO add pkl files reading
+        # TODO add dict with files and pass it as argument
 
         # How do we use the multimodal data?
         # 'all'     : All combinations (~725K parallel)
@@ -34,14 +29,16 @@ class FactorsIterator(Iterator):
         # 'pairs'   : Take only one-to-one pairs e.g., train_i.en->train_i.de (~145K parallel)
         self.mode = kwargs.get('mode', 'all')
         self._print('Shuffle mode: %s' % shuffle_mode)
+        
+        self.srcfile = kwargs['srcfile']
+        self.srcdict = kwargs['srcdict']
 
+        # 1 input source
         if 'srcfactfile' in kwargs:
             self.srcfact = True
             self.trgfact = True
-            self.srcfile = kwargs['srcfile']
+            
             self.srcfactfile = kwargs['srcfactfile']
-
-            self.srcdict = kwargs['srcdict']
             self.srcfactdict = kwargs['srcfactdict']
         
             self.n_words_src = kwargs.get('n_words_src', 0)
@@ -54,16 +51,17 @@ class FactorsIterator(Iterator):
             if self.mask:
                 self._keys.append("%s_mask" % self.src_name)
                 self._keys.append("%s_mask" % self.srcfact_name)
+        # 2 input source
         else:
             self.srcfact = False
-            self.srcfile = kwargs['srcfile']
-            self.srcdict = kwargs['srcdict']
+            
             self.n_words_src = kwargs.get('n_words_src', 0)
             self.src_name = kwargs.get('src_name', 'x')
             self._keys = [self.src_name]
             if self.mask:
                 self._keys.append("%s_mask" % self.src_name)
 
+        # 2 output target
         if 'trgfactfile' in kwargs:
             self.trgfact = True
             self.trglemfile = kwargs['trglemfile']
@@ -84,6 +82,7 @@ class FactorsIterator(Iterator):
                 self._keys.append("%s_mask" % self.trglem_name)
                 self._keys.append("%s_mask" % self.trgfact_name)
     
+        # 1 output target
         else:
             self.trgfact = False
             self.trgfile = kwargs['trgfile']
@@ -96,6 +95,7 @@ class FactorsIterator(Iterator):
 
     def read(self):
         seqs = []
+        # 2 inputs and 2 outputs
         if self.srcfact and self.trgfact:
             tlf = fopen(self.trglemfile, 'r')
             tff = fopen(self.trgfactfile, 'r')
@@ -135,6 +135,7 @@ class FactorsIterator(Iterator):
             tlf.close()
             tff.close()
 
+        # 2 inputs and 1 output
         elif self.srcfact:
             slf = fopen(self.srcfile, 'r')
             sff = fopen(self.srcfactfile, 'r')
@@ -168,6 +169,7 @@ class FactorsIterator(Iterator):
             sff.close()
             tf.close()
 
+        # 1 input and 2 outputs
         elif self.trgfact:
             # We open the data files
             sf = fopen(self.srcfile, 'r')
@@ -209,37 +211,7 @@ class FactorsIterator(Iterator):
 
         # Number of training samples
         self.n_samples = len(self._seqs)
-        # Some statistics
-#        unk_trg = 0
-#        unk_src = 0
-#        total_src_words = []
-#        total_trg_words = []
-
-        # Let's map the sentences once to idx's
-#   if self.srcfact:
-#       for sample in self._seqs:
-#       sample[0] = sent_to_idx(self.srclem_dict, sample[0], self.n_words_srclem)
-#       total_srclem_words.extend(sample[0])
-#       sample[1] = sent_to_idx(self.srcfact_dict, sample[1], self.n_words_srcfact)
-#       total_srcfact_words.extend(sample[1])
-#       sample[2] = sent_to_idx(self.trglem_dict, sample[2], self.n_words_trglem)
-#       total_trglem_words.extend(sample[2])
-#       sample[3] = sent_to_idx(self.trgfact_dict, sample[3], self.n_words_trgfact)
-#       total_trg_words.extend(sample[3])
-#   else:
-#       for sample in self._seqs:
-#       sample[0] = sent_to_idx(self.srcdict, sample[0], self.n_words_src)
-#       total_src_words.extend(sample[0])
-#       sample[1] = sent_to_idx(self.trglemdict, sample[1], self.n_words_trglem)
-#       total_trglem_words.extend(sample[1])
-#       sample[2] = sent_to_idx(self.trgfactdict, sample[2], self.n_words_trgfact)
-#       total_trgfact_words.extend(sample[2])
-        
-#        self.unk_src = total_src_words.count(1)
-#        self.unk_trg = total_trg_words.count(1)
-#        self.total_src_words = len(total_src_words)
-#        self.total_trg_words = len(total_trg_words)
-
+        # TODO statistics
 
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length
@@ -256,6 +228,7 @@ class FactorsIterator(Iterator):
             self.prepare_batches()
 
 
+    # this method is required for the 2 masks for target because we do not want EOS in the second output
     @staticmethod
     def mask_data_mult(seqs):
         """Pads sequences with EOS (0) for minibatch processing."""
@@ -278,20 +251,16 @@ class FactorsIterator(Iterator):
 
     def mask_seqs(self, idxs):
         """Prepares a list of padded tensors with their masks for the given sample idxs."""
+        src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
+        trg, trg_mask = Iterator.mask_data([self._seqs[i][2] for i in idxs])
         if self.srcfact and self.trgfact:
-            src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
             srcfact, srcmult_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
-            trg, trg_mask = Iterator.mask_data([self._seqs[i][2] for i in idxs])
             trgmult, trgmult_mask = Iterator.mask_data([self._seqs[i][3] for i in idxs])
             return (src, srcfact, src_mask, trg, trgmult, trg_mask)
         elif self.srcfact:
-            src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
             srcfact, srcmult_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
-            trg, trg_mask = Iterator.mask_data([self._seqs[i][2] for i in idxs])
             return (src, srcfact, src_mask, srcmult_mask, trg, trg_mask)
         elif self.trgfact:
-            src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
-            trg, trg_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
             trgmult, trgmult_mask = self.mask_data_mult([self._seqs[i][2] for i in idxs])
             return (src, src_mask, trg, trgmult, trg_mask, trgmult_mask)
 

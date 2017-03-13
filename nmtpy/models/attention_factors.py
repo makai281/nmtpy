@@ -125,6 +125,7 @@ class Model(BaseModel):
                                           valid_mode=valid_mode,
                                           f_valid_out=[lem_trans_fname, fact_trans_fname],
                                           factors=self.factors)
+        lem_bleu_str, lem_bleu = result['out1']
         self.logger.info("Lemmas BLEU: %s" % lem_bleu_str)
         fact_bleu_str, fact_bleu = result['out2']
         self.logger.info("Factors BLEU: %s" % fact_bleu_str)
@@ -134,7 +135,7 @@ class Model(BaseModel):
 
     @staticmethod
     def beam_search(inputs, f_inits, f_nexts, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-
+	    #TODO ensamble
             # Final results and their scores
             final_sample_lem = []
             final_score_lem = []

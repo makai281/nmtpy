@@ -171,28 +171,20 @@ class Translator(object):
         if self.mode == "forced" and self.src_files and self.ref_files:
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
             if args.factors:
+                # Give parameters as dict
+                dict_params = {'batch_size':1, 'srcfile':self.src_files, 'srcdict':self.models[0].src_dict, \
+                        'trglemfile':self.ref_files[0], 'trgdict':self.models[0].trg_dict, \
+                        'trgfactfile': self.fact_ref_files[0], 'trgmultdict': self.models[0].trgmult_dict, \
+                        'n_words_src': self.models[0].n_words_src,'n_words_trg': self.models[0].n_words_trg, \
+                        'n_words_trgmult':self.models[0].n_words_trgmult, 'trg_name': 'y_true'}
+
                 if len(self.src_files) == 1:
-                    self.iterator = FactorsIterator(
-                                        batch_size=1,
-                                        srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
-                                        trglemfile=self.ref_files[0], trgdict=self.models[0].trg_dict,
-                                        trgfactfile=self.fact_ref_files[0], trgmultdict=self.models[0].trgmult_dict,
-                                        n_words_src=self.models[0].n_words_src,
-                                        n_words_trg=self.models[0].n_words_trg,
-                                        n_words_trgmult=self.models[0].n_words_trgmult,
-                                        trg_name='y_true')
+                    self.iterator = FactorsIterator(**dict_params)
                 else:
                     # Factors also in input
-                    self.iterator = FactorsIterator(
-                                        batch_size=1,
-                                        srcfile=self.src_files[0], srcdict=self.models[0].src_dict,
-                                        srcfactfile=self.src_files[1], srcfactdict=self.models[0].srcfact_dict,
-                                        trglemfile=self.ref_files[0], trgdict=self.model.trg_dict,
-                                        trgfactfile=self.fact_ref_files[0], trgmultdict=self.models[0].trgmult_dict,
-                                        n_words_src=self.models[0].n_words_src,
-                                        n_words_trg=self.models[0].n_words_trg,
-                                        n_words_trgmult=self.models[0].n_words_trgmult,
-                                        trg_name='y_true')
+                    dict_params['srcfactfile'] = self.src_files[1]
+                    dict_params['srcfactdict'] = self.models[0].srcfact_dict
+                    self.iterator = FactorsIterator(**dict_params)
             else:
                 self.iterator = BiTextIterator(
                                         batch_size=1,
@@ -349,7 +341,7 @@ class Translator(object):
             self.processes[pidx].terminate()
             cleanup.unregister_proc(self.processes[pidx].pid)
 
-    # OJO Adding trans to distinguish if it comes from factors or not
+    # TODO give the translation as parameter
     def write_hyps(self, filename, n_out, dump_scores=False):
         if n_out == 1:
             trans = self.trans

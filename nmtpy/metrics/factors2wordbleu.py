@@ -7,14 +7,11 @@ from .bleu   import MultiBleuScorer, BLEUScore
 
 """Factors2word class."""
 class Factors2word(object):
-    def __init__(self):
-        super(Factors2word, self)
-        self.name = "Factors2word"
 
     def compute(self, script, hyp_file, hyp_mult_file, ref):
         script = find_executable(script)
         lang = ref.split('.')[-1]
-        cmdline = ['python', script, lang, hyp_file, hyp_mult_file, ref]
+        cmdline = [script, lang, hyp_file, hyp_mult_file, ref]
 
         hypstring = None
         with open(hyp_file, "r") as fhyp:
@@ -22,9 +19,8 @@ class Factors2word(object):
         
         out = subprocess.run(cmdline, stdout=subprocess.PIPE,
                                input=hypstring, universal_newlines=True).stdout.splitlines()
-        print (out[0])
 
-        score = out[1].splitlines()
+        score = out[-1].splitlines()
         if len(score) == 0:
             return BLEUScore()
         else:
