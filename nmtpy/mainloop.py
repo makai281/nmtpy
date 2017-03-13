@@ -195,7 +195,8 @@ class MainLoop(object):
             self._print("Validation %2d - loss = %5.5f (PPL: %4.5f)" % (self.vctr, cur_loss, ppl))
 
             metric = None
-            f_valid_out = None if self.valid_save_hyp is False else "{0}.{1:03d}".format(self.save_path, self.vctr)
+            f_valid_out = None if self.valid_save_hyp is False else "{0}.{1:03d}".format( os.path.join( self.save_path+'.valid_hyps', os.path.basename(self.save_path) ), self.vctr)
+
             # Are we doing translation?
             if self.do_beam_search:
                 metric_str, metric = self.model.run_beam_search(beam_size=self.beam_size,
