@@ -20,7 +20,7 @@ class BPEFilter(object):
         pass
 
     def __filter(self, s):
-        return s.replace("@@ ", "")
+        return s.replace("@@ ", "").replace("@@", "")
 
     def __call__(self, inp):
         if isinstance(inp, str):
