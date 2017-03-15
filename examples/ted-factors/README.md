@@ -32,6 +32,8 @@ nmt-translate -m ~/nmtpy/models/<your model file> \
               -o trans_dev.lemma.fr trans_dev.factors.fr \
               -fa evalf
 ```
+The option -R needs the references of the word-level, first output and second output, repectively.
+In -fa option you can include your script to combine both outputs if desired instead of evalf option.
 
 
 ## Citation:
