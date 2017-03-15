@@ -80,9 +80,11 @@ The `WMTIterator` only knows how to handle the ResNet-50 convolutional features 
 
 ### Factored NMT
 
-The model file for the following paper will be provided as soon as the integration is ready:
+The model file `attention_factors.py` corresponds to the following paper:
 
 [García-Martínez, Mercedes, Loïc Barrault, and Fethi Bougares. "Factored Neural Machine Translation." arXiv preprint arXiv:1609.04621 (2016).](https://arxiv.org/abs/1609.04621)
+
+In the examples folder of this repository, you can find data and a configuration file to run this model.
 
 ### RNNLM: `rnnlm.py`
 
