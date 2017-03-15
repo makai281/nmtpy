@@ -69,7 +69,7 @@ def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks
 
         if args.factors:
             # normalize scores according to sequence lengths
-            trans, score, align, trans_fact = resp
+            trans, trans_fact, score, align = resp
             score = score / np.array([len(s) for s in trans])
 
             # Sort the scores and take the best(s) idx(s)
@@ -396,7 +396,7 @@ class Translator(object):
             results['out1'] = (str(score), score.score)
             score_fact = c.compute(self.ref_files[2], hyp_files[1])
             results['out2'] = (str(score_fact), score_fact.score)
-            if args.factors == 'eval1' or self.models[0].valid_ref_files == self.ref_files[1]:
+            if args.factors == 'evalf' or self.models[0].valid_ref_files == self.ref_files[1]:
                 #results[scorer] = (str(score), 2*score.score+score_fact.score)
                 results[scorer] = (str(score), score.score)
             else:
@@ -480,7 +480,7 @@ if __name__ == "__main__":
     parser.add_argument('-S', '--src-files'     , type=str, nargs='+', default=None, help="Source data(s) in order: text,image (default: validation set)")
     parser.add_argument('-R', '--ref-files'     , type=str, nargs='+', default=None, help="One or multiple reference files (default: validation set)")
     parser.add_argument('-m', '--models'        , nargs='+', required=True, help="Model files")
-    parser.add_argument('-fa', '--factors'      , type=str, default=None, help="Activate factors. The value can be eval1 to evaluate just with the first output or the script to combine the 2 outputs (default: None)")
+    parser.add_argument('-fa', '--factors'      , type=str, default=None, help="Activate factors. The value can be evalf to evaluate just with the first output or the script to combine the 2 outputs (default: None)")
 
     args = parser.parse_args()
 

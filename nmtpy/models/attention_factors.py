@@ -357,7 +357,7 @@ class Model(BaseModel):
             for b in range(beam_size):
                 final_score.append(final_score_lem[b] + final_score_fact[b])
             # we pass the 2 translations together
-            return final_sample_lem, final_score, final_alignments, final_sample_fact
+            return final_sample_lem, final_sample_fact, final_score, final_alignments
 
     def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)
