@@ -78,7 +78,7 @@ The models are separated into 8 files implementing their own multimodal CGRU dif
 
 The `WMTIterator` only knows how to handle the ResNet-50 convolutional features that we provide in the examples page. If you would like to use FC-style fixed-length vectors or other types of multimodal features, you need to write your own iterator.
 
-### Factored NMT
+### Factored NMT: `attention_factors.py`
 
 The model file `attention_factors.py` corresponds to the following paper:
 
