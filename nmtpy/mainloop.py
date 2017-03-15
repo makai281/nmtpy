@@ -211,8 +211,8 @@ class MainLoop(object):
             if self._is_best(cur_loss, metric):
                 #create a link which name is _BEST#val
                 if self.valid_save_hyp:
-                    f_best = f_valid_out+'.BEST'
-                    if os.path.exists(f_best):
+                    f_best = "{0}.BEST".format( os.path.join( self.save_path+'.valid_hyps', os.path.basename(self.save_path) ) )
+                    if os.path.exists(f_best) is True:
                         os.unlink(f_best)
                     os.symlink(f_valid_out, f_best)
                 self.save_best_model()
