@@ -210,10 +210,11 @@ class MainLoop(object):
 
             if self._is_best(cur_loss, metric):
                 #create a link which name is _BEST#val
-                f_best = f_valid_out+'.BEST'
-                if os.path.exists(f_best):
-                    os.unlink(f_best)
-                os.symlink(f_valid_out, f_best)
+                if self.valid_save_hyp:
+                    f_best = f_valid_out+'.BEST'
+                    if os.path.exists(f_best):
+                        os.unlink(f_best)
+                    os.symlink(f_valid_out, f_best)
                 self.save_best_model()
                 self.early_bad = 0
             else:
