@@ -33,6 +33,7 @@ nmt-translate -m ~/nmtpy/models/<your model file> \
               -fa evalf
 ```
 The option -R needs the references of the word-level, first output and second output, repectively.
+
 In -fa option you can include your script to combine both outputs if desired instead of evalf option.
 
 
