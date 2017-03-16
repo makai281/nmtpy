@@ -111,7 +111,7 @@ class Model(BaseModel):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save(tmpf.name)
-        
+	    # TODO avoid the temp files, save them in the model folder and check f_valid_out for factors mode 
             lem_trans_fd, lem_trans_fname = tempfile.mkstemp(suffix='.lem.hyp')
             os.close(lem_trans_fd)
             fact_trans_fd, fact_trans_fname = tempfile.mkstemp(suffix='.fact.hyp')

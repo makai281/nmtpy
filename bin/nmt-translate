@@ -205,7 +205,7 @@ class Translator(object):
                 self.models[0].data['valid_src'] = self.src_files[0]
                 if 'valid_img' in self.models[0].data:
                     self.models[0].data['valid_img'] = self.src_files[1]
-                if 'valid_srcfact' in self.model.data:
+                if 'valid_srcfact' in self.models[0].data:
                     self.models[0].data['valid_srcfact'] = self.src_files[1]
                 if self.factors:
                     self.models[0].data['valid_trg1'] = self.ref_files[1]
