@@ -66,7 +66,7 @@ class Model(BaseModel):
 
         if 'trg1_dict' in kwargs:
             # Already passed through kwargs (nmt-translate)
-            self.trg_dict = kwargs['trg_dict']
+            self.trg_dict = kwargs['trglem_dict']
             # Invert dict
             trg_idict = invert_dictionary(self.trg_dict)
         else:
@@ -111,7 +111,7 @@ class Model(BaseModel):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save(tmpf.name)
-	    # TODO avoid the temp files, save them in the model folder and check f_valid_out for factors mode 
+            # TODO avoid the temp files, save them in the model folder and check f_valid_out for factors mode 
             lem_trans_fd, lem_trans_fname = tempfile.mkstemp(suffix='.lem.hyp')
             os.close(lem_trans_fd)
             fact_trans_fd, fact_trans_fname = tempfile.mkstemp(suffix='.fact.hyp')
@@ -135,7 +135,7 @@ class Model(BaseModel):
 
     @staticmethod
     def beam_search(inputs, f_inits, f_nexts, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):
-	    #TODO ensamble
+            #TODO ensamble
             # Final results and their scores
             final_sample_lem = []
             final_score_lem = []
@@ -325,8 +325,6 @@ class Model(BaseModel):
                         new_hyp_samples_fact.append(new_hyp_fact)
                         new_hyp_alignments.append(new_ali)
                         live_beam += 1
-                    #print (idx,'final_sample_lem=',idx_to_sent(self.trg_idict, new_hyp_samples_lem[idx]), len(new_hyp_samples_lem[idx]))
-                    #print (idx,'final_sample_fact=',idx_to_sent(self.trgmult_idict, new_hyp_samples_fact[idx]), len(new_hyp_samples_fact[idx]))
 
 
                 hyp_scores_lem  = np.array(new_hyp_scores_lem, dtype=FLOAT)
@@ -356,8 +354,8 @@ class Model(BaseModel):
             final_score = []
             for b in range(beam_size):
                 final_score.append(final_score_lem[b] + final_score_fact[b])
-            # we pass the 2 translations together
-            return final_sample_lem, final_sample_fact, final_score, final_alignments
+
+            return final_sample_lem, final_score, final_alignments, final_sample_fact
 
     def info(self):
         self.logger.info('Source vocabulary size: %d', self.n_words_src)

@@ -69,7 +69,8 @@ def translate_model(rqueue, wqueue, pid, models, beam_size, nbest, suppress_unks
 
         if args.factors:
             # normalize scores according to sequence lengths
-            trans, trans_fact, score, align = resp
+            trans, score, align, trans_fact = resp
+
             score = score / np.array([len(s) for s in trans])
 
             # Sort the scores and take the best(s) idx(s)
@@ -172,7 +173,7 @@ class Translator(object):
             log.info("Using only %s as reference file for forced decoding." % self.ref_files[0])
             if args.factors:
                 # Give parameters as dict
-                dict_params = {'batch_size':1, 'srcfile':self.src_files, 'srcdict':self.models[0].src_dict, \
+                dict_params = {'batch_size':1, 'srcfile':self.src_files[0], 'srcdict':self.models[0].src_dict, \
                         'trglemfile':self.ref_files[0], 'trgdict':self.models[0].trg_dict, \
                         'trgfactfile': self.fact_ref_files[0], 'trgmultdict': self.models[0].trgmult_dict, \
                         'n_words_src': self.models[0].n_words_src,'n_words_trg': self.models[0].n_words_trg, \
@@ -208,6 +209,9 @@ class Translator(object):
                 if 'valid_srcfact' in self.models[0].data:
                     self.models[0].data['valid_srcfact'] = self.src_files[1]
                 if self.factors:
+                    if len(self.ref_files) < 3:
+                        log.info("ERROR: 3 references files are required (word-level, 1st_out-level and 2nd_out-level)")
+                        exit()
                     self.models[0].data['valid_trg1'] = self.ref_files[1]
                     self.models[0].data['valid_trg2'] = self.ref_files[2]
 

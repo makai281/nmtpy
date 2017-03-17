@@ -33,7 +33,7 @@ class FactorsIterator(Iterator):
         self.srcfile = kwargs['srcfile']
         self.srcdict = kwargs['srcdict']
 
-        # 1 input source
+        # 2 input source
         if 'srcfactfile' in kwargs:
             self.srcfact = True
             self.trgfact = True
@@ -51,7 +51,7 @@ class FactorsIterator(Iterator):
             if self.mask:
                 self._keys.append("%s_mask" % self.src_name)
                 self._keys.append("%s_mask" % self.srcfact_name)
-        # 2 input source
+        # 1 input source
         else:
             self.srcfact = False
             
