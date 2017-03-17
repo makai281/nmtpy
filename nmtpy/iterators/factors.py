@@ -252,15 +252,17 @@ class FactorsIterator(Iterator):
     def mask_seqs(self, idxs):
         """Prepares a list of padded tensors with their masks for the given sample idxs."""
         src, src_mask = Iterator.mask_data([self._seqs[i][0] for i in idxs])
-        trg, trg_mask = Iterator.mask_data([self._seqs[i][2] for i in idxs])
         if self.srcfact and self.trgfact:
             srcfact, srcmult_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
+            trg, trg_mask = Iterator.mask_data([self._seqs[i][2] for i in idxs])
             trgmult, trgmult_mask = Iterator.mask_data([self._seqs[i][3] for i in idxs])
             return (src, srcfact, src_mask, trg, trgmult, trg_mask)
         elif self.srcfact:
             srcfact, srcmult_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
+            trg, trg_mask = Iterator.mask_data([self._seqs[i][2] for i in idxs])
             return (src, srcfact, src_mask, srcmult_mask, trg, trg_mask)
         elif self.trgfact:
+            trg, trg_mask = Iterator.mask_data([self._seqs[i][1] for i in idxs])
             trgmult, trgmult_mask = self.mask_data_mult([self._seqs[i][2] for i in idxs])
             return (src, src_mask, trg, trgmult, trg_mask, trgmult_mask)
 
