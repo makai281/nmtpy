@@ -518,7 +518,7 @@ if __name__ == "__main__":
         # Override this if given
         args.score = False
         hypf = get_temp_file(suffix=".nbest_hyps")
-        out_file = hypf.name
+        out_file[0] = hypf.name
         hypf.close()
 
     # Dump hypotheses
