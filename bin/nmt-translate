@@ -527,7 +527,7 @@ if __name__ == "__main__":
         translator.write_hyps(out_file[0], 1, args.score)
         translator.write_hyps(out_file[1], 2, args.score)
     else:
-        translator.write_hyps(out_file, 1, args.score)
+        translator.write_hyps(out_file[0], 1, args.score)
 
     if args.export and args.saveto:
         # Export attentional informations if -o and -e are given
@@ -541,7 +541,7 @@ if __name__ == "__main__":
             # Factors evaluation combining the 2 outputs
             results = translator.compute_fact_score(out_file, args.metrics.split(","))
         else:
-            results = translator.compute_metrics(out_file, args.metrics.split(","))
+            results = translator.compute_metrics(out_file[0], args.metrics.split(","))
         # NOTE: This dict is expected from nmt-translate for obtaining the validation results.
         print(results)
 
