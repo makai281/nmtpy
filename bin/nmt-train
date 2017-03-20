@@ -121,6 +121,10 @@ if __name__ == '__main__':
     # Update save_path
     model_args.save_path = os.path.join(model_args.save_path,
                                         "%s.%d" % (exp_id, run_id))
+
+    # ensure valid hyps folder if valid_save_hyp is activated
+    if train_args.valid_save_hyp is True:
+        ensure_dirs([model_args.save_path+'.valid_hyps'])
     ###################################
 
     # Start logging module (both to terminal and to file)

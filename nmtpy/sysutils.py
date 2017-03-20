@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import os
+import bz2
 import sys
 import copy
 import gzip
+import lzma
 import tempfile
 import subprocess
 
@@ -152,11 +154,18 @@ def create_gpu_lock(used_gpu):
     lockfile = get_temp_file(name=name)
     lockfile.write("[nmtpy] %s\n" % name)
 
-def fopen(filename, mode='r'):
-    """GZIP-aware file opening function."""
+def fopen(filename, mode=None):
+    """GZ/BZ2/XZ-aware file opening function."""
+    # NOTE: Mode is not used but kept for not breaking iterators.
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode)
-    return open(filename, mode)
+        return gzip.open(filename, 'rt')
+    elif filename.endswith('.bz2'):
+        return bz2.open(filename, 'rt')
+    elif filename.endswith(('.xz', '.lzma')):
+        return lzma.open(filename, 'rt')
+    else:
+        # Plain text
+        return open(filename, 'r')
 
 def find_executable(fname):
     """Find executable in PATH."""

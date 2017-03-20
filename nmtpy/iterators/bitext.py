@@ -14,6 +14,7 @@ class BiTextIterator(Iterator):
         assert 'trgfile' in kwargs, "Missing argument trgfile"
         assert 'srcdict' in kwargs, "Missing argument srcdict"
         assert 'trgdict' in kwargs, "Missing argument trgdict"
+        assert batch_size > 1, "Batch size should be > 1"
 
         self._print('Shuffle mode: %s' % shuffle_mode)
 
@@ -73,10 +74,7 @@ class BiTextIterator(Iterator):
         self.n_samples = len(self._seqs)
 
         # Set batch processor function
-        if self.batch_size == 1:
-            self._process_batch = (lambda idxs: self.process_single(idxs[0]))
-        else:
-            self._process_batch = (lambda idxs: self.mask_seqs(idxs))
+        self._process_batch = (lambda idxs: self.mask_seqs(idxs))
 
         if self.shuffle_mode == 'trglen':
             # Homogeneous batches ordered by target sequence length

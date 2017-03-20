@@ -11,14 +11,14 @@ Rico Sennrich, Barry Haddow and Alexandra Birch (2015). Neural Machine Translati
 Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (ACL 2016). Berlin, Germany.
 """
 
+import re
 import sys
 import codecs
 import argparse
 
-
 class BPE(object):
 
-    def __init__(self, codes, separator='@@'):            
+    def __init__(self, codes, separator='@@', skiptags=False):
         
         with codecs.open(codes.name, encoding='utf-8') as codes:
             self.bpe_codes = [tuple(item.split()) for item in codes]
@@ -27,17 +27,21 @@ class BPE(object):
         self.bpe_codes = dict([(code,i) for (i,code) in reversed(list(enumerate(self.bpe_codes)))])
 
         self.separator = separator
+        self.skiptags = skiptags
 
     def segment(self, sentence):
         """segment single sentence (whitespace-tokenized string) with BPE encoding"""
 
         output = []
         for word in sentence.split():
-            new_word = encode(word, self.bpe_codes)
+            if self.skiptags and re.match('<.*?:.*>', word):
+                output.append(word)
+            else:
+                new_word = encode(word, self.bpe_codes)
 
-            for item in new_word[:-1]:
-                output.append(item + self.separator)
-            output.append(new_word[-1])
+                for item in new_word[:-1]:
+                    output.append(item + self.separator)
+                output.append(new_word[-1])
 
         return ' '.join(output)
 
@@ -120,12 +124,15 @@ if __name__ == '__main__':
         metavar='PATH',
         help="Output file (default: standard output)")
     parser.add_argument(
+        '--skiptags', '-k', action='store_true', default=False,
+        help="Skip <foo:bar> morphological tags (default: False)")
+    parser.add_argument(
         '--separator', '-s', type=str, default='@@', metavar='STR',
         help="Separator between non-final subword units (default: '%(default)s'))")
 
     args = parser.parse_args()
 
-    bpe = BPE(args.codes, args.separator)
+    bpe = BPE(args.codes, args.separator, args.skiptags)
 
     for line in args.input:
         args.output.write(bpe.segment(line).strip())
