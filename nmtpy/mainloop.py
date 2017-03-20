@@ -41,7 +41,6 @@ class MainLoop(object):
 
         self.save_path      = model_args.save_path
 
-
         # NOTE: This is relevant only for fusion models + WMTIterator
         self.valid_mode     = 'single'
         if 'valid_mode' in self.model.__dict__:
@@ -255,4 +254,5 @@ class MainLoop(object):
         while self._train_epoch():
             pass
         # Final summary
-        self.dump_val_summary()
+        if len(self.valid_losses) > 0:
+            self.dump_val_summary()
