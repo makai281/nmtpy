@@ -94,11 +94,13 @@ if __name__ == '__main__':
     # Take the remaining command line arguments (model_type and/or init if any)
     cmd_args = cargs.__dict__
 
-    # Split and convert extra arguments to dict
-    ext_args = dict([e.split(':', 1) for e in extra])
+    if len(extra) > 0:
+        # Split and convert extra arguments to dict
+        ext_args = [e.split(':', 1) for e in extra]
+        ext_args = dict([(k.strip(), v.strip()) for k,v in ext_args])
 
-    # Merge by prioritizing extra arguments
-    cmd_args.update(ext_args)
+        # Merge by prioritizing extra arguments
+        cmd_args.update(ext_args)
 
     # Parse configuration file and merge with the rest
     conf = Config(cfname, trdefs=trdefs, mddefs=mddefs, override=cmd_args)
