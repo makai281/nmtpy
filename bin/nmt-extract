@@ -11,46 +11,31 @@ from nmtpy.nmtutils import get_param_dict
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='nmt-extract')
-    parser.add_argument('-o', '--output'        , help="Output file (with extension .npy or .tsv).")
-    parser.add_argument('-m', '--model'         , help="Model .npz file.")
-
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-t', '--target'        , action='store_true',
-                                                  help="Extract target word embeddings")
-    group.add_argument('-s', '--source'        , action='store_true',
-                                                  help="Extract source word embeddings")
+    parser.add_argument('-o', '--output', type=str,                 help="Output .npz file.")
+    parser.add_argument('-n', '--init', action='store_true',        help="Make output file compatible with nmt-train '--init' argument.")
+    parser.add_argument('-m', '--model', type=str,                  help="Model's .npz file from which weights will be extracted.")
+    parser.add_argument('-w', '--which', nargs='+', required=True,  help='Space separated list of to-be-extracted weight keys.')
 
     args = parser.parse_args()
-    if not args.output.endswith(('npy', 'tsv')):
-        print("Output file should end with .npy or .tsv")
-        sys.exit(1)
 
     try:
         params = get_param_dict(args.model)
     except KeyError as ke:
-        print('%s does not contain model parameters. Did you train your model long enough?' % args.model)
+        print('%s does not contain model parameters. Did you train model do at least 1 validation?' % args.model)
         sys.exit(1)
 
-    if args.target:
-        if 'Wemb_dec' not in params:
-            print('Target embeddings must be called Wemb_dec in order for nmt-extract to work.')
+    extracted_weights = {}
+    for key in args.which:
+        try:
+            extracted_weights[key] = params[key]
+            print("Extracted '%s' with shape=%s" % (key, params[key].shape))
+        except KeyError as ke:
+            print("'%s' not found in model's .npz file, aborting." % key)
             sys.exit(1)
-        embs = params['Wemb_dec']
-    elif args.source:
-        if 'Wemb_enc' not in params:
-            print('Source embeddings must be called Wemb_enc in order for nmt-extract to work.')
-            sys.exit(1)
-        embs = params['Wemb_enc']
 
-    print("Embedding size: %d, Vocabulary size: %d" % (embs.shape[1], embs.shape[0]))
-
-    ftype = args.output.split(".")[-1]
-    if ftype == "npy":
-        np.save(args.output, embs)
-    elif ftype == "tsv":
-        # Useful for t-SNE wrappers
-        with open(args.output, 'w') as f:
-            for p in embs:
-                f.write("\t".join(["%f" % i for i in p]) + "\n")
-
-    sys.exit(0)
+    if args.init:
+        # You can use output file to init a new model with pre-trained weights
+        # extracted here.
+        np.savez(args.output, tparams=extracted_weights, opts={})
+    else:
+        np.savez(args.output, **extracted_weights)
