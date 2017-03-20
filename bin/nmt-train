@@ -228,4 +228,5 @@ if __name__ == '__main__':
     np.random.seed(train_args.seed)
 
     # Create mainloop
-    MainLoop(model, log, train_args, model_args).run()
+    loop = MainLoop(model, log, train_args, model_args)
+    loop.run()
