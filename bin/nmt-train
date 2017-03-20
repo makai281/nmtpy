@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-s', '--suffix'        , help="Model file suffix",
                                                   type=str, default=None)
-    parser.add_argument('-i', '--init'          , help="Pretrained model .npz",
+    parser.add_argument('-i', '--init'          , help="Pretrained weigths .npz extracted with nmt-extract",
                                                   type=str)
     parser.add_argument('-t', '--timestamp'     , help="Add timestamp to log messages.",
                                                   action="store_true", default=False)
@@ -172,16 +172,16 @@ if __name__ == '__main__':
     log.info("Initializing parameters")
     model.init_params()
 
-    # Load pre-trained model weights if requested
-    init_params = None
-    if train_args.init:
-        log.info('Overriding parameters from pre-trained model')
-        log.info('  %s' % os.path.basename(train_args.init))
-        init_params = get_param_dict(train_args.init)
-
     # Create theano shared variables
     log.info('Creating shared variables')
-    model.init_shared_variables(_from=init_params)
+    model.init_shared_variables()
+
+    # Override some weights with pre-trained ones if given
+    if train_args.init:
+        log.info('Will override parameters from pre-trained weights')
+        log.info('  %s' % os.path.basename(train_args.init))
+        new_params = get_param_dict(train_args.init)
+        model.update_shared_variables(new_params)
 
     # Print number of parameters
     log.info("Number of parameters: %s" % model.get_nb_params())

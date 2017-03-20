@@ -80,11 +80,6 @@ class BaseModel(object, metaclass=ABCMeta):
         """Return the number of parameters of the model."""
         return readable_size(sum([p.size for p in self.initial_params.values()]))
 
-    def set_shared_variables(self, updates):
-        """Set model parameters from updates dict."""
-        for k in self.tparams.keys():
-            self.tparams[k].set_value(updates[k])
-
     def save(self, fname):
         """Save model parameters as .npz."""
         if self.tparams is not None:
@@ -100,21 +95,19 @@ class BaseModel(object, metaclass=ABCMeta):
         for k,v in params.items():
             self.tparams[k] = theano.shared(v, name=k)
 
-    def init_shared_variables(self, _from=None):
+    def init_shared_variables(self):
         """Initialize the shared variables of the model."""
-        if _from is None:
-            _from = self.initial_params
+        # Create tensor dict
+        self.tparams = OrderedDict()
 
-        if self.tparams is None:
-            # tparams is None for the first call
-            self.tparams = OrderedDict()
-            for kk, pp in _from.items():
-                self.tparams[kk] = theano.shared(_from[kk], name=kk)
-        else:
-            # Already initialized the params, override them
-            for kk in self.tparams.keys():
-                # Let this fail if _from doesn't match the model
-                self.tparams[kk].set_value(_from[kk])
+        # Fill it with initial random weights
+        for kk, pp in self.initial_params.items():
+            self.tparams[kk] = theano.shared(pp, name=kk)
+
+    def update_shared_variables(self, _from):
+        """Reset some variables from _from dict."""
+        for kk in _from.keys():
+            self.tparams[kk].set_value(_from[kk])
 
     def val_loss(self):
         """Compute validation loss."""
