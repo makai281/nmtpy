@@ -147,6 +147,7 @@ if __name__ == '__main__':
     import theano
     import numpy as np
     log.info("Using device: %s (on machine %s)" % (train_args.device_id, platform.node()))
+    log.info("Theano version: %s" % theano.version.full_version)
 
     # Set numpy random seed before everything else
     if train_args.seed != 0:
