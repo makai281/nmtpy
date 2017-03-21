@@ -122,6 +122,7 @@ class Model(BaseModel):
                                           beam_size=beam_size,
                                           n_jobs=n_jobs,
                                           mode=mode,
+                                          metric=metric,
                                           valid_mode=valid_mode,
                                           f_valid_out=[lem_trans_fname, fact_trans_fname],
                                           factors=self.factors)
@@ -131,7 +132,6 @@ class Model(BaseModel):
         self.logger.info("Factors BLEU: %s" % fact_bleu_str)
 
         return result[metric]
-
 
     @staticmethod
     def beam_search(inputs, f_inits, f_nexts, beam_size=12, maxlen=50, suppress_unks=False, **kwargs):

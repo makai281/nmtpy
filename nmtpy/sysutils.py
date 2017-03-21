@@ -131,7 +131,7 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(save_path, beam_size, n_jobs, mode,
+def get_valid_evaluation(save_path, beam_size, n_jobs, mode, metric,
                          valid_mode='single', trans_cmd='nmt-translate', f_valid_out=None, factors=None):
     """Run nmt-translate for validation during training."""
     cmd = [trans_cmd, "-b", str(beam_size), "-D", mode,

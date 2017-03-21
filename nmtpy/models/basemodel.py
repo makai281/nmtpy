@@ -208,6 +208,7 @@ class BaseModel(object, metaclass=ABCMeta):
                                           beam_size=beam_size,
                                           n_jobs=n_jobs,
                                           mode=mode,
+                                          metric=metric,
                                           valid_mode=valid_mode,
                                           f_valid_out=f_valid_out)
 
