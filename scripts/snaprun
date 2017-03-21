@@ -7,10 +7,10 @@
 #   $ snaprun nmt-train -c foobar.conf
 
 # Source tree to use as nmtpy
-NMTPY=~/git/nmtpy
+NMTPY=
 
 # Enter to $NMTPY
-cd $NMTPY
+pushd $NMTPY
 
 # Take the last commit SHA1
 SHA=`git rev-parse --short HEAD`
@@ -32,6 +32,7 @@ echo "Took snapshot under $SNAPSHOT"
 export PATH=${SNAPSHOT}/bin:${PATH}
 export PYTHONPATH=$SNAPSHOT
 
+popd
 # Execute the given command
 $@
 
