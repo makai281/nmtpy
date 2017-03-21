@@ -140,8 +140,9 @@ class Translator(object):
 
         # Check for post-processing filter
         if "filter" in self.model_options[0]:
-            log.info("Hypotheses and references will be processed by '%s' filter" % model_options['filter'])
-            self.filters.append(get_filter(model_options['filter']))
+            log.info("Hypotheses will be processed by the filters: '%s'" % model_options['filter'])
+            filters = model_options['filter'].split(',')
+            self.filters = [get_filter(f) for f in filters]
 
         # Get inverted dictionary from the model itself
         self.trg_idict = self.models[0].trg_idict
