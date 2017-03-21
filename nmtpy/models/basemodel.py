@@ -152,7 +152,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # Filter out weights that we do not want to update during backprop
         if dont_update is not None:
-            for key in tparams:
+            for key in list(tparams.keys()):
                 if key in dont_update:
                     del tparams[key]
 
