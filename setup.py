@@ -42,6 +42,7 @@ setup(
                     'bin/nmt-train',
                     'bin/nmt-extract',
                     'bin/nmt-translate',
+                    'bin/nmt-translate-factors', # Factored NMT variant.
                     'bin/nmt-build-dict',
                     'bin/nmt-coco-metrics',
                     'bin/nmt-bpe-apply',

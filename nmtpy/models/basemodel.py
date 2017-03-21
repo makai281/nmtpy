@@ -207,12 +207,11 @@ class BaseModel(object, metaclass=ABCMeta):
             result = get_valid_evaluation(tmpf.name,
                                           beam_size=beam_size,
                                           n_jobs=n_jobs,
-                                          metric=metric,
                                           mode=mode,
                                           valid_mode=valid_mode,
                                           f_valid_out=f_valid_out)
 
-        return result
+        return result[metric]
 
     def gen_sample(self, input_dict, maxlen=50, argmax=False):
         """Generate samples, do greedy (argmax) decoding or forced decoding."""

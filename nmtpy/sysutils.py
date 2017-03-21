@@ -131,13 +131,16 @@ def get_temp_file(suffix="", name=None, delete=False):
         cleanup.register_tmp_file(t.name)
     return t
 
-def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode='single', f_valid_out=None):
+def get_valid_evaluation(save_path, beam_size, n_jobs, mode,
+                         valid_mode='single', trans_cmd='nmt-translate', f_valid_out=None, factors=None):
     """Run nmt-translate for validation during training."""
-    cmd = ["nmt-translate", "-b", str(beam_size), "-D", mode,
+    cmd = [trans_cmd, "-b", str(beam_size), "-D", mode,
            "-j", str(n_jobs), "-m", save_path, "-M", metric, "-v", valid_mode]
+    # Factors option needs -fa option with the script and 2 output files
+    if factors:
+        cmd.extend(["-fa", factors, "-o", f_valid_out[0], f_valid_out[1]])
 
-    if f_valid_out is not None:
-        #print("run valid with -o ", f_valid_out, " , should save !", file=stderr)
+    elif f_valid_out is not None:
         cmd.extend(["-o", f_valid_out])
 
     # nmt-translate will print a dict of metrics
@@ -146,7 +149,7 @@ def get_valid_evaluation(save_path, beam_size, n_jobs, metric, mode, valid_mode=
     out, err = p.communicate()
     cleanup.unregister_proc(p.pid)
     results = eval(out.splitlines()[-1].strip())
-    return results[metric]
+    return results
 
 def create_gpu_lock(used_gpu):
     """Create a lock file for GPU reservation."""
