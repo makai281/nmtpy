@@ -369,6 +369,7 @@ class Translator(object):
             refs.append([all_refs[i][sidx] for i in range(n_refs)])
 
         # Add sources, targets, and references
+        # NOTE: att_weights are not cleared from BPE in terms of number of tokens
         for s, t, att in zip(srcs, self.trans, self.att_weights):
             sample = {'src' : s.split(' '), 'trg' : t[0].split(' '), 'ref' : refs.pop(0), 'att': att}
             samples.append(sample)
@@ -438,12 +439,12 @@ if __name__ == "__main__":
         out_file = hypf.name
         hypf.close()
 
+    # Export attentional informations if -o and -e are given
+    if args.export and args.saveto:
+        translator.dump_json("%s.json" % out_file)
+
     # Dump hypotheses
     translator.write_hyps(out_file, args.score)
-
-    if args.export and args.saveto:
-        # Export attentional informations if -o and -e are given
-        translator.dump_json("%s.json" % out_file)
 
     # No need to compute metrics with nbest style files
     if args.decoder != "forced" and args.nbest == 1 \
