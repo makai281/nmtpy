@@ -111,11 +111,9 @@ class Model(BaseModel):
         # Save model temporarily
         with get_temp_file(suffix=".npz", delete=True) as tmpf:
             self.save(tmpf.name)
-            # TODO avoid the temp files, save them in the model folder and check f_valid_out for factors mode 
-            lem_trans_fd, lem_trans_fname = tempfile.mkstemp(suffix='.lem.hyp')
-            os.close(lem_trans_fd)
-            fact_trans_fd, fact_trans_fname = tempfile.mkstemp(suffix='.fact.hyp')
-            os.close(fact_trans_fd)
+            # Save lemmas and factors files in the model folder 
+            # TODO Make work f_valid_out for factors mode 
+            model_path='/'.join(self.save_path.split('/')[0:-1])
 
             result = get_valid_evaluation(tmpf.name,
                                           trans_cmd='nmt-translate-factors',
@@ -124,7 +122,7 @@ class Model(BaseModel):
                                           mode=mode,
                                           metric=metric,
                                           valid_mode=valid_mode,
-                                          f_valid_out=[lem_trans_fname, fact_trans_fname],
+                                          f_valid_out=[model_path+'/lem.hyp', model_path+'/fact.hyp'],
                                           factors=self.factors)
         lem_bleu_str, lem_bleu = result['out1']
         self.logger.info("Lemmas BLEU: %s" % lem_bleu_str)
