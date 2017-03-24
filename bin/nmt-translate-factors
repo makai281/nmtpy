@@ -209,7 +209,7 @@ class Translator(object):
                     self.models[0].data['valid_img'] = self.src_files[1]
                 if 'valid_srcfact' in self.models[0].data:
                     self.models[0].data['valid_srcfact'] = self.src_files[1]
-                if self.factors:
+                if self.factors and self.ref_files:
                     if len(self.ref_files) < 3:
                         log.info("ERROR: 3 references files are required (word-level, 1st_out-level and 2nd_out-level)")
                         exit()
