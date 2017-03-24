@@ -125,9 +125,9 @@ class Model(BaseModel):
                                           f_valid_out=[model_path+'/lem.hyp', model_path+'/fact.hyp'],
                                           factors=self.factors)
         lem_bleu_str, lem_bleu = result['out1']
-        self.logger.info("Lemmas BLEU: %s" % lem_bleu_str)
+        self.logger.info("Out1: %s" % lem_bleu_str)
         fact_bleu_str, fact_bleu = result['out2']
-        self.logger.info("Factors BLEU: %s" % fact_bleu_str)
+        self.logger.info("Out2: %s" % fact_bleu_str)
 
         return result[metric]
 
